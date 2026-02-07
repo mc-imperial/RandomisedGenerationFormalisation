@@ -216,3 +216,11 @@ example : tape 3 = none := rfl
 example : tape 10 = none := rfl
 
 end initial_tape_tests
+
+
+
+
+def FormalLanguage (Sigma : Type*) := Set (List Sigma)
+
+def RE (Sigma : Type*) [Fintype Sigma] : Set (FormalLanguage Sigma) :=
+  { L | ∃ (Q : Type*) (_ : Fintype Q) (M : TM Sigma Q), ∀ x : List Sigma, L x ↔ accepts M x }
