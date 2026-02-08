@@ -237,3 +237,39 @@ def TM_generator {Γ Λ : Type*}
           | Turing.TM0.Stmt.move Turing.Dir.right =>
             some (GenState.sim q', w, none, OneDirection.N, Direction.R)
   }
+
+/-- Standard encoding using FinEnum, which provides a computable enumeration. -/
+def standardEncoding (Γ : Type*) [FinEnum Γ] [DecidableEq Γ] : Encoding Γ where
+  W := Nat.size (FinEnum.card Γ)
+  enum := fun (i : Fin (2^(Nat.size (FinEnum.card Γ)))) =>
+    if h : i < FinEnum.card Γ then
+      some (FinEnum.equiv.symm ⟨i.val, h⟩)
+    else
+      none
+  complete := by
+    intro g
+    let idx := FinEnum.equiv g
+    -- Now reason that this will take the "then" branch of enum
+    use ⟨idx.val, by
+      calc idx.val
+          < FinEnum.card Γ := idx.isLt
+        _ < 2 ^ Nat.size (FinEnum.card Γ) := Nat.lt_size_self (FinEnum.card Γ)
+    ⟩
+    simp [idx]
+
+theorem recognised_implies_generable {Γ Λ : Type*}
+  [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [DecidableEq Γ]
+  {enc : Encoding Γ}
+  (M : Turing.TM0.Machine (Γ := Γ) (Λ := Λ))
+  (input : List Γ)
+  (h_halts : (Turing.TM0.eval M input).Dom) :
+  input ∈ language (TM_generator (enc := enc) M) := by
+  sorry
+
+theorem recognised_implies_generable_standard_encoding {Γ Λ : Type*}
+  [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
+  (M : Turing.TM0.Machine (Γ := Γ) (Λ := Λ))
+  (input : List Γ)
+  (h_halts : (Turing.TM0.eval M input).Dom) :
+  input ∈ language (TM_generator (enc := standardEncoding Γ) M) :=
+    recognised_implies_generable M input h_halts
