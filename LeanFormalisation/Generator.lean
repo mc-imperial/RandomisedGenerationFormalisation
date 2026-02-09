@@ -691,24 +691,102 @@ lemma weGetReadyToSimulate {Γ Λ : Type*}
     use n1 + n2
     exact Steps.trans steps1 steps2
 
+def configurationsMatch {Γ Λ : Type*}
+  [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
+  (genCfg : GeneratorConfig Γ Γ (GenState Λ Γ (standardEncoding Γ)))
+  (tm0Cfg : Turing.TM0.Cfg Γ Λ) : Prop :=
+  genCfg.state = GenState.sim (Λ := Λ) (Γ := Γ) (enc := standardEncoding Γ) tm0Cfg.q
+    ∧ genCfg.work genCfg.workIndex = tm0Cfg.Tape.head
+    ∧ ∀ (d : ℕ), genCfg.work (genCfg.workIndex + 1 + d) =
+        Turing.ListBlank.nth tm0Cfg.Tape.right d
+    ∧ ∀ (d : ℕ), genCfg.work (genCfg.workIndex - 1 - d) =
+        Turing.ListBlank.nth tm0Cfg.Tape.left d
+
+def maybeConfigurationsMatch {Γ Λ : Type*}
+  [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
+  (maybeGenCfg : Option (GeneratorConfig Γ Γ (GenState Λ Γ (standardEncoding Γ))))
+  (maybeTm0Cfg : Option (Turing.TM0.Cfg Γ Λ)) : Prop :=
+match maybeGenCfg, maybeTm0Cfg with
+| none, none => True
+| some genCfg, some tm0Cfg => configurationsMatch genCfg tm0Cfg
+| _, _ => False
+
+lemma matchingConfigurationsStepSimultaneously {Γ Λ : Type*}
+  [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
+  (M : Turing.TM0.Machine Γ Λ)
+  (genCfg : GeneratorConfig Γ Γ (GenState Λ Γ (standardEncoding Γ)))
+  (tm0Cfg : Turing.TM0.Cfg Γ Λ)
+  (h_match : configurationsMatch genCfg tm0Cfg)
+  : maybeConfigurationsMatch (step (TM_generator M) genCfg) (Turing.TM0.step M tm0Cfg) := by sorry
+
 lemma simulationWorksOnceWeAreReady {Γ Λ : Type*}
   [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
   (M : Turing.TM0.Machine (Γ := Γ) (Λ := Λ))
   (input : List Γ)
   (h_halts : (Turing.TM0.eval M input).Dom)
   (cfg : GeneratorConfig Γ Γ (GenState Λ Γ (standardEncoding Γ)))
-: cfg.state = GenState.sim (default : Λ)
-  ∧ cfg.workIndex = 0
-  ∧ (∀ i (h : i < input.length),
-      cfg.work (i : ℤ) = input.get ⟨i, h⟩)
-  ∧ (∀ i : ℕ, i ≥ input.length →
-      cfg.work (i : ℤ) = (default : Γ))
-  ∧ cfg.output = input
-  → ∃ haltCfg,
+  (h_cfg :
+    cfg.state = GenState.sim (default : Λ)
+    ∧ cfg.workIndex = 0
+    ∧ (∀ i (h : i < input.length), cfg.work (i : ℤ) = input.get ⟨i, h⟩)
+    ∧ (∀ i : ℕ, i ≥ input.length → cfg.work (i : ℤ) = (default : Γ))
+    ∧ cfg.output = input
+  ) :
+  ∃ haltCfg,
     let gen := TM_generator (enc := standardEncoding Γ) M
     StepsTo gen cfg haltCfg
     ∧ haltingConfig gen haltCfg
-    ∧ haltCfg.output = input := by sorry
+    ∧ haltCfg.output = input := by
+
+  -- Step 1: Show `cfg` matches the TM0 initial configuration
+  have h_match_init : configurationsMatch cfg (Turing.TM0.init input) := by
+    -- unfold definitions, use h_cfg
+    sorry
+
+  -- Step 2: Use halting assumption to get a halting TM0 configuration
+  obtain ⟨tmCfg, h_reaches, h_tm_halt⟩ : ∃ tmCfg,
+      Turing.TM0.Reaches M (Turing.TM0.init input) tmCfg ∧ Turing.TM0.step M tmCfg = none :=
+    by
+      -- this comes from h_halts and `mem_eval`
+      sorry
+
+  -- Step 3: Induction over `Reaches` to propagate `configurationsMatch` through steps
+  have h_sim :
+    ∀ {tmCfg cfg},
+      Turing.TM0.Reaches M (Turing.TM0.init input) tmCfg →
+      configurationsMatch cfg (Turing.TM0.init input) →
+      ∃ genCfg,
+        let gen := TM_generator (enc := standardEncoding Γ) M
+        StepsTo gen cfg genCfg ∧ configurationsMatch genCfg tmCfg := by
+    intro tmCfg cfg h_reaches
+    induction h_reaches generalizing cfg with
+    | refl =>
+        -- base case: tmCfg = init input
+        intro h_match
+        sorry
+        --exact ⟨cfg, TM_generator M, StepsTo.refl _, h_match⟩
+    | tail prev_steps one_step IH =>
+        intro h_match
+        -- c₂ ∈ step M c₁, h_reaches : Reaches M init c₁
+        -- Apply IH to c₁
+        obtain ⟨genCfg₁, h_steps₁, h_match₁⟩ := IH h_match
+        -- Now take one generator step corresponding to TM0 `step`
+        -- This produces a new configuration matching c₂
+        sorry
+        -- let gen := TM_generator M
+        -- have h_step_cfg : Step gen genCfg₁ = some genCfg₂ := sorry
+        -- -- Build StepsTo gen cfg genCfg₂ by chaining h_steps₁ and this step
+        -- exact ⟨genCfg₂, gen, h_steps₁.trans h_step_cfg, h_match_next⟩
+
+  -- Step 4: Apply the simulation lemma to reach the halting configuration
+  obtain ⟨haltCfg, h_steps, h_match⟩ := h_sim h_reaches h_match_init
+
+  -- Step 5: Return the final configuration
+  use haltCfg
+  have h_haltCfg_halts : haltingConfig
+    (TM_generator (enc := standardEncoding Γ) M) haltCfg := by sorry
+  have h_haltCfg_preserves_output : haltCfg.output = input := by sorry
+  refine ⟨h_steps, h_haltCfg_halts, h_haltCfg_preserves_output⟩
 
 theorem recognised_implies_generable {Γ Λ : Type*}
   [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
