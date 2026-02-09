@@ -439,18 +439,15 @@ lemma rewindWithNonNegativeIndexManySteps {Γ Λ : Type*}
     ∧ cfg'.output = input
     ∧ StepsTo gen cfg cfg' := by
   let gen := TM_generator (enc := standardEncoding Γ) M
-  obtain ⟨h_state, h_idx_bound, h_idx_nonneg, h_work_input,
-          h_work_blank_high, h_work_blank_low, h_output, h_no_blank⟩ := h
-  -- Induct on cfg.workIndex.toNat (the distance to -1)
-  induction cfg.workIndex.toNat with
-  | zero =>
-    -- Base case: cfg.workIndex = 0, need to step to -1
-    have h_idx_zero : cfg.workIndex = 0 := by sorry
-    -- Take one step
-    have h_step := rewindWithNonNegativeIndexOneStep M input cfg
-      ⟨h_state, h_idx_bound, h_idx_nonneg, h_work_input, h_no_blank⟩
-    -- The resulting config after one step
-    let nextCfg : GeneratorConfig Γ Γ (GenState Λ Γ (standardEncoding Γ)) := {
+  obtain ⟨h_state, h_idx_bound, h_idx_nonneg, h_work_input, h_work_ge,
+          h_work_neg, h_output, h_no_blank⟩ := h
+  -- Induction on cfg.workIndex.toNat
+  match n : cfg.workIndex.toNat with
+  | 0 =>
+    -- Base case: cfg.workIndex = 0
+    have h_idx_eq : cfg.workIndex = 0 := by omega
+    -- Take one step to get to workIndex = -1
+    let cfg' : GeneratorConfig Γ Γ (GenState Λ Γ (standardEncoding Γ)) := {
       state := GenState.rewind,
       input := cfg.input,
       inputIndex := cfg.inputIndex,
@@ -458,11 +455,59 @@ lemma rewindWithNonNegativeIndexManySteps {Γ Λ : Type*}
       workIndex := cfg.workIndex - 1,
       output := cfg.output
     }
-    use nextCfg
-    sorry
-  | succ n ih =>
-    -- Inductive case: cfg.workIndex = n + 1, step to n, then use IH
-    sorry
+    use cfg'
+    constructor
+    · rfl
+    constructor
+    · simp [cfg', h_idx_eq]
+    constructor
+    · exact h_work_input
+    constructor
+    · exact h_work_ge
+    constructor
+    · exact h_work_neg
+    constructor
+    · exact h_output
+    · use 1
+      apply Steps.step cfg cfg' cfg' 0
+      · exact rewindWithNonNegativeIndexOneStep M input cfg
+          ⟨h_state, h_idx_bound, h_idx_nonneg, h_work_input, h_no_blank⟩
+      · exact Steps.refl cfg'
+  | m + 1 =>
+    -- Inductive case
+    have h_idx_eq : cfg.workIndex = m + 1 := by omega
+    -- Take one step
+    let cfg_next : GeneratorConfig Γ Γ (GenState Λ Γ (standardEncoding Γ)) := {
+      state := GenState.rewind,
+      input := cfg.input,
+      inputIndex := cfg.inputIndex,
+      work := cfg.work,
+      workIndex := cfg.workIndex - 1,
+      output := cfg.output
+    }
+    have h_step : step gen cfg = some cfg_next :=
+      rewindWithNonNegativeIndexOneStep M input cfg
+        ⟨h_state, h_idx_bound, h_idx_nonneg, h_work_input, h_no_blank⟩
+    --Apply IH to cfg_next
+    have h_ih_input : cfg_next.state = GenState.rewind
+       ∧ cfg_next.workIndex < input.length
+       ∧ cfg_next.workIndex ≥ 0
+       ∧ (∀ i (h : i < input.length), cfg_next.work (i : ℤ) = input.get ⟨i, h⟩)
+       ∧ (∀ i : ℕ, i ≥ input.length → cfg_next.work (i : ℤ) = (default : Γ))
+       ∧ (∀ i : ℤ, i < 0 → cfg_next.work (i : ℤ) = (default : Γ))
+       ∧ cfg_next.output = input
+       ∧ default ∉ input := by
+         simp only [Order.sub_one_lt_iff, Int.sub_nonneg,
+           List.get_eq_getElem, ge_iff_le, true_and, cfg_next]
+         refine ⟨by omega, by omega, by omega, by omega, by omega, by omega, by omega⟩
+    obtain ⟨cfg', h_final⟩ := rewindWithNonNegativeIndexManySteps M input cfg_next h_ih_input
+    use cfg'
+    refine ⟨h_final.1, h_final.2.1, h_final.2.2.1, h_final.2.2.2.1,
+      h_final.2.2.2.2.1, h_final.2.2.2.2.2.1, ?_⟩
+    obtain ⟨k, h_steps⟩ := h_final.2.2.2.2.2.2
+    use k + 1
+    exact Steps.step cfg cfg_next cfg' k h_step h_steps
+termination_by cfg.workIndex.toNat
 
 lemma rewindWithNegativeIndex {Γ Λ : Type*}
   [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
@@ -699,15 +744,5 @@ theorem recognised_implies_generable {Γ Λ : Type*}
     --
     -- Show input ∈ generatedLanguage gen
     use bitstreamFromInput input
-
-
--- WIP
-lemma eatOneInputBit {Λ Γ : Type*}
-  [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
-  (cfg : GeneratorConfig Γ Γ (GenState Λ Γ (standardEncoding Γ)))
-  (M : Turing.TM0.Machine (Γ := Γ) (Λ := Λ))
-  (i : ℕ)
-  : ∃ ls : LoadState Γ (standardEncoding Γ), cfg.state = GenState.load ls
-      ∧ ls.bitsRead < (standardEncoding Γ).W - 1 → false := by sorry
 
 end RecognisableEqualsGenerable
