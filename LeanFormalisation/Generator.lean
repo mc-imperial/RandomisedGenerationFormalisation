@@ -16,9 +16,9 @@ def TM0_recognisableLanguages (Γ : Type*) [Inhabited Γ] : Set (Set (List Γ)) 
   { L | ∃ (Λ : Type*) (_ : Inhabited Λ) (M : Turing.TM0.Machine (Γ := Γ) (Λ := Λ)),
     L = TM0_language M }
 
-theorem TM0_recognisable_eq_RE {Γ : Type*} [Primcodable Γ] [Fintype Γ] [Inhabited Γ] :
-  TM0_recognisableLanguages Γ = reLanguages (Γ := Γ) := by
-  sorry
+-- theorem TM0_recognisable_eq_RE {Γ : Type*} [Primcodable Γ] [Fintype Γ] [Inhabited Γ] :
+--   TM0_recognisableLanguages Γ = reLanguages (Γ := Γ) := by
+--   sorry
 
 inductive WorkTapeDirection
   | L     -- move left
@@ -183,6 +183,7 @@ def generableLanguages {Γ : Type*} [Fintype Γ] : Set (Set (List Γ)) :=
 
 structure Encoding (Γ : Type*) where
   W : ℕ
+  W_pos : W > 0
   enum : Fin (2^W) → Option Γ
   complete : ∀ g : Γ, ∃ i, enum i = some g
 
@@ -304,8 +305,15 @@ def TM_generator {Γ Λ : Type*}
 namespace RecognisableEqualsGenerable
 
 /-- Standard encoding using FinEnum, which provides a computable enumeration. -/
-def standardEncoding (Γ : Type*) [FinEnum Γ] [DecidableEq Γ] : Encoding Γ where
+def standardEncoding (Γ : Type*) [Inhabited Γ] [FinEnum Γ] [DecidableEq Γ] : Encoding Γ where
   W := Nat.size (FinEnum.card Γ)
+  W_pos := by
+    -- Γ is inhabited, so card ≥ 1
+    have h_card : FinEnum.card Γ ≥ 1 := by
+      have : Nonempty Γ := ⟨default⟩
+      exact FinEnum.card_pos
+    -- Nat.size n > 0 for any n ≥ 1
+    exact Nat.size_pos.mpr (Nat.pos_iff_ne_zero.mpr (by omega))
   enum := fun (i : Fin (2^(Nat.size (FinEnum.card Γ)))) =>
     if h : i < FinEnum.card Γ then
       some (FinEnum.equiv.symm ⟨i.val, h⟩)
@@ -345,8 +353,10 @@ def getEOFBit {Γ : Type*} [Fintype Γ] (enc : Encoding Γ) (k : ℕ) : Bool :=
 def bitstreamFromInput {Γ : Type*} [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
  (input : List Γ) : ℕ → Bool :=
   let enc := standardEncoding Γ
-  fun i : ℕ => if i < input.length * enc.W then
-    getEncodingBit enc (input.get ⟨i / enc.W, sorry⟩) (i % enc.W)
+  fun i : ℕ => if h : i < input.length * enc.W then
+    getEncodingBit enc (input.get ⟨i / enc.W, by
+      exact Nat.div_lt_iff_lt_mul enc.W_pos |>.mpr h
+    ⟩) (i % enc.W)
   else
     if i < (input.length + 1) * enc.W then
       getEOFBit enc (i % enc.W)
