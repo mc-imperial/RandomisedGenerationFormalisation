@@ -59,7 +59,7 @@ structure Generator (Γw Γo Q : Type*) [Fintype Γw] [Fintype Γo] [Fintype Q] 
   -- - A value indicating the direction in which the working tape head should move
   δ : Q -> Bool -> Γw → Option (Q × Γw × Option Γo × InputTapeDirection × WorkTapeDirection)
 
-
+@[ext]
 structure GeneratorConfig (Γw Γo Q : Type*) [Fintype Γw] [Fintype Γo] [Fintype Q] where
   (state : Q)
   (input : ℕ → Bool)
@@ -354,6 +354,288 @@ def bitstreamFromInput {Γ : Type*} [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [De
       -- Bits after the encoding; value doesn't matter, so set them (arbitrarily) to false
       false
 
+lemma weGetReadyToRewind {Γ Λ : Type*}
+  [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
+  (M : Turing.TM0.Machine (Γ := Γ) (Λ := Λ))
+  (input : List Γ)
+: ∃ cfg : GeneratorConfig Γ Γ (GenState Λ Γ (standardEncoding Γ)),
+    let gen := TM_generator (enc := standardEncoding Γ) M
+    cfg.state = GenState.rewind
+    ∧ cfg.workIndex = input.length - 1
+    ∧ (∀ i (h : i < input.length),
+        cfg.work (i : ℤ) = input.get ⟨i, h⟩)
+    ∧ (∀ i : ℕ, i ≥ input.length →
+        cfg.work (i : ℤ) = (default : Γ))
+    ∧ (∀ i : ℤ, i < 0 →
+        cfg.work (i : ℤ) = (default : Γ))
+    ∧ cfg.output = input
+    ∧ StepsTo gen (initConfig gen (bitstreamFromInput input)) cfg := by
+sorry
+
+lemma rewindWithNonNegativeIndexOneStep {Γ Λ : Type*}
+  [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
+  (M : Turing.TM0.Machine (Γ := Γ) (Λ := Λ))
+  (input : List Γ)
+  (cfg : GeneratorConfig Γ Γ (GenState Λ Γ (standardEncoding Γ)))
+  (h : cfg.state = GenState.rewind
+    ∧ cfg.workIndex < input.length
+    ∧ cfg.workIndex ≥ 0
+    ∧ (∀ i (h : i < input.length), cfg.work (i : ℤ) = input.get ⟨i, h⟩)
+    ∧ default ∉ input)
+: step (TM_generator (enc := standardEncoding Γ) M) cfg = some {
+    state := GenState.rewind,
+    input := cfg.input,
+    inputIndex := cfg.inputIndex,
+    work := cfg.work,
+    workIndex := cfg.workIndex - 1,
+    output := cfg.output
+} := by
+  obtain ⟨h_state, h_idx_bound, h_idx_nonneg, h_work_input, h_no_blank⟩ := h
+  unfold step TM_generator
+  simp only [h_state]
+  -- Show that cfg.work (cfg.workIndex) ≠ default
+  have h_not_blank : cfg.work cfg.workIndex ≠ default := by
+    have h_eq : cfg.work cfg.workIndex = input.get ⟨cfg.workIndex.toNat, by omega⟩ := by
+      have := h_work_input cfg.workIndex.toNat (by omega)
+      convert this using 2
+      simp only [Int.ofNat_toNat, left_eq_sup]
+      exact h_idx_nonneg
+    rw [h_eq]
+    intro h_contra
+    apply h_no_blank
+    rw [← h_contra]
+    exact List.get_mem input ⟨cfg.workIndex.toNat, by omega⟩
+  simp only [if_neg h_not_blank]
+  norm_num
+  constructor
+  · -- Prove function equality
+    funext x
+    split_ifs with hx
+    · rw [hx]
+    · rfl
+  · -- Prove cfg.workIndex + -1 = cfg.workIndex - 1
+    ring
+
+lemma rewindWithNonNegativeIndexManySteps {Γ Λ : Type*}
+  [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
+  (M : Turing.TM0.Machine (Γ := Γ) (Λ := Λ))
+  (input : List Γ)
+  (cfg : GeneratorConfig Γ Γ (GenState Λ Γ (standardEncoding Γ)))
+  (h : cfg.state = GenState.rewind
+    ∧ cfg.workIndex < input.length
+    ∧ cfg.workIndex ≥ 0
+    ∧ (∀ i (h : i < input.length), cfg.work (i : ℤ) = input.get ⟨i, h⟩)
+    ∧ (∀ i : ℕ, i ≥ input.length → cfg.work (i : ℤ) = (default : Γ))
+    ∧ (∀ i : ℤ, i < 0 → cfg.work (i : ℤ) = (default : Γ))
+    ∧ cfg.output = input
+    ∧ default ∉ input)
+: ∃ cfg',
+    let gen := TM_generator (enc := standardEncoding Γ) M
+    cfg'.state = GenState.rewind
+    ∧ cfg'.workIndex = -1
+    ∧ (∀ i (h : i < input.length), cfg'.work (i : ℤ) = input.get ⟨i, h⟩)
+    ∧ (∀ i : ℕ, i ≥ input.length → cfg'.work (i : ℤ) = (default : Γ))
+    ∧ (∀ i : ℤ, i < 0 → cfg'.work (i : ℤ) = (default : Γ))
+    ∧ cfg'.output = input
+    ∧ StepsTo gen cfg cfg' := by
+  let gen := TM_generator (enc := standardEncoding Γ) M
+  obtain ⟨h_state, h_idx_bound, h_idx_nonneg, h_work_input,
+          h_work_blank_high, h_work_blank_low, h_output, h_no_blank⟩ := h
+  -- Induct on cfg.workIndex.toNat (the distance to -1)
+  induction cfg.workIndex.toNat with
+  | zero =>
+    -- Base case: cfg.workIndex = 0, need to step to -1
+    have h_idx_zero : cfg.workIndex = 0 := by sorry
+    -- Take one step
+    have h_step := rewindWithNonNegativeIndexOneStep M input cfg
+      ⟨h_state, h_idx_bound, h_idx_nonneg, h_work_input, h_no_blank⟩
+    -- The resulting config after one step
+    let nextCfg : GeneratorConfig Γ Γ (GenState Λ Γ (standardEncoding Γ)) := {
+      state := GenState.rewind,
+      input := cfg.input,
+      inputIndex := cfg.inputIndex,
+      work := cfg.work,
+      workIndex := cfg.workIndex - 1,
+      output := cfg.output
+    }
+    use nextCfg
+    sorry
+  | succ n ih =>
+    -- Inductive case: cfg.workIndex = n + 1, step to n, then use IH
+    sorry
+
+lemma rewindWithNegativeIndex {Γ Λ : Type*}
+  [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
+  (M : Turing.TM0.Machine (Γ := Γ) (Λ := Λ))
+  (cfg : GeneratorConfig Γ Γ (GenState Λ Γ (standardEncoding Γ)))
+  (h : cfg.state = GenState.rewind
+    ∧ cfg.workIndex = -1
+    ∧ cfg.work (-1) = (default : Γ))
+: step (TM_generator (enc := standardEncoding Γ) M) cfg = some {
+    state := GenState.sim (default : Λ),
+    input := cfg.input,
+    inputIndex := cfg.inputIndex,
+    work := cfg.work,
+    workIndex := 0,
+    output := cfg.output
+} := by
+  obtain ⟨h_state, h_idx, h_blank⟩ := h
+  unfold step TM_generator
+  simp only [h_state, h_idx, h_blank, if_true]
+  norm_num
+  funext x
+  split_ifs with hx
+  · rw [hx, h_blank]
+  · rfl
+
+lemma rewindingLeadsToSimulationReadiness {Γ Λ : Type*}
+  [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
+  (M : Turing.TM0.Machine (Γ := Γ) (Λ := Λ))
+  (input : List Γ)
+  (cfg : GeneratorConfig Γ Γ (GenState Λ Γ (standardEncoding Γ)))
+  (h : cfg.state = GenState.rewind
+    ∧ cfg.workIndex = input.length - 1
+    ∧ (∀ i (h : i < input.length), cfg.work (i : ℤ) = input.get ⟨i, h⟩)
+    ∧ (∀ i : ℕ, i ≥ input.length → cfg.work (i : ℤ) = (default : Γ))
+    ∧ (∀ i : ℤ, i < 0 → cfg.work (i : ℤ) = (default : Γ))
+    ∧ cfg.output = input
+    ∧ default ∉ input)
+: ∃ cfg',
+    let gen := TM_generator (enc := standardEncoding Γ) M
+    cfg'.state = GenState.sim (default : Λ)
+    ∧ cfg'.workIndex = 0
+    ∧ (∀ i (h : i < input.length), cfg'.work (i : ℤ) = input.get ⟨i, h⟩)
+    ∧ (∀ i : ℕ, i ≥ input.length → cfg'.work (i : ℤ) = (default : Γ))
+    ∧ (∀ i : ℤ, i < 0 → cfg'.work (i : ℤ) = (default : Γ))
+    ∧ cfg'.output = input
+    ∧ StepsTo gen cfg cfg' := by
+  let gen := TM_generator (enc := standardEncoding Γ) M
+  obtain ⟨h_state, h_idx, h_work_input, h_work_blank_high, h_work_blank_low, h_output, h_nodefault⟩
+    := h
+  -- Bind the length to avoid generalization issues
+  by_cases h_empty : input.length = 0
+  · -- Empty input case
+    have h_idx_neg : cfg.workIndex = -1 := by simp [h_idx, h_empty]
+    have h_work_neg : cfg.work (-1) = default := by
+      apply h_work_blank_low
+      norm_num
+    have h_step := rewindWithNegativeIndex M cfg ⟨h_state, h_idx_neg, h_work_neg⟩
+    use {
+      state := GenState.sim (default : Λ),
+      input := cfg.input,
+      inputIndex := cfg.inputIndex,
+      work := cfg.work,
+      workIndex := 0,
+      output := cfg.output
+    }
+    refine ⟨rfl, rfl, ?_, ?_, ?_, ?_, ?_⟩
+    · intro i hi
+      simp [h_empty] at hi
+    · intro i hi
+      exact h_work_blank_high i hi
+    · intro i hi
+      exact h_work_blank_low i hi
+    · exact h_output
+    · use 1
+      apply Steps.step cfg _ _ 0 h_step
+      exact Steps.refl _
+  · -- Non-empty input case
+    have h_length_pos : input.length > 0 := by omega
+    have h_idx_nonneg : cfg.workIndex ≥ 0 := by
+      rw [h_idx]
+      omega
+    have h_idx_bound : cfg.workIndex < input.length := by
+      rw [h_idx]
+      omega
+    have h_many_conditions : cfg.state = GenState.rewind
+      ∧ cfg.workIndex < input.length
+      ∧ cfg.workIndex ≥ 0
+      ∧ (∀ i (h : i < input.length), cfg.work (i : ℤ) = input.get ⟨i, h⟩)
+      ∧ (∀ i : ℕ, i ≥ input.length → cfg.work (i : ℤ) = default)
+      ∧ (∀ i : ℤ, i < 0 → cfg.work (i : ℤ) = default)
+      ∧ cfg.output = input
+      ∧ default ∉ input :=
+        ⟨h_state, h_idx_bound, h_idx_nonneg, h_work_input,
+         h_work_blank_high, h_work_blank_low, h_output, h_nodefault⟩
+    obtain ⟨rewindCfg, h_rewind_state, h_rewind_idx, h_rewind_work_input,
+            h_rewind_work_blank_high, h_rewind_work_blank_low, h_rewind_output,
+            h_steps_to_rewind⟩ :=
+      rewindWithNonNegativeIndexManySteps M input cfg h_many_conditions
+    have h_rewind_work_neg : rewindCfg.work (-1) = default :=
+      h_rewind_work_blank_low (-1) (by omega)
+    have h_step := rewindWithNegativeIndex M rewindCfg
+      ⟨h_rewind_state, h_rewind_idx, h_rewind_work_neg⟩
+    let finalCfg : GeneratorConfig Γ Γ (GenState Λ Γ (standardEncoding Γ)) := {
+      state := GenState.sim (default : Λ),
+      input := rewindCfg.input,
+      inputIndex := rewindCfg.inputIndex,
+      work := rewindCfg.work,
+      workIndex := 0,
+      output := rewindCfg.output
+    }
+    use finalCfg
+    refine ⟨rfl, rfl, ?_, ?_, ?_, ?_, ?_⟩
+    · intro i hi
+      exact h_rewind_work_input i hi
+    · intro i hi
+      exact h_rewind_work_blank_high i hi
+    · intro i hi
+      exact h_rewind_work_blank_low i hi
+    · exact h_rewind_output
+    · obtain ⟨n1, steps1⟩ := h_steps_to_rewind
+      use n1 + 1
+      have step_final : Steps gen rewindCfg finalCfg 1 := by
+        apply Steps.step rewindCfg finalCfg finalCfg 0 h_step
+        exact Steps.refl _
+      exact Steps.trans steps1 step_final
+
+lemma weGetReadyToSimulate {Γ Λ : Type*}
+  [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
+  (M : Turing.TM0.Machine (Γ := Γ) (Λ := Λ))
+  (input : List Γ)
+  (h_nodefault : default ∉ input)
+: ∃ cfg : GeneratorConfig Γ Γ (GenState Λ Γ (standardEncoding Γ)),
+    let gen := TM_generator (enc := standardEncoding Γ) M
+    cfg.state = GenState.sim (default : Λ)
+    ∧ cfg.workIndex = 0
+    ∧ (∀ i (h : i < input.length),
+        cfg.work (i : ℤ) = input.get ⟨i, h⟩)
+    ∧ (∀ i : ℕ, i ≥ input.length →
+        cfg.work (i : ℤ) = (default : Γ))
+    ∧ (∀ i : ℤ, i < 0 →
+        cfg.work (i : ℤ) = (default : Γ))
+    ∧ cfg.output = input
+    ∧ StepsTo gen (initConfig gen (bitstreamFromInput input)) cfg := by
+    let gen := TM_generator (enc := standardEncoding Γ) M
+    -- First, get to the rewind state
+    obtain ⟨rewindCfg, h_rewind_state, h_rewind_idx, h_rewind_work_input,
+            h_rewind_work_blank_high, h_rewind_work_blank_low, h_rewind_output, h_init_to_rewind⟩ :=
+      weGetReadyToRewind M input
+    -- Build the hypothesis for rewindingLeadsToSimulationReadiness
+    have h_rewind_conditions : rewindCfg.state = GenState.rewind
+      ∧ rewindCfg.workIndex = input.length - 1
+      ∧ (∀ i (h : i < input.length), rewindCfg.work (i : ℤ) = input.get ⟨i, h⟩)
+      ∧ (∀ i : ℕ, i ≥ input.length → rewindCfg.work (i : ℤ) = (default : Γ))
+      ∧ (∀ i : ℤ, i < 0 → rewindCfg.work (i : ℤ) = (default : Γ))
+      ∧ rewindCfg.output = input
+      ∧ default ∉ input
+       := by
+        exact ⟨h_rewind_state, h_rewind_idx, h_rewind_work_input,
+               h_rewind_work_blank_high, h_rewind_work_blank_low, h_rewind_output, h_nodefault⟩
+    -- Apply rewindingLeadsToSimulationReadiness with rewindCfg
+    obtain ⟨simCfg, h_sim_state, h_sim_idx, h_sim_work_input, h_sim_work_blank_high,
+            h_sim_work_blank_low, h_sim_output, h_rewind_to_sim⟩ :=
+      rewindingLeadsToSimulationReadiness M input rewindCfg h_rewind_conditions
+    -- Return simCfg with all required properties
+    use simCfg
+    refine ⟨h_sim_state, h_sim_idx, h_sim_work_input, h_sim_work_blank_high,
+            h_sim_work_blank_low, h_sim_output, ?_⟩
+    -- Show StepsTo from init to sim via rewind
+    obtain ⟨n1, steps1⟩ := h_init_to_rewind
+    obtain ⟨n2, steps2⟩ := h_rewind_to_sim
+    use n1 + n2
+    exact Steps.trans steps1 steps2
+
 lemma simulationWorksOnceWeAreReady {Γ Λ : Type*}
   [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
   (M : Turing.TM0.Machine (Γ := Γ) (Λ := Λ))
@@ -373,37 +655,23 @@ lemma simulationWorksOnceWeAreReady {Γ Λ : Type*}
     ∧ haltingConfig gen haltCfg
     ∧ haltCfg.output = input := by sorry
 
-lemma weGetReadyToSimulate {Γ Λ : Type*}
-  [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
-  (M : Turing.TM0.Machine (Γ := Γ) (Λ := Λ))
-  (input : List Γ)
-  (h_halts : (Turing.TM0.eval M input).Dom)
-: ∃ cfg : GeneratorConfig Γ Γ (GenState Λ Γ (standardEncoding Γ)),
-    let gen := TM_generator (enc := standardEncoding Γ) M
-    cfg.state = GenState.sim (default : Λ)
-    ∧ cfg.workIndex = 0
-    ∧ (∀ i (h : i < input.length),
-        cfg.work (i : ℤ) = input.get ⟨i, h⟩)
-    ∧ (∀ i : ℕ, i ≥ input.length →
-        cfg.work (i : ℤ) = (default : Γ))
-    ∧ cfg.output = input
-    ∧ StepsTo gen (initConfig gen (bitstreamFromInput input)) cfg := by sorry
-
 theorem recognised_implies_generable {Γ Λ : Type*}
   [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
   (M : Turing.TM0.Machine (Γ := Γ) (Λ := Λ))
   (input : List Γ)
+  (h_nodefault : default ∉ input)
   (h_halts : (Turing.TM0.eval M input).Dom) :
   input ∈ generatedLanguage (TM_generator (enc := standardEncoding Γ) M) := by
     let enc := standardEncoding Γ
     let gen := (TM_generator (enc := enc) M)
-    rcases weGetReadyToSimulate M input h_halts
+    rcases weGetReadyToSimulate M input h_nodefault
       with ⟨
         readyCfg,
         h_readyCfg_initial_state,
         h_readyCfg_work_index_zero,
         h_readyCfg_work_tape_contains_input,
-        h_readyCfg_work_tape_blank_elsewhere,
+        h_readyCfg_work_tape_blank_above,
+        h_readyCfg_work_tape_blank_below,
         h_readyCfg_output_is_input,
         h_initial_stepsTo_readyCfg
       ⟩
@@ -414,7 +682,7 @@ theorem recognised_implies_generable {Γ Λ : Type*}
       ∧ (∀ i : ℕ, i ≥ input.length → readyCfg.work (i : ℤ) = (default : Γ))
       ∧ readyCfg.output = input := by
         exact ⟨h_readyCfg_initial_state, h_readyCfg_work_index_zero,
-               h_readyCfg_work_tape_contains_input, h_readyCfg_work_tape_blank_elsewhere,
+               h_readyCfg_work_tape_contains_input, h_readyCfg_work_tape_blank_above,
                h_readyCfg_output_is_input⟩
     rcases simulationWorksOnceWeAreReady M input h_halts readyCfg h_ready
       with ⟨haltCfg, h_steps_to_halt, h_is_halting, h_halt_output⟩
@@ -441,19 +709,5 @@ lemma eatOneInputBit {Λ Γ : Type*}
   (i : ℕ)
   : ∃ ls : LoadState Γ (standardEncoding Γ), cfg.state = GenState.load ls
       ∧ ls.bitsRead < (standardEncoding Γ).W - 1 → false := by sorry
-
--- hready : have gen := TM_generator M;
--- readyCfg.state = GenState.sim default ∧
---   readyCfg.workIndex = 0 ∧
---     (∀ (i : ℕ) (h : i < input.length), readyCfg.work ↑i = input.get ⟨i, h⟩) ∧
---       (∀ i ≥ input.length, readyCfg.work ↑i = default) ∧
---         readyCfg.output = input ∧ StepsTo gen (initConfig gen (bitstreamFromInput input)) readyCfg
-
-    -- have htotal : StepsTo gen (initConfig gen (bitstreamFromInput input)) haltCfg := by sorry
-    -- have hcomputes : Computes gen (initConfig gen (bitstreamFromInput input)) haltCfg.output :=
-    --   stepsTo_halts_implies_computes gen _ _ htotal hsim.2
-    -- exact ⟨bitstreamFromInput input, by
-    --   rw [hsim.3]; exact hcomputes⟩
-    sorry
 
 end RecognisableEqualsGenerable
