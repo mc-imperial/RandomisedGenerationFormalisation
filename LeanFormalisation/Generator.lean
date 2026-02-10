@@ -890,6 +890,40 @@ lemma matchingConfigurationsStepSimultaneously {Γ Λ : Type*}
               omega
             rw [this, Nat.pred_eq_sub_one]
 
+lemma simStaysInSimAndPreservesOutput {Γ Λ : Type*}
+  [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
+  (M : Turing.TM0.Machine (Γ := Γ) (Λ := Λ))
+  (cfg cfg' : GeneratorConfig Γ Γ (GenState Λ Γ (standardEncoding Γ)))
+  (h_state : ∃ q, cfg.state = GenState.sim q)
+  (h_step : step (TM_generator M) cfg = some cfg') :
+  cfg'.output = cfg.output ∧ (∃ q', cfg'.state = GenState.sim q') := by
+  obtain ⟨q, hq⟩ := h_state
+  unfold step TM_generator at h_step
+  simp only [hq] at h_step
+  cases h_M : M q (cfg.work cfg.workIndex) with
+  | none => simp [h_M] at h_step
+  | some val =>
+    obtain ⟨q', stmt⟩ := val
+    simp only [h_M] at h_step
+    cases stmt with
+    | write g =>
+      simp only [Option.some.injEq] at h_step
+      constructor
+      · rw [← h_step]
+      · rw [← h_step]; exact ⟨q', rfl⟩
+    | move dir =>
+      cases dir with
+      | left =>
+        simp only [Option.some.injEq] at h_step
+        constructor
+        · rw [← h_step]
+        · rw [← h_step]; exact ⟨q', rfl⟩
+      | right =>
+        simp only [Option.some.injEq] at h_step
+        constructor
+        · rw [← h_step]
+        · rw [← h_step]; exact ⟨q', rfl⟩
+
 lemma simulationWorksOnceWeAreReady {Γ Λ : Type*}
   [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
   (M : Turing.TM0.Machine (Γ := Γ) (Λ := Λ))
@@ -1031,7 +1065,10 @@ lemma simulationWorksOnceWeAreReady {Γ Λ : Type*}
     | some _ =>
       rw [h_gen] at h_sim_halt
       contradiction
-  have h_haltCfg_preserves_output : haltCfg.output = input := by sorry
+
+  have h_haltCfg_preserves_output : haltCfg.output = input := by
+    sorry
+
   refine ⟨h_steps, h_haltCfg_halts, h_haltCfg_preserves_output⟩
 
 theorem recognised_implies_generable {Γ Λ : Type*}
