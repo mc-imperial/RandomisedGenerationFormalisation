@@ -944,11 +944,12 @@ lemma simulationWorksOnceWeAreReady {Γ Λ : Type*}
     StepsTo gen cfg haltCfg
     ∧ haltingConfig gen haltCfg
     ∧ haltCfg.output = input := by
-
+  --
+  obtain ⟨h_state, h_idx, h_work_input, h_work_blank_high, h_work_blank_low,
+    h_output, h_nodefault⟩ := h_cfg
+  --
   -- Step 1: Show `cfg` matches the TM0 initial configuration
   have h_match_init : configurationsMatch cfg (Turing.TM0.init input) := by
-    obtain ⟨h_state, h_idx, h_work_input, h_work_blank_high, h_work_blank_low,
-      h_output, h_nodefault⟩ := h_cfg
     constructor
     · -- states_match
       exact h_state
@@ -1005,7 +1006,7 @@ lemma simulationWorksOnceWeAreReady {Γ Λ : Type*}
         Turing.Tape.mk'_left]
       have : (0 : ℤ) - 1 - (d : ℤ) < 0 := by omega
       exact h_work_blank_low _ this
-
+  --
   -- Step 2: Use halting assumption to get a halting TM0 configuration
   obtain ⟨tmCfg, h_reaches, h_tm_halt⟩ : ∃ tmCfg,
       Turing.TM0.Reaches M (Turing.TM0.init input) tmCfg ∧ Turing.TM0.step M tmCfg = none := by
@@ -1016,21 +1017,26 @@ lemma simulationWorksOnceWeAreReady {Γ Λ : Type*}
     rw [Turing.mem_eval] at h_cfg
     obtain ⟨h_reaches, h_halt⟩ := h_cfg
     exact ⟨cfg, h_reaches, h_halt⟩
-
+  --
   -- Step 3: Induction over `Reaches` to propagate `configurationsMatch` through steps
   have h_sim :
     ∀ {tmCfg cfg},
       Turing.TM0.Reaches M (Turing.TM0.init input) tmCfg →
       configurationsMatch cfg (Turing.TM0.init input) →
+      (∃ q, cfg.state = GenState.sim q) →
+      cfg.output = input →
       ∃ genCfg,
         let gen := TM_generator (enc := standardEncoding Γ) M
-        StepsTo gen cfg genCfg ∧ configurationsMatch genCfg tmCfg := by
-    intro tmCfg cfg h_reaches h_match
+        StepsTo gen cfg genCfg ∧ configurationsMatch genCfg tmCfg
+          ∧ (∃ q, genCfg.state = GenState.sim q) ∧ genCfg.output = input := by
+    intro tmCfg cfg h_reaches h_match h_sim_state h_out
     induction h_reaches with
     | refl =>
-      exact ⟨cfg, ⟨0, Steps.refl cfg⟩, h_match⟩
+      exact ⟨cfg, ⟨0, Steps.refl cfg⟩, h_match, h_sim_state, h_out⟩
     | @tail b c prev one_step IH =>
-      obtain ⟨genCfg₁, h_steps₁, h_match₁⟩ := IH
+      obtain ⟨genCfg₁, h_ih_properties⟩ := IH
+      dsimp at h_ih_properties
+      obtain ⟨h_steps₁, h_match₁, h_sim_state₁, h_out₁⟩ := h_ih_properties
       have h_sim_step := matchingConfigurationsStepSimultaneously M genCfg₁ b h_match₁
       unfold maybeConfigurationsMatch at h_sim_step
       rw [one_step] at h_sim_step
@@ -1047,11 +1053,19 @@ lemma simulationWorksOnceWeAreReady {Γ Λ : Type*}
           have one_step_gen : Steps (TM_generator M) genCfg₁ genCfg₂ 1 :=
             Steps.step genCfg₁ genCfg₂ genCfg₂ 0 h_gen_step (Steps.refl genCfg₂)
           exact Steps.trans h_n one_step_gen
+        constructor
         · exact h_sim_step
-
+        · -- Use simStaysInSimAndPreservesOutput
+          have ⟨h_preserve_out, h_stay_sim⟩ :=
+            simStaysInSimAndPreservesOutput M genCfg₁ genCfg₂ h_sim_state₁ h_gen_step
+          rw [h_preserve_out, h_out₁]
+          simp only [and_true]
+          exact h_stay_sim
+  --
   -- Step 4: Apply the simulation lemma to reach the halting configuration
-  obtain ⟨haltCfg, h_steps, h_match⟩ := h_sim h_reaches h_match_init
-
+  obtain ⟨haltCfg, h_steps, h_match, _, h_output_input⟩ :=
+    h_sim h_reaches h_match_init (by use (default : Λ)) h_output
+  --
   -- Step 5: Return the final configuration
   use haltCfg
   have h_haltCfg_halts : haltingConfig
@@ -1065,11 +1079,8 @@ lemma simulationWorksOnceWeAreReady {Γ Λ : Type*}
     | some _ =>
       rw [h_gen] at h_sim_halt
       contradiction
-
-  have h_haltCfg_preserves_output : haltCfg.output = input := by
-    sorry
-
-  refine ⟨h_steps, h_haltCfg_halts, h_haltCfg_preserves_output⟩
+  --
+  refine ⟨h_steps, h_haltCfg_halts, h_output_input⟩
 
 theorem recognised_implies_generable {Γ Λ : Type*}
   [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
