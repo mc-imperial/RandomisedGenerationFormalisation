@@ -718,7 +718,40 @@ lemma matchingConfigurationsStepSimultaneously {Γ Λ : Type*}
   (tm0Cfg : Turing.TM0.Cfg Γ Λ)
   (h_match : configurationsMatch genCfg tm0Cfg)
   : maybeConfigurationsMatch (step (TM_generator M) genCfg) (Turing.TM0.step M tm0Cfg) := by
-  sorry
+  -- Extract the matching conditions
+  have h_state := h_match.states_match
+  have h_head := h_match.heads_match
+  have h_right := h_match.tape_match_right
+  have h_left := h_match.tape_match_left
+  -- Unfold the step functions
+  unfold step TM_generator Turing.TM0.step maybeConfigurationsMatch
+  -- The generator is in sim state, so we know genCfg.state = GenState.sim tm0Cfg.q
+  simp only [h_state]
+  -- Case split on what M does at the current state and tape head
+  cases h_M : M tm0Cfg.q tm0Cfg.Tape.head with
+  | none =>
+    -- Both machines halt
+    simp
+    sorry
+  | some val =>
+    -- Both machines continue
+    obtain ⟨q', stmt⟩ := val
+    simp only [Int.reduceNeg, Option.map_some, reduceCtorEq, imp_self, implies_true]
+    -- Case split on the statement type
+    cases stmt with
+    | write a =>
+      -- Write operation
+      sorry
+    | move dir =>
+      -- Move operation
+      simp only [Int.reduceNeg, reduceCtorEq, imp_self, implies_true]
+      cases dir with
+      | left =>
+        -- Move left
+        sorry
+      | right =>
+        -- Move right
+        sorry
 
 lemma simulationWorksOnceWeAreReady {Γ Λ : Type*}
   [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
