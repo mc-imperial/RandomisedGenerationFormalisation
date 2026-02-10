@@ -996,9 +996,8 @@ lemma simulationWorksOnceWeAreReady {Γ Λ : Type*}
     induction h_reaches generalizing cfg with
     | refl =>
         -- base case: tmCfg = init input
-        intro h_match
-        sorry
-        --exact ⟨cfg, TM_generator M, StepsTo.refl _, h_match⟩
+      intro h_match
+      exact ⟨cfg, ⟨0, Steps.refl cfg⟩, h_match⟩
     | tail prev_steps one_step IH =>
         intro h_match
         -- c₂ ∈ step M c₁, h_reaches : Reaches M init c₁
