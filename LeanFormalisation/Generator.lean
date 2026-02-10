@@ -769,6 +769,26 @@ lemma matchingConfigurationsStepSimultaneously {Γ Λ : Type*}
       cases dir with
       | left =>
         -- Move left
+        -- Compute next generator config
+        have h_next_gen : step (TM_generator M) genCfg = some {
+          state := GenState.sim q'
+          input := genCfg.input
+          inputIndex := genCfg.inputIndex
+          work := genCfg.work
+          workIndex := genCfg.workIndex - 1
+          output := genCfg.output
+        } := by
+          unfold step TM_generator
+          simp only [h_state]
+          sorry
+        -- Compute next TM0 config
+        have h_next_tm : Turing.TM0.step M tm0Cfg = some {
+          q := q'
+          Tape := tm0Cfg.Tape.move Turing.Dir.left
+        } := by
+          simp only [Turing.TM0.step, h_M]
+          rfl
+        --constructor -- Tactic `constructor` failed: target is not an inductive datatype
         sorry
       | right =>
         -- Move right
