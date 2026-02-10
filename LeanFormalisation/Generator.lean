@@ -1021,7 +1021,16 @@ lemma simulationWorksOnceWeAreReady {Γ Λ : Type*}
   -- Step 5: Return the final configuration
   use haltCfg
   have h_haltCfg_halts : haltingConfig
-    (TM_generator (enc := standardEncoding Γ) M) haltCfg := by sorry
+      (TM_generator (enc := standardEncoding Γ) M) haltCfg := by
+    unfold haltingConfig
+    have h_sim_halt := matchingConfigurationsStepSimultaneously M haltCfg tmCfg h_match
+    unfold maybeConfigurationsMatch at h_sim_halt
+    rw [h_tm_halt] at h_sim_halt
+    cases h_gen : step (TM_generator M) haltCfg with
+    | none => rfl
+    | some _ =>
+      rw [h_gen] at h_sim_halt
+      contradiction
   have h_haltCfg_preserves_output : haltCfg.output = input := by sorry
   refine ⟨h_steps, h_haltCfg_halts, h_haltCfg_preserves_output⟩
 
