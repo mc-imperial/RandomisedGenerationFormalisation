@@ -730,7 +730,9 @@ lemma simulationWorksOnceWeAreReady {Γ Λ : Type*}
     ∧ cfg.workIndex = 0
     ∧ (∀ i (h : i < input.length), cfg.work (i : ℤ) = input.get ⟨i, h⟩)
     ∧ (∀ i : ℕ, i ≥ input.length → cfg.work (i : ℤ) = (default : Γ))
+    ∧ (∀ i : ℤ, i < 0 → cfg.work (i : ℤ) = (default : Γ))
     ∧ cfg.output = input
+    ∧ default ∉ input
   ) :
   ∃ haltCfg,
     let gen := TM_generator (enc := standardEncoding Γ) M
@@ -740,8 +742,68 @@ lemma simulationWorksOnceWeAreReady {Γ Λ : Type*}
 
   -- Step 1: Show `cfg` matches the TM0 initial configuration
   have h_match_init : configurationsMatch cfg (Turing.TM0.init input) := by
-    -- unfold definitions, use h_cfg
-    sorry
+    obtain ⟨h_state, h_idx, h_work_input, h_work_blank_high, h_work_blank_low,
+      h_output, h_nodefault⟩ := h_cfg
+    unfold configurationsMatch Turing.TM0.init Turing.Tape.mk₁
+    constructor
+    · -- State matches
+      exact h_state
+    constructor
+    · -- Head matches
+      rw [h_idx]
+      cases h : input with
+      | nil =>
+        simp only [Turing.Tape.mk₂, Turing.Tape.mk'_head, Turing.ListBlank.head_mk, List.headI_nil]
+        -- Goal: cfg.work 0 = default
+        have : input.length = 0 := by simp [h]
+        exact h_work_blank_high 0 (by omega)
+      | cons head tail =>
+        simp only [Turing.Tape.mk₂, Turing.Tape.mk'_head, Turing.ListBlank.head_mk, List.headI_cons]
+        -- Goal: cfg.work 0 = head
+        convert h_work_input 0 (by simp [h])
+        simp [h]
+    · -- Right side AND left side (both are ∀ statements)
+      intro d
+      constructor
+      · -- Right side matches for this d
+        rw [h_idx]
+        simp only [Turing.ListBlank.nth]
+        cases h : input with
+        | nil =>
+          simp only [zero_add, Turing.Tape.mk₂, Turing.Tape.mk'_right,
+            Turing.ListBlank.tail_mk, List.tail_nil]
+          have : input.length = 0 := by simp [h]
+          exact h_work_blank_high (1 + d) (by simp [h])
+        | cons head tail =>
+          simp only [zero_add, Turing.Tape.mk₂, Turing.ListBlank.mk,
+              Turing.Tape.mk'_right, Turing.ListBlank.tail,
+              Quotient.mk'']
+          -- Now the goal should be: cfg.work (1 + ↑d) = tail.getI d
+          simp only [List.getI, List.getD_eq_getElem?_getD]
+          by_cases hd : d < tail.length
+          · -- d is within tail bounds
+            have hget : tail[d]? = some (tail[d]) := by
+              exact List.getElem?_eq_getElem hd
+            simp only [Quotient.liftOn'_mk'', List.tail_cons, hget, Option.getD_some]
+            have : tail[d] = input.get ⟨d + 1, by simp [h]; omega⟩ := by
+              simp [h]
+            rw [this]
+            convert h_work_input (1 + d) (by simp [h]; omega) using 2
+            ring_nf
+          · -- d ≥ tail.length, so getElem? returns none
+            simp only [Quotient.liftOn'_mk'', List.tail_cons]
+            -- Goal: cfg.work (1 + ↑d) = tail[d]?.getD default
+            have : tail[d]? = none := by
+              rw [List.getElem?_eq_none]
+              omega
+            simp only [this, Option.getD_none]
+            exact h_work_blank_high (1 + d) (by simp [h]; omega)
+      · -- Left side for all d'
+        intro d'
+        rw [h_idx]
+        simp only [zero_sub, Int.reduceNeg, Turing.ListBlank.nth]
+        have : (0 : ℤ) - 1 - (d' : ℤ) < 0 := by omega
+        exact h_work_blank_low _ this
 
   -- Step 2: Use halting assumption to get a halting TM0 configuration
   obtain ⟨tmCfg, h_reaches, h_tm_halt⟩ : ∃ tmCfg,
@@ -813,10 +875,12 @@ theorem recognised_implies_generable {Γ Λ : Type*}
       ∧ readyCfg.workIndex = 0
       ∧ (∀ i (h : i < input.length), readyCfg.work (i : ℤ) = input.get ⟨i, h⟩)
       ∧ (∀ i : ℕ, i ≥ input.length → readyCfg.work (i : ℤ) = (default : Γ))
-      ∧ readyCfg.output = input := by
+      ∧ (∀ i : ℤ, i < 0 → readyCfg.work i = (default : Γ))
+      ∧ readyCfg.output = input
+      ∧ default ∉ input := by
         exact ⟨h_readyCfg_initial_state, h_readyCfg_work_index_zero,
-               h_readyCfg_work_tape_contains_input, h_readyCfg_work_tape_blank_above,
-               h_readyCfg_output_is_input⟩
+              h_readyCfg_work_tape_contains_input, h_readyCfg_work_tape_blank_above,
+              h_readyCfg_work_tape_blank_below, h_readyCfg_output_is_input, h_nodefault⟩
     rcases simulationWorksOnceWeAreReady M input h_halts readyCfg h_ready
       with ⟨haltCfg, h_steps_to_halt, h_is_halting, h_halt_output⟩
     --
