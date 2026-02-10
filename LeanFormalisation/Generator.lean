@@ -718,6 +718,13 @@ lemma matchingConfigurationsStepSimultaneously {Γ Λ : Type*}
   (tm0Cfg : Turing.TM0.Cfg Γ Λ)
   (h_match : configurationsMatch genCfg tm0Cfg)
   : maybeConfigurationsMatch (step (TM_generator M) genCfg) (Turing.TM0.step M tm0Cfg) := by
+  have h_list_blank : ∀ (lb : Turing.ListBlank Γ)
+      (x : ℕ), 1 ≤ x → lb.tail.nth x = lb.tail.tail.nth (x - 1) := by
+    intros lb x hx
+    -- Use nth_succ on lb.tail
+    rw [← Turing.ListBlank.nth_succ lb.tail (x - 1)]
+      -- Simplify the RHS: (x - 1) + 1 = x
+    rw [Nat.sub_add_cancel hx]
   -- Extract the matching conditions
   have h_state := h_match.states_match
   have h_head := h_match.heads_match
@@ -831,12 +838,28 @@ lemma matchingConfigurationsStepSimultaneously {Γ Λ : Type*}
               linarith
             rw [if_neg h_if_condition_false]
             rw [show -2 + genCfg.workIndex = genCfg.workIndex - 1 - 1 by ring]
-            have h_left_1 := h_left 1
-            sorry
+            have h_left_1 :
+              genCfg.work (genCfg.workIndex - 1 - 1) = tm0Cfg.Tape.left.nth 1 :=
+            by
+              simpa using (h_left 1)
+            rw [h_left_1]
+            simp
           · have h_d_geq_1: d ≥ 1 := Nat.succ_le_of_lt (Nat.pos_of_ne_zero h)
             rw [show d = (d - 1) + 1 by omega]
             rw [Turing.ListBlank.nth_succ]
-            sorry
+            ring_nf
+            have h_if_false : -2 + (genCfg.workIndex - ↑(1 + (d - 1))) ≠ genCfg.workIndex := by
+              omega
+            rw [if_neg h_if_false]
+            have h_1_plus_d_minus_1 : 1 + (d - 1) = d := by omega
+            rw [h_1_plus_d_minus_1]
+            have : -2 + (genCfg.workIndex - ↑d) = genCfg.workIndex - 1 - ↑(d + 1) := by
+              push_cast
+              ring
+            rw [this, h_left (d + 1)]
+            simp only [Turing.ListBlank.nth_succ]
+            apply h_list_blank
+            exact h_d_geq_1
       | right =>
         -- Move right
         sorry
