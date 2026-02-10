@@ -730,9 +730,9 @@ lemma matchingConfigurationsStepSimultaneously {Γ Λ : Type*}
   -- Case split on what M does at the current state and tape head
   cases h_M : M tm0Cfg.q tm0Cfg.Tape.head with
   | none =>
-    -- Both machines halt
-    simp
-    sorry
+      rw [h_head]
+      rw [h_M]
+      simp
   | some val =>
     -- Both machines continue
     obtain ⟨q', stmt⟩ := val
@@ -740,8 +740,29 @@ lemma matchingConfigurationsStepSimultaneously {Γ Λ : Type*}
     -- Case split on the statement type
     cases stmt with
     | write a =>
-      -- Write operation
-      sorry
+        simp only [h_M, h_head]
+        constructor
+        · -- states_match
+          rfl
+        · -- heads match
+          simp
+          rfl
+        · -- tape_match_right
+          intro d
+          simp only [add_zero]
+          have h_ne : genCfg.workIndex + 1 + ↑d ≠ genCfg.workIndex := by
+            intro eq
+            linarith [Int.ofNat_le_ofNat_of_le (Nat.zero_le d)]
+          simp only [if_neg h_ne]
+          exact h_match.tape_match_right d
+        · -- tape_match_left
+          intro d
+          simp only [add_zero]
+          have h_ne : genCfg.workIndex - 1 - ↑d ≠ genCfg.workIndex := by
+            intro eq
+            linarith [Int.ofNat_le_ofNat_of_le (Nat.zero_le d)]
+          simp only [if_neg h_ne]
+          exact h_match.tape_match_left d
     | move dir =>
       -- Move operation
       simp only [Int.reduceNeg, reduceCtorEq, imp_self, implies_true]
