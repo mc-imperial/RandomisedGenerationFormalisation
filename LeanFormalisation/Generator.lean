@@ -912,7 +912,6 @@ lemma simulationWorksOnceWeAreReady {Γ Λ : Type*}
     ∧ haltCfg.output = input := by
 
   -- Step 1: Show `cfg` matches the TM0 initial configuration
-  -- Step 1: Show `cfg` matches the TM0 initial configuration
   have h_match_init : configurationsMatch cfg (Turing.TM0.init input) := by
     obtain ⟨h_state, h_idx, h_work_input, h_work_blank_high, h_work_blank_low,
       h_output, h_nodefault⟩ := h_cfg
@@ -992,24 +991,29 @@ lemma simulationWorksOnceWeAreReady {Γ Λ : Type*}
       ∃ genCfg,
         let gen := TM_generator (enc := standardEncoding Γ) M
         StepsTo gen cfg genCfg ∧ configurationsMatch genCfg tmCfg := by
-    intro tmCfg cfg h_reaches
-    induction h_reaches generalizing cfg with
+    intro tmCfg cfg h_reaches h_match
+    induction h_reaches with
     | refl =>
-        -- base case: tmCfg = init input
-      intro h_match
       exact ⟨cfg, ⟨0, Steps.refl cfg⟩, h_match⟩
-    | tail prev_steps one_step IH =>
-        intro h_match
-        -- c₂ ∈ step M c₁, h_reaches : Reaches M init c₁
-        -- Apply IH to c₁
-        obtain ⟨genCfg₁, h_steps₁, h_match₁⟩ := IH h_match
-        -- Now take one generator step corresponding to TM0 `step`
-        -- This produces a new configuration matching c₂
-        sorry
-        -- let gen := TM_generator M
-        -- have h_step_cfg : Step gen genCfg₁ = some genCfg₂ := sorry
-        -- -- Build StepsTo gen cfg genCfg₂ by chaining h_steps₁ and this step
-        -- exact ⟨genCfg₂, gen, h_steps₁.trans h_step_cfg, h_match_next⟩
+    | @tail b c prev one_step IH =>
+      obtain ⟨genCfg₁, h_steps₁, h_match₁⟩ := IH
+      have h_sim_step := matchingConfigurationsStepSimultaneously M genCfg₁ b h_match₁
+      unfold maybeConfigurationsMatch at h_sim_step
+      rw [one_step] at h_sim_step
+      cases h_gen_step : step (TM_generator M) genCfg₁ with
+      | none =>
+        rw [h_gen_step] at h_sim_step
+        contradiction
+      | some genCfg₂ =>
+        rw [h_gen_step] at h_sim_step
+        use genCfg₂
+        constructor
+        · obtain ⟨n, h_n⟩ := h_steps₁
+          use n + 1
+          have one_step_gen : Steps (TM_generator M) genCfg₁ genCfg₂ 1 :=
+            Steps.step genCfg₁ genCfg₂ genCfg₂ 0 h_gen_step (Steps.refl genCfg₂)
+          exact Steps.trans h_n one_step_gen
+        · exact h_sim_step
 
   -- Step 4: Apply the simulation lemma to reach the halting configuration
   obtain ⟨haltCfg, h_steps, h_match⟩ := h_sim h_reaches h_match_init
