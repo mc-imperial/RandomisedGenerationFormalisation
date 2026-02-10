@@ -691,16 +691,16 @@ lemma weGetReadyToSimulate {Γ Λ : Type*}
     use n1 + n2
     exact Steps.trans steps1 steps2
 
-def configurationsMatch {Γ Λ : Type*}
+structure configurationsMatch {Γ Λ : Type*}
   [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
   (genCfg : GeneratorConfig Γ Γ (GenState Λ Γ (standardEncoding Γ)))
-  (tm0Cfg : Turing.TM0.Cfg Γ Λ) : Prop :=
-  genCfg.state = GenState.sim (Λ := Λ) (Γ := Γ) (enc := standardEncoding Γ) tm0Cfg.q
-    ∧ genCfg.work genCfg.workIndex = tm0Cfg.Tape.head
-    ∧ ∀ (d : ℕ), genCfg.work (genCfg.workIndex + 1 + d) =
-        Turing.ListBlank.nth tm0Cfg.Tape.right d
-    ∧ ∀ (d : ℕ), genCfg.work (genCfg.workIndex - 1 - d) =
-        Turing.ListBlank.nth tm0Cfg.Tape.left d
+  (tm0Cfg : Turing.TM0.Cfg Γ Λ) : Prop where
+  states_match : genCfg.state = GenState.sim (Λ := Λ) (Γ := Γ) (enc := standardEncoding Γ) tm0Cfg.q
+  heads_match : genCfg.work genCfg.workIndex = tm0Cfg.Tape.head
+  tape_match_right : ∀ (d : ℕ), genCfg.work (genCfg.workIndex + 1 + d) =
+    Turing.ListBlank.nth tm0Cfg.Tape.right d
+  tape_match_left : ∀ (d : ℕ), genCfg.work (genCfg.workIndex - 1 - d) =
+    Turing.ListBlank.nth tm0Cfg.Tape.left d
 
 def maybeConfigurationsMatch {Γ Λ : Type*}
   [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
@@ -717,7 +717,8 @@ lemma matchingConfigurationsStepSimultaneously {Γ Λ : Type*}
   (genCfg : GeneratorConfig Γ Γ (GenState Λ Γ (standardEncoding Γ)))
   (tm0Cfg : Turing.TM0.Cfg Γ Λ)
   (h_match : configurationsMatch genCfg tm0Cfg)
-  : maybeConfigurationsMatch (step (TM_generator M) genCfg) (Turing.TM0.step M tm0Cfg) := by sorry
+  : maybeConfigurationsMatch (step (TM_generator M) genCfg) (Turing.TM0.step M tm0Cfg) := by
+  sorry
 
 lemma simulationWorksOnceWeAreReady {Γ Λ : Type*}
   [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
@@ -741,69 +742,66 @@ lemma simulationWorksOnceWeAreReady {Γ Λ : Type*}
     ∧ haltCfg.output = input := by
 
   -- Step 1: Show `cfg` matches the TM0 initial configuration
+  -- Step 1: Show `cfg` matches the TM0 initial configuration
   have h_match_init : configurationsMatch cfg (Turing.TM0.init input) := by
     obtain ⟨h_state, h_idx, h_work_input, h_work_blank_high, h_work_blank_low,
       h_output, h_nodefault⟩ := h_cfg
-    unfold configurationsMatch Turing.TM0.init Turing.Tape.mk₁
     constructor
-    · -- State matches
+    · -- states_match
       exact h_state
-    constructor
-    · -- Head matches
+    · -- heads_match
       rw [h_idx]
+      unfold Turing.TM0.init Turing.Tape.mk₁
       cases h : input with
       | nil =>
         simp only [Turing.Tape.mk₂, Turing.Tape.mk'_head, Turing.ListBlank.head_mk, List.headI_nil]
-        -- Goal: cfg.work 0 = default
         have : input.length = 0 := by simp [h]
         exact h_work_blank_high 0 (by omega)
       | cons head tail =>
         simp only [Turing.Tape.mk₂, Turing.Tape.mk'_head, Turing.ListBlank.head_mk, List.headI_cons]
-        -- Goal: cfg.work 0 = head
         convert h_work_input 0 (by simp [h])
         simp [h]
-    · -- Right side AND left side (both are ∀ statements)
+    · -- right_match
       intro d
-      constructor
-      · -- Right side matches for this d
-        rw [h_idx]
-        simp only [Turing.ListBlank.nth]
-        cases h : input with
-        | nil =>
-          simp only [zero_add, Turing.Tape.mk₂, Turing.Tape.mk'_right,
-            Turing.ListBlank.tail_mk, List.tail_nil]
-          have : input.length = 0 := by simp [h]
-          exact h_work_blank_high (1 + d) (by simp [h])
-        | cons head tail =>
-          simp only [zero_add, Turing.Tape.mk₂, Turing.ListBlank.mk,
-              Turing.Tape.mk'_right, Turing.ListBlank.tail,
-              Quotient.mk'']
-          -- Now the goal should be: cfg.work (1 + ↑d) = tail.getI d
-          simp only [List.getI, List.getD_eq_getElem?_getD]
-          by_cases hd : d < tail.length
-          · -- d is within tail bounds
-            have hget : tail[d]? = some (tail[d]) := by
-              exact List.getElem?_eq_getElem hd
-            simp only [Quotient.liftOn'_mk'', List.tail_cons, hget, Option.getD_some]
-            have : tail[d] = input.get ⟨d + 1, by simp [h]; omega⟩ := by
-              simp [h]
-            rw [this]
-            convert h_work_input (1 + d) (by simp [h]; omega) using 2
-            ring_nf
-          · -- d ≥ tail.length, so getElem? returns none
-            simp only [Quotient.liftOn'_mk'', List.tail_cons]
-            -- Goal: cfg.work (1 + ↑d) = tail[d]?.getD default
-            have : tail[d]? = none := by
-              rw [List.getElem?_eq_none]
-              omega
-            simp only [this, Option.getD_none]
-            exact h_work_blank_high (1 + d) (by simp [h]; omega)
-      · -- Left side for all d'
-        intro d'
-        rw [h_idx]
-        simp only [zero_sub, Int.reduceNeg, Turing.ListBlank.nth]
-        have : (0 : ℤ) - 1 - (d' : ℤ) < 0 := by omega
-        exact h_work_blank_low _ this
+      unfold Turing.TM0.init Turing.Tape.mk₁
+      rw [h_idx]
+      simp only [Turing.ListBlank.nth]
+      cases h : input with
+      | nil =>
+        simp only [zero_add, Turing.Tape.mk₂, Turing.Tape.mk'_right,
+          Turing.ListBlank.tail_mk, List.tail_nil]
+        have : input.length = 0 := by simp [h]
+        exact h_work_blank_high (1 + d) (by simp [h])
+      | cons head tail =>
+        simp only [zero_add, Turing.Tape.mk₂, Turing.ListBlank.mk,
+            Turing.Tape.mk'_right, Turing.ListBlank.tail,
+            Quotient.mk'']
+        simp only [List.getI, List.getD_eq_getElem?_getD]
+        by_cases hd : d < tail.length
+        · -- d is within tail bounds
+          have hget : tail[d]? = some (tail[d]) := by
+            exact List.getElem?_eq_getElem hd
+          simp only [Quotient.liftOn'_mk'', List.tail_cons, hget, Option.getD_some]
+          have : tail[d] = input.get ⟨d + 1, by simp [h]; omega⟩ := by
+            simp [h]
+          rw [this]
+          convert h_work_input (1 + d) (by simp [h]; omega) using 2
+          ring_nf
+        · -- d ≥ tail.length, so getElem? returns none
+          simp only [Quotient.liftOn'_mk'', List.tail_cons]
+          have : tail[d]? = none := by
+            rw [List.getElem?_eq_none]
+            omega
+          simp only [this, Option.getD_none]
+          exact h_work_blank_high (1 + d) (by simp [h]; omega)
+    · -- left_match
+      intro d
+      unfold Turing.TM0.init Turing.Tape.mk₁
+      rw [h_idx]
+      simp only [zero_sub, Int.reduceNeg, Turing.ListBlank.nth, Turing.Tape.mk₂,
+        Turing.Tape.mk'_left]
+      have : (0 : ℤ) - 1 - (d : ℤ) < 0 := by omega
+      exact h_work_blank_low _ this
 
   -- Step 2: Use halting assumption to get a halting TM0 configuration
   obtain ⟨tmCfg, h_reaches, h_tm_halt⟩ : ∃ tmCfg,
