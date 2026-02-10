@@ -780,7 +780,15 @@ lemma matchingConfigurationsStepSimultaneously {Γ Λ : Type*}
         } := by
           unfold step TM_generator
           simp only [h_state]
-          sorry
+          simp only [h_head]
+          simp only [h_M, add_zero, Int.reduceNeg, Option.some.injEq,
+            GeneratorConfig.mk.injEq, and_true, true_and]
+          constructor
+          · funext x
+            by_cases hx : x = genCfg.workIndex
+            · simp [hx, h_head]
+            · simp [hx]
+          · linarith
         -- Compute next TM0 config
         have h_next_tm : Turing.TM0.step M tm0Cfg = some {
           q := q'
@@ -788,8 +796,23 @@ lemma matchingConfigurationsStepSimultaneously {Γ Λ : Type*}
         } := by
           simp only [Turing.TM0.step, h_M]
           rfl
-        --constructor -- Tactic `constructor` failed: target is not an inductive datatype
-        sorry
+        simp only [h_head, h_M, add_zero, Int.reduceNeg]
+        refine ⟨?_, ?_, ?_, ?_⟩
+        · rfl
+        · simp [Turing.Tape.move]
+          simpa using h_left 0
+        · intro d
+          simp only [Int.reduceNeg, neg_add_cancel_right, add_eq_left,
+            Int.natCast_eq_zero, Turing.Tape.move]
+          cases d with
+          | zero =>
+            simp
+          | succ d =>
+            simp [Turing.ListBlank.nth]
+            sorry
+        · intro d
+          simp [Turing.Tape.move]
+          sorry
       | right =>
         -- Move right
         sorry
