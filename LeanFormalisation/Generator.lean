@@ -814,23 +814,20 @@ lemma matchingConfigurationsStepSimultaneously {Γ Λ : Type*}
           simpa using h_left 0
         · intro d
           simp only [Turing.Tape.move]
-          by_cases h : d = 0
-          · simp only [Int.reduceNeg, neg_add_cancel_right, h,
-              CharP.cast_eq_zero, add_zero, ↓reduceIte,
-              Turing.ListBlank.nth_zero, Turing.ListBlank.head_cons]
-          · ring_nf
-            have h' : genCfg.workIndex + (↑d : ℤ) ≠ genCfg.workIndex := by
-              intro hEq
-              have : (↑d : ℤ) = 0 := by
-                linarith
-              exact h (Int.ofNat_eq_zero.mp this)
-            simp only [h', ↓reduceIte]
-            have h_d_geq_1: d ≥ 1 := Nat.succ_le_of_lt (Nat.pos_of_ne_zero h)
-            rw [show d = (d - 1) + 1 by omega]
-            rw [Turing.ListBlank.nth_succ, Turing.ListBlank.tail_cons]
-            convert h_right (d - 1) using 2
-            ring_nf
-            omega
+          split
+          · have h_d_eq_0 : d = 0 := by omega
+            simp [h_d_eq_0]
+          · have h_d_neq_0 : d ≠ 0 := by omega
+            have h_helper : genCfg.workIndex + -1 + 1 + ↑d = genCfg.workIndex + 1 + ↑(d - 1) :=
+              by omega
+            rw [h_helper, h_right (d - 1)]
+            have h_d_gt_0 : d > 0 := by omega
+            rw [← Nat.succ_pred_eq_of_pos h_d_gt_0, Turing.ListBlank.nth_succ,
+              Turing.ListBlank.tail_cons]
+            have : d.pred.succ = d := by
+              simp [Nat.pred_eq_sub_one]
+              omega
+            rw [this, Nat.pred_eq_sub_one]
         · intro d
           simp only [Turing.Tape.move]
           have impossible : ¬ (genCfg.workIndex + - 1 - 1 - ↑d = genCfg.workIndex) := by omega
