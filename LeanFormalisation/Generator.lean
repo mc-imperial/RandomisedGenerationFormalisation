@@ -718,10 +718,6 @@ lemma matchingConfigurationsStepSimultaneously {Γ Λ : Type*}
   (tm0Cfg : Turing.TM0.Cfg Γ Λ)
   (h_match : configurationsMatch genCfg tm0Cfg)
   : maybeConfigurationsMatch (step (TM_generator M) genCfg) (Turing.TM0.step M tm0Cfg) := by
-  have h_nth_tail_succ : ∀ (lb : Turing.ListBlank Γ) (k : ℕ),
-      lb.tail.nth (k + 1) = lb.tail.tail.nth k := by
-    intro lb k
-    rw [Turing.ListBlank.nth_succ]
   have h_list_blank : ∀ (lb : Turing.ListBlank Γ)
       (x : ℕ), 1 ≤ x → lb.tail.nth x = lb.tail.tail.nth (x - 1) := by
     intros lb x hx
@@ -838,7 +834,61 @@ lemma matchingConfigurationsStepSimultaneously {Γ Λ : Type*}
           simp only [Turing.ListBlank.nth_succ]
       | right =>
         -- Move right
-        sorry
+        -- Compute next generator config
+        have h_next_gen : step (TM_generator M) genCfg = some {
+          state := GenState.sim q'
+          input := genCfg.input
+          inputIndex := genCfg.inputIndex
+          work := genCfg.work
+          workIndex := genCfg.workIndex + 1
+          output := genCfg.output
+        } := by
+          unfold step TM_generator
+          simp only [h_state]
+          simp only [h_head]
+          simp only [h_M, add_zero, Option.some.injEq,
+            GeneratorConfig.mk.injEq, and_true, true_and]
+          funext x
+          split_ifs with hx
+          · rw[hx]
+            exact symm h_head
+          · rfl
+        -- Compute next TM0 config
+        have h_next_tm : Turing.TM0.step M tm0Cfg = some {
+          q := q'
+          Tape := tm0Cfg.Tape.move Turing.Dir.right
+        } := by
+          simp only [Turing.TM0.step, h_M]
+          rfl
+        simp only [h_head, h_M, add_zero]
+        refine ⟨?_, ?_, ?_, ?_⟩
+        · rfl
+        · simp [Turing.Tape.move]
+          simpa using h_right 0
+        · intro d
+          simp only [Turing.Tape.move]
+          have impossible : ¬ (genCfg.workIndex + 1 + 1 + ↑d = genCfg.workIndex) := by omega
+          simp only [if_neg impossible]
+          have h_helper : genCfg.workIndex + 1 + 1 + ↑d = genCfg.workIndex + 1 + ↑(d + 1) :=
+            by omega
+          rw [h_helper, h_right (d + 1)]
+          simp only [Turing.ListBlank.nth_succ]
+        · intro d
+          simp only [Turing.Tape.move]
+          split
+          · have h_d_eq_0 : d = 0 := by omega
+            simp [h_d_eq_0]
+          · have h_d_neq_0 : d ≠ 0 := by omega
+            have h_helper : genCfg.workIndex + 1 - 1 - ↑d = genCfg.workIndex - 1 - ↑(d - 1) :=
+              by omega
+            rw [h_helper, h_left (d - 1)]
+            have h_d_gt_0 : d > 0 := by omega
+            rw [← Nat.succ_pred_eq_of_pos h_d_gt_0, Turing.ListBlank.nth_succ,
+              Turing.ListBlank.tail_cons]
+            have : d.pred.succ = d := by
+              simp [Nat.pred_eq_sub_one]
+              omega
+            rw [this, Nat.pred_eq_sub_one]
 
 lemma simulationWorksOnceWeAreReady {Γ Λ : Type*}
   [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
