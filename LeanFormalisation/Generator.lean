@@ -975,10 +975,14 @@ lemma simulationWorksOnceWeAreReady {Γ Λ : Type*}
 
   -- Step 2: Use halting assumption to get a halting TM0 configuration
   obtain ⟨tmCfg, h_reaches, h_tm_halt⟩ : ∃ tmCfg,
-      Turing.TM0.Reaches M (Turing.TM0.init input) tmCfg ∧ Turing.TM0.step M tmCfg = none :=
-    by
-      -- this comes from h_halts and `mem_eval`
-      sorry
+      Turing.TM0.Reaches M (Turing.TM0.init input) tmCfg ∧ Turing.TM0.step M tmCfg = none := by
+    unfold Turing.TM0.eval at h_halts
+    obtain ⟨output, h_out⟩ := Part.dom_iff_mem.mp h_halts
+    rw [Part.mem_map_iff] at h_out
+    obtain ⟨cfg, h_cfg, _⟩ := h_out
+    rw [Turing.mem_eval] at h_cfg
+    obtain ⟨h_reaches, h_halt⟩ := h_cfg
+    exact ⟨cfg, h_reaches, h_halt⟩
 
   -- Step 3: Induction over `Reaches` to propagate `configurationsMatch` through steps
   have h_sim :
