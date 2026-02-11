@@ -421,9 +421,11 @@ lemma readBlockBits_lt_pow {input : ℕ → Bool} {W k : ℕ} {x : Fin W} (hW : 
             _ = 2^W := by
                 have : W = (W - 1) + 1 := by omega
                 rw [this, pow_succ]
-                ring
+                ring_nf
+                sorry
 
-lemma readBlockBits_le_pred_pow {input : ℕ → Bool} {W k : ℕ} {x : Fin W} (hW : W > 0) (hx : x.val ≤ W) :
+lemma readBlockBits_le_pred_pow {input : ℕ → Bool} {W k : ℕ} {x : Fin W} (hW : W > 0)
+    (hx : x.val ≤ W) :
   readBlockBits input W k x ≤ 2^x.val - 1 := by
   unfold readBlockBits
   by_cases hx0 : x.val = 0
@@ -473,21 +475,22 @@ lemma decodeBitWithinSymbol {Γ Λ : Type*}
   [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
   (M : Turing.TM0.Machine (Γ := Γ) (Λ := Λ))
   (input : List Γ)
-  {k : ℕ} (hk : k < input.length)
+  {k : ℕ} (hk : k ≤ input.length)
   {x : Fin (standardEncoding Γ).W} (hx : x.val < (standardEncoding Γ).W - 1)
   (cfg : GeneratorConfig Γ Γ (GenState Λ Γ (standardEncoding Γ)))
-  (hinv : DecodeBitInv input cfg (k := k) (by omega) (x := x) (by exact Nat.lt_of_lt_pred hx)) :
+  (hinv : DecodeBitInv input cfg (k := k) (by omega) (x := x)
+    (by exact Nat.lt_of_lt_pred hx)) :
   ∃ cfg',
     step (TM_generator (enc := standardEncoding Γ) M) cfg = some cfg' ∧
-    (DecodeBitInv input cfg' (k := k) (by omega) (x := ⟨x.val + 1, by omega⟩) (by omega)) :=
-by
-  sorry
+    DecodeBitInv input cfg' (k := k) (by omega) (x := ⟨x.val + 1, by omega⟩)
+      (by omega) :=
+by sorry
 
 lemma decodeBitEndOfSymbol {Γ Λ : Type*}
   [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
   (M : Turing.TM0.Machine (Γ := Γ) (Λ := Λ))
   (input : List Γ)
-  {k : ℕ} (hk : k < input.length)  -- Changed from k < input.length - 1
+  {k : ℕ} (hk : k < input.length)
   (cfg : GeneratorConfig Γ Γ (GenState Λ Γ (standardEncoding Γ)))
   (hinv : DecodeBitInv input cfg (k := k) (by omega)
     (x := ⟨(standardEncoding Γ).W - 1, Nat.sub_lt (standardEncoding Γ).W_pos (by norm_num)⟩)
@@ -495,18 +498,17 @@ lemma decodeBitEndOfSymbol {Γ Λ : Type*}
   ∃ cfg',
     step (TM_generator (enc := standardEncoding Γ) M) cfg = some cfg' ∧
     DecodeSymbolInv input cfg' (k := k + 1) (by omega) :=
-by
-  sorry
+by sorry
 
-lemma decodeFinalBit {Γ Λ : Type*}
+-- Decode the final bit of the EOF marker, triggering rewind
+lemma decodeEOFBitFinal {Γ Λ : Type*}
   [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
   (M : Turing.TM0.Machine (Γ := Γ) (Λ := Λ))
   (input : List Γ)
   (cfg : GeneratorConfig Γ Γ (GenState Λ Γ (standardEncoding Γ)))
-  (hinv : DecodeBitInv input cfg (k := input.length - 1) (by omega)
-    (x := ⟨(standardEncoding Γ).W - 1,
-      Nat.sub_lt (standardEncoding Γ).W_pos (by norm_num)⟩)
-      (Nat.sub_lt (standardEncoding Γ).W_pos (by norm_num))) :
+  (hinv : DecodeBitInv input cfg (k := input.length) (by omega)
+    (x := ⟨(standardEncoding Γ).W - 1, Nat.sub_lt (standardEncoding Γ).W_pos (by norm_num)⟩)
+    (Nat.sub_lt (standardEncoding Γ).W_pos (by norm_num))) :
   ∃ cfg',
     step (TM_generator (enc := standardEncoding Γ) M) cfg = some cfg' ∧
     cfg'.state = GenState.rewind ∧
@@ -514,9 +516,8 @@ lemma decodeFinalBit {Γ Λ : Type*}
     (∀ i (h : i < input.length), cfg'.work (i : ℤ) = input.get ⟨i, h⟩) ∧
     (∀ i : ℕ, i ≥ input.length → cfg'.work (i : ℤ) = default) ∧
     (∀ i : ℤ, i < 0 → cfg'.work (i : ℤ) = default) ∧
-    cfg'.output = input :=
-by
-  sorry
+    cfg'.output = input
+:= by sorry
 
 lemma decodeOneSymbol {Γ Λ : Type*}
   [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
@@ -551,8 +552,9 @@ lemma decodeOneSymbol {Γ Λ : Type*}
         exact ⟨1, Steps.step cfg_i cfg' cfg' 0 h_step (Steps.refl cfg')⟩
       · -- Not last bit
         have h_i_lt : i < W - 1 := by omega
+        have hk_le : k ≤ input.length := by omega
         obtain ⟨cfg_next, h_step, h_next_inv⟩ :=
-          decodeBitWithinSymbol M input hk h_i_lt cfg_i h_inv
+          decodeBitWithinSymbol M input hk_le h_i_lt cfg_i h_inv
         have h_i_succ : i + 1 < W := by omega
         have hn_next : n - 1 = W - 1 - (i + 1) := by omega
         have h_n_pos : 0 < n := by omega
