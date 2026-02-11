@@ -364,6 +364,32 @@ def bitstreamFromInput {Γ : Type*} [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [De
       -- Bits after the encoding; value doesn't matter, so set them (arbitrarily) to false
       false
 
+def DecodeInv {Γ Λ : Type*}
+  [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
+  (input : List Γ) (cfg : GeneratorConfig Γ Γ (GenState Λ Γ (standardEncoding Γ)))
+  (k : ℕ) : Prop :=
+  k ≤ input.length
+  ∧ cfg.state = GenState.load  { bitsRead := 0, acc := 0, accBound := sorry }
+  ∧ cfg.inputIndex = k * (standardEncoding Γ).W
+  ∧ cfg.workIndex = k
+  ∧ (∀ i : ℤ, 0 ≤ i ∧ i < k → cfg.work i = input.get ⟨Int.toNat i, sorry⟩)
+  ∧ (∀ i : ℤ, i < 0 ∨ k ≤ Int.toNat i → cfg.work i = default)
+  ∧ cfg.input = bitstreamFromInput input
+  ∧ cfg.output = input.drop k
+
+lemma decodeOneSymbol {Γ Λ : Type*}
+  [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
+  (M : Turing.TM0.Machine (Γ := Γ) (Λ := Λ))
+  (input : List Γ)
+  (cfg : GeneratorConfig Γ Γ (GenState Λ Γ (standardEncoding Γ)))
+  (k : ℕ)
+:
+k < input.length ∧ DecodeInv input cfg k → ∃ cfg',
+StepsTo (TM_generator (enc := standardEncoding Γ) M) cfg cfg'
+∧
+DecodeInv input cfg' (k + 1)
+:= by sorry
+
 lemma weGetReadyToRewind {Γ Λ : Type*}
   [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
   (M : Turing.TM0.Machine (Γ := Γ) (Λ := Λ))
@@ -380,7 +406,33 @@ lemma weGetReadyToRewind {Γ Λ : Type*}
         cfg.work (i : ℤ) = (default : Γ))
     ∧ cfg.output = input
     ∧ StepsTo gen (initConfig gen (bitstreamFromInput input)) cfg := by
-sorry
+  let initialCfg := (initConfig (TM_generator (enc := standardEncoding Γ) M)
+    (bitstreamFromInput input))
+  have h_base_inv : DecodeInv input initialCfg 0 := by sorry
+
+  have h_read_k_inputs :
+    ∀ i ≤ input.length,
+      ∃ cfg' : GeneratorConfig Γ Γ (GenState Λ Γ (standardEncoding Γ)),
+        DecodeInv input cfg' i := by
+    intro i
+    induction i with
+    | zero =>
+      intro _
+      exact ⟨initialCfg, h_base_inv⟩
+    | succ i ih =>
+      intro h_le
+      have h_lt : i < input.length :=
+        Nat.lt_of_succ_le h_le
+      have h_prev :=
+        ih (Nat.le_of_lt h_lt)
+      rcases h_prev with ⟨cfg_i, hInv_i⟩
+      have h_premise : i < input.length ∧ DecodeInv input cfg_i i := by sorry
+      have h_next :=
+        decodeOneSymbol M input cfg_i i h_premise
+      obtain ⟨cfg', h_steps_cfg_i_to_cfg', h_inv_cfg'⟩ := h_next
+      use cfg'
+
+  sorry
 
 lemma rewindWithNonNegativeIndexOneStep {Γ Λ : Type*}
   [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
