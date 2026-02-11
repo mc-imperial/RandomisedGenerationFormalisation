@@ -587,7 +587,60 @@ StepsTo (TM_generator (enc := standardEncoding Γ) M) cfg cfg'
 ∧ (∀ i : ℕ, i ≥ input.length → cfg'.work (i : ℤ) = (default : Γ))
 ∧ (∀ i : ℤ, i < 0 → cfg'.work (i : ℤ) = (default : Γ))
 ∧ cfg'.output = input
-) := by sorry
+) := by
+  let W := (standardEncoding Γ).W
+  have hW : W > 0 := (standardEncoding Γ).W_pos
+  -- Helper with explicit measure
+  have decode_eof_from_bit :
+      ∀ (n : ℕ) (i : ℕ) (hi : i < W) (hn : n = W - 1 - i)
+        (cfg_i : GeneratorConfig Γ Γ (GenState Λ Γ (standardEncoding Γ))),
+      DecodeBitInv input cfg_i (k := input.length) (by omega)
+        (x := ⟨i, hi⟩) (by exact hi) →
+      ∃ cfg',
+        StepsTo (TM_generator (enc := standardEncoding Γ) M) cfg_i cfg' ∧
+        cfg'.state = GenState.rewind ∧
+        cfg'.workIndex = input.length - 1 ∧
+        (∀ i (h : i < input.length), cfg'.work (i : ℤ) = input.get ⟨i, h⟩) ∧
+        (∀ i : ℕ, i ≥ input.length → cfg'.work (i : ℤ) = (default : Γ)) ∧
+        (∀ i : ℤ, i < 0 → cfg'.work (i : ℤ) = (default : Γ)) ∧
+        cfg'.output = input := by
+    intro n
+    induction n using Nat.strong_induction_on with
+    | h n ih =>
+      intro i hi hn cfg_i h_inv
+      by_cases h_last : i = W - 1
+      · -- Last bit: use decodeEOFBitFinal
+        subst h_last
+        obtain ⟨cfg', h_step, h_rewind, h_workIndex, h_work_lt, h_work_ge,
+          h_work_neg, h_output⟩ := decodeEOFBitFinal M input cfg_i h_inv
+        refine ⟨cfg', ?_, h_rewind, h_workIndex, h_work_lt, h_work_ge,
+          h_work_neg, h_output⟩
+        exact ⟨1, Steps.step cfg_i cfg' cfg' 0 h_step (Steps.refl cfg')⟩
+      · -- Not last bit: use decodeBitWithinSymbol
+        have h_i_lt : i < W - 1 := by omega
+        have hk_le : input.length ≤ input.length := by omega
+        obtain ⟨cfg_next, h_step, h_next_inv⟩ :=
+          decodeBitWithinSymbol M input hk_le h_i_lt cfg_i h_inv
+        have h_i_succ : i + 1 < W := by omega
+        have hn_next : n - 1 = W - 1 - (i + 1) := by omega
+        have h_n_pos : 0 < n := by omega
+        obtain ⟨cfg', h_steps_rest, h_rewind, h_workIndex, h_work_lt, h_work_ge,
+          h_work_neg, h_output⟩ :=
+          ih (n - 1) (by omega) (i + 1) h_i_succ hn_next cfg_next h_next_inv
+        refine ⟨cfg', ?_, h_rewind, h_workIndex, h_work_lt, h_work_ge,
+          h_work_neg, h_output⟩
+        exact StepsTo.trans _
+          ⟨1, Steps.step cfg_i cfg_next cfg_next 0 h_step (Steps.refl cfg_next)⟩
+          h_steps_rest
+  -- Convert DecodeSymbolInv to DecodeBitInv at bit 0
+  have h_start : DecodeBitInv input cfg (k := input.length) (by omega)
+      (x := ⟨0, hW⟩) (by exact hW) := by
+    obtain ⟨h_state, h_inputIndex, h_workIndex, h_work_lt, h_work_ge,
+      h_input, h_output⟩ := h_ready_for_last_symbol
+    refine ⟨h_state, ?_, h_workIndex, h_work_lt, h_work_ge, h_input, h_output⟩
+    simp [h_inputIndex]
+  -- Apply the helper to bit 0
+  exact decode_eof_from_bit (W - 1) 0 hW rfl cfg h_start
 
 lemma weGetReadyToRewind {Γ Λ : Type*}
   [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
