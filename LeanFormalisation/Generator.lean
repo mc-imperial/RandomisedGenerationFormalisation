@@ -504,7 +504,62 @@ lemma decodeBitWithinSymbol {Γ Λ : Type*}
     step (TM_generator (enc := standardEncoding Γ) M) cfg = some cfg' ∧
     DecodeBitInv input cfg' (k := k) (by omega) (x := ⟨x.val + 1, by omega⟩)
       (by omega) :=
-by sorry
+by
+  obtain ⟨h_state, h_inputIndex, h_workIndex, h_work_lt, h_work_ge, h_input, h_output⟩ := hinv
+  -- Show that step produces some configuration
+  have h_step : ∃ cfg', step (TM_generator (enc := standardEncoding Γ) M) cfg = some cfg' := by
+    simp only [step, TM_generator]
+    rw [h_state, h_input, h_inputIndex, h_workIndex]
+    have h_not_done : x.val ≠ (standardEncoding Γ).W := by omega
+    simp [h_not_done]
+  obtain ⟨cfg', h_step_eq⟩ := h_step
+  use cfg'
+  constructor
+  · exact h_step_eq
+  -- Now prove DecodeBitInv for cfg'
+  simp only [step, TM_generator] at h_step_eq
+  rw [h_state, h_input, h_inputIndex, h_workIndex] at h_step_eq
+  have h_not_done : x.val ≠ (standardEncoding Γ).W := by omega
+  simp only [h_not_done, ↓reduceDIte, Option.some.injEq] at h_step_eq
+  subst h_step_eq
+  constructor
+  · -- State: GenState.load with updated values
+    simp only [readBlockBits_succ]
+  constructor
+  · -- inputIndex
+    ring
+  constructor
+  · -- workIndex
+    rfl
+  constructor
+  · -- work tape for i < k
+    intro i hi
+    simp only
+    have : i ≠ k := by omega
+    simp [this]
+    convert h_work_lt i hi
+  constructor
+  · -- work tape for i < 0 or k ≤ i
+    intro i hi
+    simp only
+    split_ifs with heq
+    · -- Case: i = k
+      subst heq
+      -- Now we need cfg.work k = default
+      -- From hi: (k : ℤ) < 0 ∨ k ≤ (k : ℤ).toNat
+      -- Since k : ℕ, we have (k : ℤ).toNat = k and (k : ℤ) ≮ 0
+      apply h_work_ge
+      right
+      simp
+    · -- Case: i ≠ k
+      -- Need cfg.work i = default, which follows from h_work_ge and hi
+      exact h_work_ge i hi
+  constructor
+  · -- input
+    rfl
+  · -- output
+    simp only
+    exact h_output
 
 lemma decodeBitEndOfSymbol {Γ Λ : Type*}
   [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
