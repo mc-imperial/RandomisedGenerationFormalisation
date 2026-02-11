@@ -253,7 +253,7 @@ def TM_generator {Γ Λ : Type*}
               GenState.load { bitsRead := 0, acc := 0, accBound := by simp},
               g,
               g,
-              InputTapeDirection.R,
+              InputTapeDirection.N,
               WorkTapeDirection.R
             )
         else
@@ -573,7 +573,7 @@ by
     simp only
     exact h_output
 
-lemma decodeBitEndOfSymbol {Γ Λ : Type*}
+lemma decodeBitFinal {Γ Λ : Type*}
   [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
   (M : Turing.TM0.Machine (Γ := Γ) (Λ := Λ))
   (input : List Γ)
@@ -582,80 +582,46 @@ lemma decodeBitEndOfSymbol {Γ Λ : Type*}
   (hinv : DecodeBitInv input cfg (k := k) (by omega)
     (x := ⟨(standardEncoding Γ).W - 1, Nat.sub_lt (standardEncoding Γ).W_pos (by norm_num)⟩)
     (Nat.sub_lt (standardEncoding Γ).W_pos (by norm_num))) :
+  ∃ (cfg' : GeneratorConfig Γ Γ (GenState Λ Γ (standardEncoding Γ)))
+    (acc : Fin (2 ^ (standardEncoding Γ).W)),
+    step (TM_generator (enc := standardEncoding Γ) M) cfg = some cfg' ∧
+    (standardEncoding Γ).enum acc = some (input.get ⟨k, hk⟩) ∧
+    cfg'.state = GenState.load {
+      bitsRead := ⟨(standardEncoding Γ).W, by omega⟩,
+      acc := acc,
+      accBound := by simp; omega
+    } ∧
+    cfg'.inputIndex = (k + 1) * (standardEncoding Γ).W ∧
+    cfg'.workIndex = k ∧
+    (∀ i (hi : i < k), cfg'.work i = input.get ⟨Int.toNat i, by omega⟩) ∧
+    (∀ i : ℤ, i < 0 ∨ k ≤ Int.toNat i → cfg'.work i = default) ∧
+    cfg'.input = bitstreamFromInput input ∧
+    cfg'.output = input.take k :=
+by sorry
+
+lemma decodeSymbolWrite {Γ Λ : Type*}
+  [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
+  (M : Turing.TM0.Machine (Γ := Γ) (Λ := Λ))
+  (input : List Γ)
+  {k : ℕ} (hk : k < input.length)
+  (cfg : GeneratorConfig Γ Γ (GenState Λ Γ (standardEncoding Γ)))
+  (acc : Fin (2 ^ (standardEncoding Γ).W))
+  (h_state : cfg.state = GenState.load {
+    bitsRead := ⟨(standardEncoding Γ).W, by omega⟩,
+    acc := acc,
+    accBound := by simp; omega
+  })
+  (h_enum : (standardEncoding Γ).enum acc = some (input.get ⟨k, hk⟩))
+  (h_inputIndex : cfg.inputIndex = (k + 1) * (standardEncoding Γ).W)
+  (h_workIndex : cfg.workIndex = k)
+  (h_work_lt : ∀ i (hi : i < k), cfg.work i = input.get ⟨Int.toNat i, by omega⟩)
+  (h_work_ge : ∀ i : ℤ, i < 0 ∨ k ≤ Int.toNat i → cfg.work i = default)
+  (h_input : cfg.input = bitstreamFromInput input)
+  (h_output : cfg.output = input.take k) :
   ∃ cfg',
     step (TM_generator (enc := standardEncoding Γ) M) cfg = some cfg' ∧
     DecodeSymbolInv input cfg' (k := k + 1) (by omega) :=
-by
-  obtain ⟨h_state, h_inputIndex, h_workIndex, h_work_lt, h_work_ge, h_input, h_output⟩ := hinv
-
-  let W := (standardEncoding Γ).W
-
-  -- Get the decoded symbol - this is input[k]
-  obtain ⟨acc, h_acc_val, h_enum⟩ := readBlockBits_decodes_to_symbol input hk
-
-  -- Extract the decoded symbol from h_enum
-  have h_symbol : ∃ g, (standardEncoding Γ).enum acc = some g ∧ g = input.get ⟨k, hk⟩ := by
-    use input.get ⟨k, hk⟩
-  obtain ⟨g, h_enum_g, h_g_eq⟩ := h_symbol
-
-  -- Show that step produces some configuration
-  have h_step : ∃ cfg', step (TM_generator (enc := standardEncoding Γ) M) cfg = some cfg' := by
-    simp only [step, TM_generator]
-    rw [h_state, h_input, h_inputIndex, h_workIndex]
-    have h_done : W - 1 + 1 = W := by omega
-    simp
-    sorry
-
-  obtain ⟨cfg', h_step_eq⟩ := h_step
-  use cfg'
-  constructor
-  · exact h_step_eq
-
-  -- Prove DecodeSymbolInv for cfg'
-  simp only [step, TM_generator] at h_step_eq
-  rw [h_state, h_input, h_inputIndex, h_workIndex] at h_step_eq
-  have h_done : W - 1 + 1 = W := by omega
-  simp only at h_step_eq
-
-  -- Prove DecodeSymbolInv
-  constructor
-  · -- State: GenState.load with bitsRead = 0, acc = 0
-    sorry
-
-  constructor
-  · -- inputIndex: (k+1) * W
-    sorry
-
-  constructor
-  · -- workIndex: k+1
-    sorry
-
-  constructor
-  · -- work tape for i < k+1
-    intro i hi
-    by_cases h : i < k
-    · -- i < k: unchanged from before
-      have : (k + 1 : ℤ) ≠ i := by omega
-      simp only [Int.toNat_natCast, List.get_eq_getElem]
-      convert h_work_lt i h
-      sorry
-    · -- i = k: newly written symbol
-      have : i = k := by omega
-      subst this
-      simp
-      sorry
-
-  constructor
-  · -- work tape for i < 0 or k+1 ≤ i
-    intro i hi
-    sorry
-
-  constructor
-  · -- input unchanged
-    sorry
-
-  · -- output: input.take (k+1)
-    sorry
+by sorry
 
 -- Decode the final bit of the EOF marker, triggering rewind
 lemma decodeEOFBitFinal {Γ Λ : Type*}
@@ -702,11 +668,23 @@ lemma decodeOneSymbol {Γ Λ : Type*}
     | h n ih =>
       intro i hi hn cfg_i h_inv
       by_cases h_last : i = W - 1
-      · -- Last bit
+      · -- Last bit: need TWO steps now (decodeBitFinal + decodeSymbolWrite)
         subst h_last
-        obtain ⟨cfg', h_step, h_next⟩ := decodeBitEndOfSymbol M input hk cfg_i h_inv
+        -- First step: accumulate final bit
+        obtain ⟨cfg_mid, acc, h_step1, h_enum, h_state_mid, h_inputIndex_mid,
+          h_workIndex_mid, h_work_lt_mid, h_work_ge_mid, h_input_mid, h_output_mid⟩ :=
+          decodeBitFinal M input hk cfg_i h_inv
+        -- Second step: decode and write symbol
+        obtain ⟨cfg', h_step2, h_next⟩ :=
+          decodeSymbolWrite M input hk cfg_mid acc h_state_mid h_enum
+            h_inputIndex_mid h_workIndex_mid h_work_lt_mid h_work_ge_mid
+            h_input_mid h_output_mid
         refine ⟨cfg', ?_, h_next⟩
-        exact ⟨1, Steps.step cfg_i cfg' cfg' 0 h_step (Steps.refl cfg')⟩
+        -- Construct 2 steps
+        have h_steps : Steps (TM_generator (enc := standardEncoding Γ) M) cfg_i cfg' 2 := by
+          apply Steps.step cfg_i cfg_mid cfg' 1 h_step1
+          exact Steps.step cfg_mid cfg' cfg' 0 h_step2 (Steps.refl cfg')
+        exact ⟨2, h_steps⟩
       · -- Not last bit
         have h_i_lt : i < W - 1 := by omega
         have hk_le : k ≤ input.length := by omega
