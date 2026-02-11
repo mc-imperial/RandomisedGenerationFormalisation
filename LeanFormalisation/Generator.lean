@@ -375,12 +375,17 @@ def bitstreamFromInput {Γ : Type*} [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [De
 def DecodeInv {Γ Λ : Type*}
   [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
   (input : List Γ) (cfg : GeneratorConfig Γ Γ (GenState Λ Γ (standardEncoding Γ)))
-  (k : ℕ) : Prop :=
+  (k : ℕ)
+  (hk : k ≤ input.length)
+   : Prop :=
   k ≤ input.length
-  ∧ cfg.state = GenState.load  { bitsRead := 0, acc := 0, accBound := sorry }
+  ∧ cfg.state = GenState.load  {
+    bitsRead := 0,
+    acc := 0,
+    accBound := by simp }
   ∧ cfg.inputIndex = k * (standardEncoding Γ).W
   ∧ cfg.workIndex = k
-  ∧ (∀ i : ℤ, 0 ≤ i ∧ i < k → cfg.work i = input.get ⟨Int.toNat i, sorry⟩)
+  ∧ (∀ i (hi : i < k), cfg.work i = input.get ⟨Int.toNat i, by omega⟩)
   ∧ (∀ i : ℤ, i < 0 ∨ k ≤ Int.toNat i → cfg.work i = default)
   ∧ cfg.input = bitstreamFromInput input
   ∧ cfg.output = input.drop k
@@ -391,11 +396,12 @@ lemma decodeOneSymbol {Γ Λ : Type*}
   (input : List Γ)
   (cfg : GeneratorConfig Γ Γ (GenState Λ Γ (standardEncoding Γ)))
   (k : ℕ)
+  (hk : k < input.length)
 :
-k < input.length ∧ DecodeInv input cfg k → ∃ cfg',
+DecodeInv input cfg k (by omega) → ∃ cfg',
 StepsTo (TM_generator (enc := standardEncoding Γ) M) cfg cfg'
 ∧
-DecodeInv input cfg' (k + 1)
+DecodeInv input cfg' (k + 1) (by omega)
 := by sorry
 
 lemma decodeFinalSymbol {Γ Λ : Type*}
@@ -403,7 +409,7 @@ lemma decodeFinalSymbol {Γ Λ : Type*}
   (M : Turing.TM0.Machine (Γ := Γ) (Λ := Λ))
   (input : List Γ)
   (cfg : GeneratorConfig Γ Γ (GenState Λ Γ (standardEncoding Γ)))
-  (h_ready_for_last_symbol : DecodeInv input cfg input.length)
+  (h_ready_for_last_symbol : DecodeInv input cfg input.length (by omega))
 : ∃ cfg',
 StepsTo (TM_generator (enc := standardEncoding Γ) M) cfg cfg'
 ∧ (
@@ -434,12 +440,17 @@ lemma weGetReadyToRewind {Γ Λ : Type*}
   set gen := TM_generator (enc := standardEncoding Γ) M
   let initialCfg := (initConfig gen
     (bitstreamFromInput input))
-  have h_base_inv : DecodeInv input initialCfg 0 := by sorry
+  have h_base_inv : DecodeInv input initialCfg 0 (by omega) := by
+    unfold DecodeInv
+    simp only [zero_le, initConfig, bitstreamFromInput, List.get_eq_getElem, Bool.if_false_right,
+      zero_mul, CharP.cast_eq_zero, not_lt_zero, Int.toNat_natCast, IsEmpty.forall_iff,
+      implies_true, or_true, forall_const, List.drop_zero, List.nil_eq, true_and, initialCfg]
+    sorry
 
   have h_read_k_inputs :
     ∀ i ≤ input.length,
       ∃ cfg' : GeneratorConfig Γ Γ (GenState Λ Γ (standardEncoding Γ)),
-        DecodeInv input cfg' i
+        DecodeInv input cfg' i sorry
         ∧ StepsTo gen initialCfg cfg'
         := by
     intro i
@@ -454,9 +465,10 @@ lemma weGetReadyToRewind {Γ Λ : Type*}
       have h_prev :=
         ih (Nat.le_of_lt h_lt)
       rcases h_prev with ⟨cfg_i, hInv_i, h_steps_to_i⟩
-      have h_premise : i < input.length ∧ DecodeInv input cfg_i i := by sorry
+      have h_i_lt_inputlength : i < input.length := by sorry
+      have h_decode_inv : DecodeInv input cfg_i i sorry := by sorry
       have h_next :=
-        decodeOneSymbol M input cfg_i i h_premise
+        decodeOneSymbol M input cfg_i i h_i_lt_inputlength h_decode_inv
       obtain ⟨cfg', h_inv_cfg', h_steps_cfg_i_to_cfg'⟩ := h_next
       have h_steps_to_init_cfg' :
           StepsTo gen initialCfg cfg' :=
