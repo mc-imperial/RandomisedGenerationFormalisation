@@ -141,6 +141,14 @@ def StepsTo {Γw Γo Q} [Fintype Γw] [Fintype Γo] [Fintype Q]
 (cfg' : GeneratorConfig Γw Γo Q) : Prop :=
   ∃ n, Steps gen cfg cfg' n
 
+lemma StepsTo.trans {Γw Γo Q} [Fintype Γw] [Fintype Γo] [Fintype Q]
+  (gen : Generator Γw Γo Q)
+  {cfg1 cfg2 cfg3 : GeneratorConfig Γw Γo Q} :
+  StepsTo gen cfg1 cfg2 → StepsTo gen cfg2 cfg3 → StepsTo gen cfg1 cfg3 :=
+by
+  rintro ⟨n, h1⟩ ⟨m, h2⟩
+  exact ⟨n + m, Steps.trans h1 h2⟩
+
 def HaltsFrom {Γw Γo Q} [Fintype Γw] [Fintype Γo] [Fintype Q]
 (gen : Generator Γw Γo Q)
 (cfg : GeneratorConfig Γw Γo Q) : Prop :=
@@ -390,6 +398,23 @@ StepsTo (TM_generator (enc := standardEncoding Γ) M) cfg cfg'
 DecodeInv input cfg' (k + 1)
 := by sorry
 
+lemma decodeFinalSymbol {Γ Λ : Type*}
+  [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
+  (M : Turing.TM0.Machine (Γ := Γ) (Λ := Λ))
+  (input : List Γ)
+  (cfg : GeneratorConfig Γ Γ (GenState Λ Γ (standardEncoding Γ)))
+  (h_ready_for_last_symbol : DecodeInv input cfg input.length)
+: ∃ cfg',
+StepsTo (TM_generator (enc := standardEncoding Γ) M) cfg cfg'
+∧ (
+  cfg'.state = GenState.rewind
+∧ cfg'.workIndex = input.length - 1
+∧ (∀ i (h : i < input.length), cfg'.work (i : ℤ) = input.get ⟨i, h⟩)
+∧ (∀ i : ℕ, i ≥ input.length → cfg'.work (i : ℤ) = (default : Γ))
+∧ (∀ i : ℤ, i < 0 → cfg'.work (i : ℤ) = (default : Γ))
+∧ cfg'.output = input
+) := by sorry
+
 lemma weGetReadyToRewind {Γ Λ : Type*}
   [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
   (M : Turing.TM0.Machine (Γ := Γ) (Λ := Λ))
@@ -406,33 +431,57 @@ lemma weGetReadyToRewind {Γ Λ : Type*}
         cfg.work (i : ℤ) = (default : Γ))
     ∧ cfg.output = input
     ∧ StepsTo gen (initConfig gen (bitstreamFromInput input)) cfg := by
-  let initialCfg := (initConfig (TM_generator (enc := standardEncoding Γ) M)
+  set gen := TM_generator (enc := standardEncoding Γ) M
+  let initialCfg := (initConfig gen
     (bitstreamFromInput input))
   have h_base_inv : DecodeInv input initialCfg 0 := by sorry
 
   have h_read_k_inputs :
     ∀ i ≤ input.length,
       ∃ cfg' : GeneratorConfig Γ Γ (GenState Λ Γ (standardEncoding Γ)),
-        DecodeInv input cfg' i := by
+        DecodeInv input cfg' i
+        ∧ StepsTo gen initialCfg cfg'
+        := by
     intro i
     induction i with
     | zero =>
       intro _
-      exact ⟨initialCfg, h_base_inv⟩
+      exact ⟨initialCfg, h_base_inv, sorry⟩
     | succ i ih =>
       intro h_le
       have h_lt : i < input.length :=
         Nat.lt_of_succ_le h_le
       have h_prev :=
         ih (Nat.le_of_lt h_lt)
-      rcases h_prev with ⟨cfg_i, hInv_i⟩
+      rcases h_prev with ⟨cfg_i, hInv_i, h_steps_to_i⟩
       have h_premise : i < input.length ∧ DecodeInv input cfg_i i := by sorry
       have h_next :=
         decodeOneSymbol M input cfg_i i h_premise
-      obtain ⟨cfg', h_steps_cfg_i_to_cfg', h_inv_cfg'⟩ := h_next
+      obtain ⟨cfg', h_inv_cfg', h_steps_cfg_i_to_cfg'⟩ := h_next
+      have h_steps_to_init_cfg' :
+          StepsTo gen initialCfg cfg' :=
+        by sorry
       use cfg'
 
-  sorry
+  have h_all_inputs_decoded :=
+    h_read_k_inputs input.length (le_rfl)
+  obtain ⟨cfg_all_decoded, h_inv_all_decoded, h_initial_steps_to_cfg_all_decoded⟩ :=
+    h_all_inputs_decoded
+  obtain ⟨cfg_final, h_properties_of_cfg_final⟩ := decodeFinalSymbol M input cfg_all_decoded sorry
+  rcases h_properties_of_cfg_final with
+    ⟨h_steps_cfg_final, h_state_cfg_final, h_workIndex_cfg_final, h_work_lt_cfg_final,
+     h_work_ge_cfg_final, h_work_neg_cfg_final, h_output_cfg_final⟩
+  use cfg_final
+  have h_initial_stepsto_final :
+    StepsTo gen (initConfig gen (bitstreamFromInput input)) cfg_final :=
+      StepsTo.trans gen h_initial_steps_to_cfg_all_decoded h_steps_cfg_final
+  refine ⟨h_state_cfg_final,
+        h_workIndex_cfg_final,
+        h_work_lt_cfg_final,
+        h_work_ge_cfg_final,
+        h_work_neg_cfg_final,
+        h_output_cfg_final,
+        h_initial_stepsto_final⟩
 
 lemma rewindWithNonNegativeIndexOneStep {Γ Λ : Type*}
   [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
