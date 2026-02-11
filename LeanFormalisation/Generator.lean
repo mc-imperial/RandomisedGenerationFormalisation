@@ -390,27 +390,29 @@ lemma readBlockBits_succ {input : ℕ → Bool} {W k : ℕ} {x : ℕ} (hx : x + 
     2 * readBlockBits input W k ⟨x, by omega⟩ + (if input (k * W + x) then 1 else 0) :=
 by
   unfold readBlockBits
-  simp only [add_tsub_cancel_right, ite_mul, one_mul, zero_mul]
+  simp only [add_tsub_cancel_right]
   rw [Finset.sum_range_succ]
-
   by_cases hx0 : x = 0
-  · -- Base case: x = 0
-    simp [hx0]
-  · -- x > 0
-    have hx_pos : x > 0 := Nat.pos_of_ne_zero hx0
-    have key : (Finset.range x).sum (fun i =>
-      (if input (k * W + i) then 1 else 0) * 2 ^ (x - i)) = 2 * (Finset.range x).sum (fun i =>
-        (if input (k * W + i) then 1 else 0) * 2 ^ (x - 1 - i)) := by
-      rw [Finset.mul_sum]
-      apply Finset.sum_congr rfl
-      intro i hi
-      simp at hi
-      have : x - i = (x - 1 - i) + 1 := by omega
-      rw [this, pow_succ]
-      ring
-    -- rw [key] -- The rewrite does not apply
-    ring_nf
-    sorry
+  · simp [hx0]
+  · have hx_pos : x > 0 := Nat.pos_of_ne_zero hx0
+    calc (Finset.range x).sum (fun i => (if input (k * W + i) then 1 else 0) * 2 ^ (x - i)) +
+         (if input (k * W + x) then 1 else 0) * 2 ^ (x - x)
+        = (Finset.range x).sum (fun i => (if input (k * W + i) then 1 else 0) * 2 ^ (x - i)) +
+          (if input (k * W + x) then 1 else 0) := by simp
+      _ = (Finset.range x).sum (fun i =>
+            2 * ((if input (k * W + i) then 1 else 0) * 2 ^ (x - 1 - i))) +
+          (if input (k * W + x) then 1 else 0) := by
+            congr 1
+            apply Finset.sum_congr rfl
+            intro i hi
+            simp at hi
+            have : x - i = (x - 1 - i) + 1 := by omega
+            rw [this, pow_succ]
+            ring
+      _ = 2 * (Finset.range x).sum (fun i =>
+          (if input (k * W + i) then 1 else 0) * 2 ^ (x - 1 - i)) +
+          (if input (k * W + x) then 1 else 0) := by
+            rw [← Finset.mul_sum]
 
 lemma readBlockBits_lt_pow {input : ℕ → Bool} {W k : ℕ} {x : Fin W} (hW : W > 0) :
   readBlockBits input W k x < 2^W := by
