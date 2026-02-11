@@ -585,7 +585,77 @@ lemma decodeBitEndOfSymbol {Γ Λ : Type*}
   ∃ cfg',
     step (TM_generator (enc := standardEncoding Γ) M) cfg = some cfg' ∧
     DecodeSymbolInv input cfg' (k := k + 1) (by omega) :=
-by sorry
+by
+  obtain ⟨h_state, h_inputIndex, h_workIndex, h_work_lt, h_work_ge, h_input, h_output⟩ := hinv
+
+  let W := (standardEncoding Γ).W
+
+  -- Get the decoded symbol - this is input[k]
+  obtain ⟨acc, h_acc_val, h_enum⟩ := readBlockBits_decodes_to_symbol input hk
+
+  -- Extract the decoded symbol from h_enum
+  have h_symbol : ∃ g, (standardEncoding Γ).enum acc = some g ∧ g = input.get ⟨k, hk⟩ := by
+    use input.get ⟨k, hk⟩
+  obtain ⟨g, h_enum_g, h_g_eq⟩ := h_symbol
+
+  -- Show that step produces some configuration
+  have h_step : ∃ cfg', step (TM_generator (enc := standardEncoding Γ) M) cfg = some cfg' := by
+    simp only [step, TM_generator]
+    rw [h_state, h_input, h_inputIndex, h_workIndex]
+    have h_done : W - 1 + 1 = W := by omega
+    simp
+    sorry
+
+  obtain ⟨cfg', h_step_eq⟩ := h_step
+  use cfg'
+  constructor
+  · exact h_step_eq
+
+  -- Prove DecodeSymbolInv for cfg'
+  simp only [step, TM_generator] at h_step_eq
+  rw [h_state, h_input, h_inputIndex, h_workIndex] at h_step_eq
+  have h_done : W - 1 + 1 = W := by omega
+  simp only at h_step_eq
+
+  -- Prove DecodeSymbolInv
+  constructor
+  · -- State: GenState.load with bitsRead = 0, acc = 0
+    sorry
+
+  constructor
+  · -- inputIndex: (k+1) * W
+    sorry
+
+  constructor
+  · -- workIndex: k+1
+    sorry
+
+  constructor
+  · -- work tape for i < k+1
+    intro i hi
+    by_cases h : i < k
+    · -- i < k: unchanged from before
+      have : (k + 1 : ℤ) ≠ i := by omega
+      simp only [Int.toNat_natCast, List.get_eq_getElem]
+      convert h_work_lt i h
+      sorry
+    · -- i = k: newly written symbol
+      have : i = k := by omega
+      subst this
+      simp
+      sorry
+
+  constructor
+  · -- work tape for i < 0 or k+1 ≤ i
+    intro i hi
+    sorry
+
+  constructor
+  · -- input unchanged
+    sorry
+
+  · -- output: input.take (k+1)
+    sorry
 
 -- Decode the final bit of the EOF marker, triggering rewind
 lemma decodeEOFBitFinal {Γ Λ : Type*}
