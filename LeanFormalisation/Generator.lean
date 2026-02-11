@@ -383,46 +383,56 @@ def bitstreamFromInput {Γ : Type*} [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [De
 
 def readBlockBits (input : ℕ → Bool) (W k : ℕ) (x : Fin W) : ℕ :=
   (Finset.range x.val).sum (fun i =>
-    (if input (k * W + i) then 1 else 0) * 2^(W - 1 - i))
+    (if input (k * W + i) then 1 else 0) * 2^(x.val - 1 - i))
+
+lemma readBlockBits_succ {input : ℕ → Bool} {W k : ℕ} {x : ℕ} (hx : x + 1 < W) :
+  readBlockBits input W k ⟨x + 1, hx⟩ =
+    2 * readBlockBits input W k ⟨x, by omega⟩ + (if input (k * W + x) then 1 else 0) :=
+by
+  unfold readBlockBits
+  simp only [add_tsub_cancel_right, ite_mul, one_mul, zero_mul]
+  rw [Finset.sum_range_succ]
+
+  by_cases hx0 : x = 0
+  · -- Base case: x = 0
+    simp [hx0]
+  · -- x > 0
+    have hx_pos : x > 0 := Nat.pos_of_ne_zero hx0
+    have key : (Finset.range x).sum (fun i =>
+      (if input (k * W + i) then 1 else 0) * 2 ^ (x - i)) = 2 * (Finset.range x).sum (fun i =>
+        (if input (k * W + i) then 1 else 0) * 2 ^ (x - 1 - i)) := by
+      rw [Finset.mul_sum]
+      apply Finset.sum_congr rfl
+      intro i hi
+      simp at hi
+      have : x - i = (x - 1 - i) + 1 := by omega
+      rw [this, pow_succ]
+      ring
+    -- rw [key] -- The rewrite does not apply
+    ring_nf
+    sorry
 
 lemma readBlockBits_lt_pow {input : ℕ → Bool} {W k : ℕ} {x : Fin W} (hW : W > 0) :
   readBlockBits input W k x < 2^W := by
   unfold readBlockBits
   by_cases hx : x.val = 0
   · simp [hx]
-  · have : x.val > 0 := Nat.pos_of_ne_zero hx
-    -- The sum is bounded by 2^(W-1) + 2^(W-2) + ... + 2^(W-x.val)
-    -- which equals 2^W - 2^(W-x.val) < 2^W
-    calc (Finset.range x.val).sum (fun i => (if input (k * W + i) then 1 else 0) * 2^(W - 1 - i))
-        ≤ (Finset.range x.val).sum (fun i => 1 * 2^(W - 1 - i)) := by
+  · have hx_pos : x.val > 0 := Nat.pos_of_ne_zero hx
+    calc (Finset.range x.val).sum (fun i =>
+      (if input (k * W + i) then 1 else 0) * 2^(x.val - 1 - i))
+        ≤ (Finset.range x.val).sum (fun i => 2^(x.val - 1 - i)) := by
           apply Finset.sum_le_sum
-          intro i hi
-          simp only [mul_comm]
-          apply Nat.mul_le_mul_right
-          split_ifs <;> omega
-      _ = (Finset.range x.val).sum (fun i => 2^(W - 1 - i)) := by simp
-      _ < 2^W := by
-          -- Each term 2^(W-1-i) for i in [0, x.val) is at most 2^(W-1)
-          -- and the sum of a geometric series is bounded
-          have h_bound : ∀ i ∈ Finset.range x.val, 2^(W - 1 - i) ≤ 2^(W - 1) := by
-            intro i hi
-            apply Nat.pow_le_pow_right (by norm_num)
-            simp at hi
-            omega
-          calc (Finset.range x.val).sum (fun i => 2^(W - 1 - i))
-              ≤ x.val * 2^(W - 1) := by
-                trans (Finset.range x.val).sum (fun _ => 2^(W - 1))
-                · apply Finset.sum_le_sum; exact h_bound
-                · simp [Finset.sum_const, Finset.card_range]
-            _ < W * 2^(W - 1) := by
-                apply Nat.mul_lt_mul_of_pos_right x.isLt
-                sorry
-                --exact Nat.one_le_two_pow (W - 1)
-            _ = 2^W := by
-                have : W = (W - 1) + 1 := by omega
-                rw [this, pow_succ]
-                ring_nf
-                sorry
+          intro i _
+          split_ifs <;> simp
+      _ < 2^x.val := by
+          -- Sum of 2^(x-1) + 2^(x-2) + ... + 2^0 = 2^x - 1 < 2^x
+          have : (Finset.range x.val).sum (fun i => 2^(x.val - 1 - i)) = 2^x.val - 1 := by
+            sorry -- Geometric series
+          rw [this]
+          sorry
+      _ ≤ 2^W := by
+          apply Nat.pow_le_pow_right (by norm_num)
+          exact Nat.le_of_lt x.isLt
 
 lemma readBlockBits_le_pred_pow {input : ℕ → Bool} {W k : ℕ} {x : Fin W} (hW : W > 0)
     (hx : x.val ≤ W) :
@@ -430,10 +440,18 @@ lemma readBlockBits_le_pred_pow {input : ℕ → Bool} {W k : ℕ} {x : Fin W} (
   unfold readBlockBits
   by_cases hx0 : x.val = 0
   · simp [hx0]
-  · -- The sum represents a binary number with x.val bits
-    -- Maximum value is when all bits are 1: 2^(x.val) - 1
-    have : x.val > 0 := Nat.pos_of_ne_zero hx0
-    sorry -- This requires more detailed analysis of the geometric series
+  · have hx_pos : x.val > 0 := Nat.pos_of_ne_zero hx0
+    -- Maximum is when all bits are 1
+    calc (Finset.range x.val).sum (fun i =>
+      (if input (k * W + i) then 1 else 0) * 2^(x.val - 1 - i))
+        ≤ (Finset.range x.val).sum (fun i => 1 * 2^(x.val - 1 - i)) := by
+          apply Finset.sum_le_sum
+          intro i _
+          split_ifs <;> simp
+      _ = (Finset.range x.val).sum (fun i => 2^(x.val - 1 - i)) := by simp
+      _ = 2^x.val - 1 := by
+          -- Geometric series: 2^(n-1) + 2^(n-2) + ... + 2^0 = 2^n - 1
+          sorry
 
 def DecodeBitInv {Γ Λ : Type*}
   [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
