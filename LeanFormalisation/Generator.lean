@@ -455,6 +455,18 @@ lemma readBlockBits_le_pred_pow {input : ℕ → Bool} {W k : ℕ} {x : Fin W} (
           -- Geometric series: 2^(n-1) + 2^(n-2) + ... + 2^0 = 2^n - 1
           sorry
 
+lemma readBlockBits_decodes_to_symbol {Γ : Type*}
+  [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
+  (input : List Γ) {k : ℕ} (hk : k < input.length) :
+  let W := (standardEncoding Γ).W
+  let acc_val :=
+    2 * readBlockBits (bitstreamFromInput input) W k ⟨W - 1, Nat.sub_lt
+      (standardEncoding Γ).W_pos (by norm_num)⟩ +
+                 (if bitstreamFromInput input (k * W + (W - 1)) then 1 else 0)
+  ∃ (acc : Fin (2^W)) (h : acc.val = acc_val),
+    (standardEncoding Γ).enum acc = some (input.get ⟨k, hk⟩) := by
+  sorry
+
 def DecodeBitInv {Γ Λ : Type*}
   [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
   (input : List Γ)
@@ -536,7 +548,7 @@ by
     intro i hi
     simp only
     have : i ≠ k := by omega
-    simp [this]
+    simp only [Nat.cast_inj, this, ↓reduceIte, Int.toNat_natCast, List.get_eq_getElem]
     convert h_work_lt i hi
   constructor
   · -- work tape for i < 0 or k ≤ i
