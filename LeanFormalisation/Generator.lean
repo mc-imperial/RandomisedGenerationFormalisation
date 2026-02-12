@@ -375,11 +375,75 @@ def readBlockOfBitsNat
 
 lemma readBlockOfBits_lt_pow (input : ℕ → Bool) (base offset : ℕ) :
   readBlockOfBitsNat input base offset < 2^offset := by
-  sorry
+  unfold readBlockOfBitsNat
+  induction offset with
+  | zero => simp
+  | succ n ih =>
+    rw [Finset.sum_range_succ]
+    have h_shift : ∀ i ∈ Finset.range n,
+      (if input (base + i) then 1 else 0) * 2^(n + 1 - i - 1) =
+      2 * ((if input (base + i) then 1 else 0) * 2^(n - i - 1)) := by
+      intro i hi
+      have hi' : i < n := by simpa using hi
+      have : n + 1 - i - 1 = n - i := by omega
+      rw [this, ← mul_assoc]
+      ring_nf
+      split_ifs
+      · have : n - i - 1 + 1 = n - i := by omega
+        rw [← this, pow_succ, mul_comm]
+        simp [this]
+      · simp
+    rw [show ∑ i ∈ Finset.range n, (if input (base + i) then 1 else 0) * 2^(n + 1 - i - 1) =
+            ∑ i ∈ Finset.range n, 2 * ((if input (base + i) then 1 else 0) * 2^(n - i - 1)) by
+        apply Finset.sum_congr rfl
+        exact h_shift]
+    rw [← Finset.mul_sum]
+    have h_last : n + 1 - n - 1 = 0 := by omega
+    rw [h_last, pow_zero, mul_one]
+    have h_bit : (if input (base + n) then 1 else 0) ≤ 1 := by split_ifs <;> omega
+    have h_sum : (Finset.range n).sum (fun i =>
+      (if input (base + i) then 1 else 0) * 2^(n - i - 1)) ≤ 2^n - 1 := by
+      cases Nat.eq_zero_or_pos n with
+      | inl hn =>
+        subst hn
+        simp
+      | inr hn =>
+        have : (Finset.range n).sum (fun i =>
+          (if input (base + i) then 1 else 0) * 2^(n - i - 1)) < 2^n := ih
+        omega
+    calc 2 * (Finset.range n).sum (fun i => (if input (base + i) then 1 else 0) * 2^(n - i - 1))
+          + (if input (base + n) then 1 else 0)
+        ≤ 2 * (2^n - 1) + 1 := by omega
+      _ = 2^(n + 1) - 1 := by
+          rw [pow_succ]
+          omega
+      _ < 2^(n + 1) := by omega
 
 lemma readBlockOfBitsNat_succ (input : ℕ → Bool) (base x : ℕ) :
   readBlockOfBitsNat input base (x + 1) =
-  2 * readBlockOfBitsNat input base x + (if input (base + x) then 1 else 0) := by sorry
+  2 * readBlockOfBitsNat input base x + (if input (base + x) then 1 else 0) := by
+  unfold readBlockOfBitsNat
+  rw [Finset.sum_range_succ]
+  have h_shift : ∀ i ∈ Finset.range x,
+    (if input (base + i) then 1 else 0) * 2^(x + 1 - i - 1) =
+    2 * ((if input (base + i) then 1 else 0) * 2^(x - i - 1)) := by
+    intro i hi
+    have hi' : i < x := by simpa using hi
+    have h1 : x + 1 - i - 1 = x - i := by omega
+    have h2 : x - i - 1 + 1 = x - i := by omega
+    split_ifs
+    · rw [h1, ← h2, pow_succ]
+      ring_nf
+      have : 1 + (x - i - 1) - 1 = x - i - 1 := by omega
+      rw [this]
+    · simp
+  rw [show ∑ i ∈ Finset.range x, (if input (base + i) then 1 else 0) * 2^(x + 1 - i - 1) =
+          ∑ i ∈ Finset.range x, 2 * ((if input (base + i) then 1 else 0) * 2^(x - i - 1)) by
+      apply Finset.sum_congr rfl
+      exact h_shift]
+  rw [← Finset.mul_sum]
+  have : x + 1 - x - 1 = 0 := by omega
+  rw [this, pow_zero, mul_one]
 
 def readBlockOfBitsW
   (input : ℕ → Bool) (base : ℕ) (x : ℕ) (W : ℕ)
