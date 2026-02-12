@@ -597,7 +597,76 @@ lemma decodeBitFinal {Γ Λ : Type*}
     (∀ i : ℤ, i < 0 ∨ k ≤ Int.toNat i → cfg'.work i = default) ∧
     cfg'.input = bitstreamFromInput input ∧
     cfg'.output = input.take k :=
-by sorry
+by
+  obtain ⟨h_state, h_inputIndex, h_workIndex, h_work_lt, h_work_ge, h_input, h_output⟩ := hinv
+
+  set W := (standardEncoding Γ).W with hW_def
+  set enc := standardEncoding Γ with henc_def
+
+  -- Get the accumulator value after reading the last bit
+  obtain ⟨acc, h_acc_eq, h_decode⟩ := readBlockBits_decodes_to_symbol input hk
+
+  use {
+    state := GenState.load {
+      bitsRead := ⟨W, by omega⟩,
+      acc := acc,
+      accBound := by simp; sorry
+    },
+    input := cfg.input,
+    inputIndex := k * W + W,
+    work := fun x => if x = k then cfg.work k else cfg.work x,
+    workIndex := k,
+    output := cfg.output
+  }, acc
+
+  constructor
+  · -- Prove step produces the right config
+    simp only [step, TM_generator]
+    rw [h_state, h_input, h_inputIndex, h_workIndex]
+    have h_ne : W - 1 ≠ W := by omega
+    simp only
+    ext
+    · -- state component
+      sorry
+
+  constructor
+  · -- enum acc = some (input.get k)
+    exact h_decode
+
+  constructor
+  · -- state = ...
+    rfl
+
+  constructor
+  · -- inputIndex = (k + 1) * W
+    ring
+
+  constructor
+  · -- workIndex = k
+    rfl
+
+  constructor
+  · -- work preserves i < k
+    intro i hi
+    simp only
+    have : i ≠ k := by omega
+    simp [this]
+    sorry
+
+  constructor
+  · -- work is default for i < 0 or k ≤ i
+    intro i hi_range
+    simp only
+    split_ifs with heq
+    · subst heq; sorry
+    · sorry
+
+  constructor
+  · -- input = bitstreamFromInput input
+    sorry
+
+  · -- output = input.take k
+    sorry
 
 lemma decodeSymbolWrite {Γ Λ : Type*}
   [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
