@@ -16,10 +16,6 @@ def TM0_recognisableLanguages (Γ : Type*) [Inhabited Γ] : Set (Set (List Γ)) 
   { L | ∃ (Λ : Type*) (_ : Inhabited Λ) (M : Turing.TM0.Machine (Γ := Γ) (Λ := Λ)),
     L = TM0_language M }
 
--- theorem TM0_recognisable_eq_RE {Γ : Type*} [Primcodable Γ] [Fintype Γ] [Inhabited Γ] :
---   TM0_recognisableLanguages Γ = reLanguages (Γ := Γ) := by
---   sorry
-
 inductive WorkTapeDirection
   | L     -- move left
   | R     -- move right
@@ -185,18 +181,6 @@ def generatedLanguage {Γw Γo Q : Type*} [Fintype Γw] [Fintype Γo] [Fintype Q
 def generableLanguages {Γ : Type*} [Fintype Γ] : Set (Set (List Γ)) :=
 { L | ∃ (Γw Q : Type*) (_ : Fintype Γw) (_ : Fintype Q)
   (gen : Generator Γw Γ Q), generatedLanguage gen = L }
-
--- lemma generableLanguages_subset_reLanguages {Γ : Type*} [Primcodable Γ] [Fintype Γ]
--- : generableLanguages (Γ := Γ) ⊆ reLanguages (Γ := Γ) := by sorry
-
--- lemma reLanguages_subset_generableLanguages {Γ : Type*} [Primcodable Γ] [Fintype Γ]
--- : reLanguages (Γ := Γ) ⊆ generableLanguages (Γ := Γ) := by sorry
-
--- theorem generatebleLanguages_eq_reLanguages {Γ : Type*} [Primcodable Γ] [Fintype Γ]
--- : generableLanguages (Γ := Γ) = reLanguages (Γ := Γ) := by
---   exact
---     Set.Subset.antisymm generableLanguages_subset_reLanguages
---       reLanguages_subset_generableLanguages
 
 structure Encoding (Γ : Type*) where
   W : ℕ
@@ -411,18 +395,6 @@ def readBlockOfBitsW
     exact lt_of_lt_of_le h this
 ⟩
 
-lemma EOF_enum_is_none {Γ : Type*}
-  [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
-  (input : List Γ) :
-  (standardEncoding Γ).enum
-    (readBlockOfBitsW
-      (bitstreamFromInput input)
-      (WIDTH Γ * input.length)
-      (WIDTH Γ)
-      (WIDTH Γ)
-      (by omega))
-  = none := by sorry
-
 lemma readBlockOfBits_decodes_to_EOF {Γ : Type*}
   [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
   (input : List Γ) :
@@ -444,6 +416,30 @@ lemma readBlockOfBits_decodes_to_input {Γ : Type*}
       (by omega)
       )
     = some (input.get ⟨k, hk⟩) := by sorry
+
+lemma EOF_enum_is_none {Γ : Type*}
+  [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
+  (input : List Γ) :
+  (standardEncoding Γ).enum
+    (readBlockOfBitsW
+      (bitstreamFromInput input)
+      (WIDTH Γ * input.length)
+      (WIDTH Γ)
+      (WIDTH Γ)
+      (by omega))
+  = none := by
+  -- unfold readBlockOfBitsW
+  simp only [readBlockOfBitsW]
+  -- readBlockOfBitsW wraps readBlockOfBitsNat in a `Fin 2^W`, so we look at the value
+  have hval := readBlockOfBits_decodes_to_EOF input
+  -- By definition of standardEncoding.enum, indices ≥ card Γ map to none
+  unfold standardEncoding
+  simp only [dite_eq_right_iff, reduceCtorEq, imp_false, not_lt, ge_iff_le]
+  -- Fintype.card Γ < 2^WIDTH Γ by Nat.size definition
+  -- So the 'if' in enum fails and gives none
+  rw [hval]
+  have h_card : FinEnum.card Γ = Fintype.card Γ := FinEnum.card_eq_fintypeCard
+  omega
 
 def DecodeBitInv {Γ Λ : Type*}
   [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
@@ -1780,3 +1776,19 @@ theorem recognised_implies_generable {Γ Λ : Type*}
     use bitstreamFromInput input
 
 end RecognisableEqualsGenerable
+
+-- theorem TM0_recognisable_eq_RE {Γ : Type*} [Primcodable Γ] [Fintype Γ] [Inhabited Γ] :
+--   TM0_recognisableLanguages Γ = reLanguages (Γ := Γ) := by
+--   sorry
+
+-- lemma generableLanguages_subset_reLanguages {Γ : Type*} [Primcodable Γ] [Fintype Γ]
+-- : generableLanguages (Γ := Γ) ⊆ reLanguages (Γ := Γ) := by sorry
+
+-- lemma reLanguages_subset_generableLanguages {Γ : Type*} [Primcodable Γ] [Fintype Γ]
+-- : reLanguages (Γ := Γ) ⊆ generableLanguages (Γ := Γ) := by sorry
+
+-- theorem generatebleLanguages_eq_reLanguages {Γ : Type*} [Primcodable Γ] [Fintype Γ]
+-- : generableLanguages (Γ := Γ) = reLanguages (Γ := Γ) := by
+--   exact
+--     Set.Subset.antisymm generableLanguages_subset_reLanguages
+--       reLanguages_subset_generableLanguages
