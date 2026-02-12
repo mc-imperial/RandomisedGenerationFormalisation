@@ -811,13 +811,59 @@ lemma detectEOF {Γ Λ : Type*}
   :
   ∃ cfg',
     step (TM_generator (enc := standardEncoding Γ) M) cfg = some cfg' ∧
-    -- The generator has now detected the EOF marker and switched to rewind mode
     cfg'.state = GenState.rewind ∧
     cfg'.inputIndex = cfg.inputIndex ∧
     cfg'.workIndex = cfg.workIndex - 1 ∧
     cfg'.work = cfg.work ∧
     cfg'.output = cfg.output
-:= by sorry
+:= by
+  -- Unfold step and TM_generator
+  simp only [step, TM_generator]
+  rw [h_state]
+  -- We're in the GenState.load case with bitsRead = W
+  have h_eq : (standardEncoding Γ).W = (standardEncoding Γ).W := rfl
+  simp only [↓reduceDIte]
+  -- The enum returns none, so we take the first branch
+  rw [h_enum]
+  simp only
+  -- Construct the next configuration
+  use {
+    state := GenState.rewind,
+    input := cfg.input,
+    inputIndex := cfg.inputIndex,
+    work := cfg.work,
+    workIndex := cfg.workIndex + (-1 : ℤ),
+    output := cfg.output
+  }
+  constructor
+  · -- Prove the step equation
+    congr 1
+    ext
+    · rfl  -- state
+    · rfl  -- input
+    · simp  -- inputIndex (0 added)
+    · -- work: show the conditional equals cfg.work
+      simp only
+      split_ifs with h
+      · subst h
+        rfl
+      · rfl
+    · rfl  -- workIndex
+    · rfl  -- output
+  constructor
+  · -- cfg'.state = GenState.rewind
+    rfl
+  constructor
+  · -- cfg'.inputIndex = cfg.inputIndex
+    rfl
+  constructor
+  · -- cfg'.workIndex = cfg.workIndex - 1
+    rfl
+  constructor
+  · -- cfg'.work = cfg.work
+    rfl
+  · -- cfg'.output = cfg.output
+    rfl
 
 lemma decodeEOFMarker {Γ Λ : Type*}
   [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
