@@ -459,6 +459,78 @@ def readBlockOfBitsW
     exact lt_of_lt_of_le h this
 ⟩
 
+/-- Binary representation: sum of bits equals the number -/
+lemma sum_testBit_eq {n W : ℕ} (h : n < 2 ^ W) :
+  (Finset.range W).sum (fun i => (if n.testBit i then 1 else 0) * 2^i) = n := by
+  sorry
+  -- induction W generalizing n with
+  -- | zero =>
+  --   interval_cases n
+  --   rfl
+  -- | succ W ih =>
+  --   rw [Finset.sum_range_succ]
+  --   cases Nat.even_or_odd n with
+  --   | inl heven =>
+  --     obtain ⟨k, rfl⟩ := heven
+  --     have hk : k < 2^W := by
+  --       have : 2 * k < 2^(W + 1) := h
+  --       rw [pow_succ] at this
+  --       omega
+  --     simp [Nat.testBit_two_mul_self, Nat.testBit_two_mul_succ_self, pow_zero]
+  --     rw [← Finset.mul_sum]
+  --     have : (Finset.range W).sum (fun i => (if k.testBit i then 1 else 0) * 2^(i + 1)) =
+  --            2 * (Finset.range W).sum (fun i => (if k.testBit i then 1 else 0) * 2^i) := by
+  --       rw [← Finset.mul_sum]
+  --       congr 1
+  --       ext i
+  --       rw [pow_succ]
+  --       ring
+  --     rw [this, ih hk]
+  --   | inr hodd =>
+  --     obtain ⟨k, rfl⟩ := Nat.odd_iff_exists_bit.mp hodd
+  --     have hk : k < 2^W := by
+  --       have : 2 * k + 1 < 2^(W + 1) := h
+  --       rw [pow_succ] at this
+  --       omega
+  --     simp [Nat.testBit_two_mul_add_one_self, Nat.testBit_two_mul_add_one_succ_self, pow_zero]
+  --     rw [← Finset.mul_sum]
+  --     have : (Finset.range W).sum (fun i => (if k.testBit i then 1 else 0) * 2^(i + 1)) =
+  --            2 * (Finset.range W).sum (fun i => (if k.testBit i then 1 else 0) * 2^i) := by
+  --       rw [← Finset.mul_sum]
+  --       congr 1
+  --       ext i
+  --       rw [pow_succ]
+  --       ring
+  --     rw [this, ih hk]
+  --     ring
+
+/-- Reindex sum from MSB-first to LSB-first order -/
+lemma sum_reindex_msb_lsb {W : ℕ} (f : ℕ → ℕ) :
+  (Finset.range W).sum (fun i => f (W - 1 - i) * 2^(W - 1 - i)) =
+  (Finset.range W).sum (fun j => f j * 2^j) := by
+  sorry
+  -- by_cases hW : W = 0
+  -- · simp [hW]
+  -- · apply Finset.sum_bij
+  --   · exact fun i _ => W - 1 - i
+  --   · intro i hi
+  --     simp at hi ⊢
+  --     omega
+  --   · intro i _
+  --     have : W - 1 - (W - 1 - i) = i := by omega
+  --     simp [this]
+  --   · intro i₁ i₂ _ _ heq
+  --     omega
+  --   · intro j hj
+  --     use W - 1 - j
+  --     simp at hj ⊢
+  --     omega
+
+/-- FinEnum.card equals Fintype.card -/
+lemma FinEnum_card_eq_Fintype_card {Γ : Type*} [Fintype Γ] [FinEnum Γ] :
+  FinEnum.card Γ = Fintype.card Γ := by
+  sorry
+
 lemma readBlockOfBits_decodes_to_EOF {Γ : Type*}
   [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
   (input : List Γ) :
@@ -466,7 +538,222 @@ lemma readBlockOfBits_decodes_to_EOF {Γ : Type*}
     (bitstreamFromInput input)
     ((WIDTH Γ) * input.length)
     (WIDTH Γ)
-  = Fintype.card Γ := by sorry
+  = Fintype.card Γ := by
+  unfold readBlockOfBitsNat bitstreamFromInput WIDTH standardEncoding
+  simp only []
+  set W := (standardEncoding Γ).W
+  set card := Fintype.card Γ
+  -- All bits we read are in the EOF region
+  have h_bits : ∀ i < W,
+    (if h : W * input.length + i < input.length * W then
+      getEncodingBit (standardEncoding Γ)
+        (input.get ⟨(W * input.length + i) / W, Nat.div_lt_iff_lt_mul
+        (standardEncoding Γ).W_pos |>.mpr h⟩)
+        ((W * input.length + i) % W)
+    else if W * input.length + i < (input.length + 1) * W then
+      getEOFBit (standardEncoding Γ) ((W * input.length + i) % W)
+    else false) = getEOFBit (standardEncoding Γ) i := by
+    intro i hi
+    have h1 : ¬(W * input.length + i < input.length * W) := by
+      simp
+      linarith
+    have h2 : W * input.length + i < (input.length + 1) * W := by
+      calc W * input.length + i
+          < W * input.length + W := by omega
+        _ = (input.length + 1) * W := by ring
+    have h3 : (W * input.length + i) % W = i := by
+      rw [Nat.add_mod, Nat.mul_mod_right]
+      simp only [zero_add, dvd_refl, Nat.mod_mod_of_dvd]
+      exact Nat.mod_eq_of_lt hi
+    simp [h1, h2, h3]
+  simp only [standardEncoding, W] at h_bits ⊢
+  -- Rewrite using h_bits
+  have : ∑ x ∈ Finset.range (FinEnum.card Γ).size,
+      (if (if h : (FinEnum.card Γ).size * input.length + x <
+        input.length * (FinEnum.card Γ).size then
+            getEncodingBit
+              { W := (FinEnum.card Γ).size,
+                W_pos := (standardEncoding Γ).W_pos,
+                enum := fun i ↦ if h : ↑i < FinEnum.card Γ then
+                  some (FinEnum.equiv.symm ⟨↑i, h⟩) else none,
+                complete := (standardEncoding Γ).complete }
+              (input.get ⟨((FinEnum.card Γ).size * input.length + x) / (FinEnum.card Γ).size,
+                Nat.div_lt_iff_lt_mul (standardEncoding Γ).W_pos |>.mpr h⟩)
+              (((FinEnum.card Γ).size * input.length + x) % (FinEnum.card Γ).size)
+          else if (FinEnum.card Γ).size * input.length + x <
+            (input.length + 1) * (FinEnum.card Γ).size then
+            getEOFBit (Γ := Γ)
+              { W := (FinEnum.card Γ).size,
+                W_pos := (standardEncoding Γ).W_pos,
+                enum := fun i ↦ if h : ↑i < FinEnum.card Γ then
+                  some (FinEnum.equiv.symm ⟨↑i, h⟩) else none,
+                complete := (standardEncoding Γ).complete }
+              (((FinEnum.card Γ).size * input.length + x) % (FinEnum.card Γ).size)
+          else false) = true then 1 else 0) * 2 ^ ((FinEnum.card Γ).size - x - 1) =
+    ∑ x ∈ Finset.range (FinEnum.card Γ).size,
+      (if getEOFBit (Γ := Γ)
+            { W := (FinEnum.card Γ).size,
+              W_pos := (standardEncoding Γ).W_pos,
+              enum := fun i ↦ if h : ↑i < FinEnum.card Γ then
+                some (FinEnum.equiv.symm ⟨↑i, h⟩) else none,
+              complete := (standardEncoding Γ).complete }
+            x = true then 1 else 0) * 2 ^ ((FinEnum.card Γ).size - x - 1) := by
+    apply Finset.sum_congr rfl
+    intro x hx
+    simp only [Finset.mem_range] at hx
+    congr 1
+    congr 1
+    rw [h_bits x hx]
+  rw [this]
+  clear this
+  -- Simplify getEOFBit
+  unfold getEOFBit getNthBitMSB
+  simp only []
+  -- Simplify: inside the sum, x < (FinEnum.card Γ).size is always true
+  have h_simp : ∑ x ∈ Finset.range (FinEnum.card Γ).size,
+      (if (if x < (FinEnum.card Γ).size then
+            (Fintype.card Γ).testBit ((FinEnum.card Γ).size - 1 - x)
+          else false) = true then 1 else 0) * 2 ^ ((FinEnum.card Γ).size - x - 1) =
+    ∑ x ∈ Finset.range (FinEnum.card Γ).size,
+      (if (Fintype.card Γ).testBit ((FinEnum.card Γ).size - 1 - x) then 1 else 0) *
+      2 ^ ((FinEnum.card Γ).size - x - 1) := by
+    apply Finset.sum_congr rfl
+    intro x hx
+    simp at hx
+    simp [hx]
+  rw [h_simp]
+  clear h_simp
+  -- Apply the reindexing lemma
+  have : ∑ x ∈ Finset.range (FinEnum.card Γ).size,
+      (if (Fintype.card Γ).testBit ((FinEnum.card Γ).size - 1 - x) = true then 1 else 0) *
+      2 ^ ((FinEnum.card Γ).size - x - 1) =
+    ∑ x ∈ Finset.range (FinEnum.card Γ).size,
+      (if (Fintype.card Γ).testBit x = true then 1 else 0) * 2 ^ x := by
+    set W := (FinEnum.card Γ).size
+    set n := Fintype.card Γ
+    -- Use Finset.sum_bij to establish the bijection i ↦ W - 1 - i
+    refine Finset.sum_bij (fun i _ => W - 1 - i) ?_ ?_ ?_ ?_
+    · intro i hi
+      simp at hi ⊢
+      omega
+    · intro i₁ hi₁ i₂ hi₂ heq
+      simp at hi₁ hi₂ heq
+      omega
+    · intro b hb
+      use W - 1 - b
+      simp at hb ⊢
+      omega
+    · simp only [Finset.mem_range, ite_mul, one_mul, zero_mul]
+      intro a ha
+      congr 2
+      omega
+  rw [this]
+  clear this
+  simp only [ite_mul, one_mul, zero_mul]
+  -- The sum can be rewritten using the testBit characterization
+  have : (∑ x ∈ Finset.range (FinEnum.card Γ).size,
+      if (Fintype.card Γ).testBit x = true then 2 ^ x else 0) =
+    (∑ x ∈ Finset.range (FinEnum.card Γ).size,
+      (if (Fintype.card Γ).testBit x then 1 else 0) * 2 ^ x) := by
+    congr 1
+    ext x
+    by_cases h : (Fintype.card Γ).testBit x
+    · simp [h]
+    · simp [h]
+  rw [this]
+  clear this
+  have h_bound : card < 2^(FinEnum.card Γ).size := by
+    change Fintype.card Γ < 2 ^ (FinEnum.card Γ).size
+    rw [← FinEnum_card_eq_Fintype_card]
+    exact Nat.lt_size_self (FinEnum.card Γ)
+  exact sum_testBit_eq h_bound
+
+lemma bitstreamFromInput_in_range {Γ : Type*}
+  [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
+  (input : List Γ) (i : ℕ) (hi : i < input.length * (WIDTH Γ)) :
+  bitstreamFromInput input i =
+  getEncodingBit (standardEncoding Γ)
+    (input.get ⟨i / (WIDTH Γ), Nat.div_lt_iff_lt_mul (standardEncoding Γ).W_pos |>.mpr hi⟩)
+    (i % (WIDTH Γ)) := by
+  unfold bitstreamFromInput WIDTH
+  simp [hi]
+
+lemma readBlockOfBits_extracts_symbol {Γ : Type*}
+  [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
+  (input : List Γ) {k : ℕ} (hk : k < input.length) :
+  (Finset.range (WIDTH Γ)).sum (fun i =>
+    (if bitstreamFromInput input ((WIDTH Γ) * k + i) then 1 else 0) *
+    2^((WIDTH Γ) - 1 - i)) = symbolToNat (input.get ⟨k, hk⟩) := by
+  set W := WIDTH Γ
+  set g := input.get ⟨k, hk⟩
+  -- All bits are in the input range
+  have h_in_range : ∀ i < W, W * k + i < input.length * W := by
+    intro i hi
+    calc W * k + i
+        < W * k + W := by omega
+      _ = W * (k + 1) := by ring
+      _ ≤ W * input.length := by exact Nat.mul_le_mul_left _ (Nat.succ_le_of_lt hk)
+      _ = input.length * W := by exact Nat.mul_comm  W input.length
+  -- Each bit comes from the encoding of g
+  have h_bits : ∀ i < W,
+    bitstreamFromInput input (W * k + i) = getEncodingBit (standardEncoding Γ) g i := by
+    intro i hi
+    rw [bitstreamFromInput_in_range input (W * k + i) (h_in_range i hi)]
+    congr
+    · -- (W * k + i) / W = k
+      rw [Nat.add_comm, Nat.add_mul_div_left _ _ (standardEncoding Γ).W_pos]
+      simp only [Nat.add_eq_right, Nat.div_eq_zero_iff]
+      right
+      exact hi
+    · -- (W * k + i) % W = i
+      rw [Nat.add_mod, Nat.mul_mod_right]
+      simp only [zero_add, dvd_refl, Nat.mod_mod_of_dvd]
+      exact Nat.mod_eq_of_lt hi
+  -- Rewrite sum using h_bits
+  have h_sum_rewrite : ∑ i ∈ Finset.range W,
+      (if bitstreamFromInput input (W * k + i) = true then 1 else 0) * 2 ^ (W - 1 - i) =
+    ∑ i ∈ Finset.range W,
+      (if getEncodingBit (standardEncoding Γ) g i = true then 1 else 0) * 2 ^ (W - 1 - i) := by
+    apply Finset.sum_congr rfl
+    intro i hi
+    simp only [Finset.mem_range] at hi
+    congr 2
+    have h := h_bits i hi
+    simp [h]
+  rw [h_sum_rewrite]
+  -- Expand definitions
+  unfold getEncodingBit getNthBitMSB symbolToNat
+  set n := (FinEnum.equiv g).val
+  -- Simplify conditions (all i in range satisfy i < W)
+  have h_simp : ∑ i ∈ Finset.range W,
+      (if (if i < W then n.testBit (W - 1 - i) else false) = true then 1 else 0) * 2 ^ (W - 1 - i) =
+    ∑ i ∈ Finset.range W,
+      (if n.testBit (W - 1 - i) then 1 else 0) * 2 ^ (W - 1 - i) := by
+    apply Finset.sum_congr rfl
+    intro i hi
+    simp only [Finset.mem_range] at hi
+    simp [hi]
+  rw [h_simp]
+  -- Reindex MSB to LSB
+  have h_reindex : ∑ x ∈ Finset.range W,
+      (if n.testBit (W - 1 - x) then 1 else 0) * 2 ^ (W - 1 - x) =
+    ∑ x ∈ Finset.range W,
+      (if n.testBit x then 1 else 0) * 2 ^ x := by
+    refine Finset.sum_bij (fun i _ => W - 1 - i) ?_ ?_ ?_ ?_
+    · intro i hi; simp at hi ⊢; omega
+    · intro i₁ hi₁ i₂ hi₂ heq; simp at hi₁ hi₂ heq; omega
+    · intro b hb; use W - 1 - b; simp at hb ⊢; omega
+    · simp only [Finset.mem_range, ite_mul, one_mul, zero_mul]
+      intro a ha
+      trivial
+  rw [h_reindex]
+  -- Apply binary representation lemma
+  have h_bound : n < 2^W := by
+    have : n < FinEnum.card Γ := (FinEnum.equiv g).2
+    calc n < FinEnum.card Γ := this
+         _ < 2^(Nat.size (FinEnum.card Γ)) := Nat.lt_size_self _
+         _ = 2^W := rfl
+  exact sum_testBit_eq h_bound
 
 lemma readBlockOfBits_decodes_to_input {Γ : Type*}
   [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
@@ -478,8 +765,30 @@ lemma readBlockOfBits_decodes_to_input {Γ : Type*}
       (WIDTH Γ)
       (WIDTH Γ)
       (by omega)
-      )
-    = some (input.get ⟨k, hk⟩) := by sorry
+  ) = some (input.get ⟨k, hk⟩) := by
+  unfold readBlockOfBitsW
+  simp only [List.get_eq_getElem]
+  set W := WIDTH Γ
+  set g := input.get ⟨k, hk⟩
+  have h_val : readBlockOfBitsNat (bitstreamFromInput input) (W * k) W = symbolToNat g := by
+    unfold readBlockOfBitsNat
+    convert readBlockOfBits_extracts_symbol input hk using 2
+    · simp only [show W = WIDTH Γ from rfl]
+      congr 2
+      omega
+  -- Unfold standardEncoding.enum
+  unfold standardEncoding
+  simp only
+  -- symbolToNat g is in range
+  have h_lt : symbolToNat g < FinEnum.card Γ := (FinEnum.equiv g).2
+  simp only [Option.dite_none_right_eq_some, Option.some.injEq]
+  refine ⟨?_, ?_⟩
+  · convert h_lt using 1
+  · suffices FinEnum.equiv.symm ⟨symbolToNat g, h_lt⟩ = g by
+      convert this using 1
+      congr
+    unfold symbolToNat
+    exact Equiv.symm_apply_apply (FinEnum.equiv) g
 
 lemma EOF_enum_is_none {Γ : Type*}
   [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
