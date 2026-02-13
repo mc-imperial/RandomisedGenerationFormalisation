@@ -463,51 +463,11 @@ def readBlockOfBitsW
 lemma sum_testBit_eq {n W : ℕ} (h : n < 2 ^ W) :
   (Finset.range W).sum (fun i => (if n.testBit i then 1 else 0) * 2^i) = n := by
   sorry
-  -- induction W generalizing n with
-  -- | zero =>
-  --   interval_cases n
-  --   rfl
-  -- | succ W ih =>
-  --   rw [Finset.sum_range_succ]
-  --   cases Nat.even_or_odd n with
-  --   | inl heven =>
-  --     obtain ⟨k, rfl⟩ := heven
-  --     have hk : k < 2^W := by
-  --       have : 2 * k < 2^(W + 1) := h
-  --       rw [pow_succ] at this
-  --       omega
-  --     simp [Nat.testBit_two_mul_self, Nat.testBit_two_mul_succ_self, pow_zero]
-  --     rw [← Finset.mul_sum]
-  --     have : (Finset.range W).sum (fun i => (if k.testBit i then 1 else 0) * 2^(i + 1)) =
-  --            2 * (Finset.range W).sum (fun i => (if k.testBit i then 1 else 0) * 2^i) := by
-  --       rw [← Finset.mul_sum]
-  --       congr 1
-  --       ext i
-  --       rw [pow_succ]
-  --       ring
-  --     rw [this, ih hk]
-  --   | inr hodd =>
-  --     obtain ⟨k, rfl⟩ := Nat.odd_iff_exists_bit.mp hodd
-  --     have hk : k < 2^W := by
-  --       have : 2 * k + 1 < 2^(W + 1) := h
-  --       rw [pow_succ] at this
-  --       omega
-  --     simp [Nat.testBit_two_mul_add_one_self, Nat.testBit_two_mul_add_one_succ_self, pow_zero]
-  --     rw [← Finset.mul_sum]
-  --     have : (Finset.range W).sum (fun i => (if k.testBit i then 1 else 0) * 2^(i + 1)) =
-  --            2 * (Finset.range W).sum (fun i => (if k.testBit i then 1 else 0) * 2^i) := by
-  --       rw [← Finset.mul_sum]
-  --       congr 1
-  --       ext i
-  --       rw [pow_succ]
-  --       ring
-  --     rw [this, ih hk]
-  --     ring
 
 /-- Reindex sum from MSB-first to LSB-first order -/
 lemma sum_reindex_msb_lsb {W : ℕ} (f : ℕ → ℕ) :
-  (Finset.range W).sum (fun i => f (W - 1 - i) * 2^(W - 1 - i)) =
-  (Finset.range W).sum (fun j => f j * 2^j) := by
+  (Finset.range W).sum (fun i => f (W - 1 - i) * 2 ^ (W - 1 - i)) =
+  (Finset.range W).sum (fun j => f j * 2 ^ j) := by
   sorry
   -- by_cases hW : W = 0
   -- · simp [hW]
@@ -525,11 +485,6 @@ lemma sum_reindex_msb_lsb {W : ℕ} (f : ℕ → ℕ) :
   --     use W - 1 - j
   --     simp at hj ⊢
   --     omega
-
-/-- FinEnum.card equals Fintype.card -/
-lemma FinEnum_card_eq_Fintype_card {Γ : Type*} [Fintype Γ] [FinEnum Γ] :
-  FinEnum.card Γ = Fintype.card Γ := by
-  sorry
 
 lemma readBlockOfBits_decodes_to_EOF {Γ : Type*}
   [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
@@ -664,7 +619,7 @@ lemma readBlockOfBits_decodes_to_EOF {Γ : Type*}
   clear this
   have h_bound : card < 2^(FinEnum.card Γ).size := by
     change Fintype.card Γ < 2 ^ (FinEnum.card Γ).size
-    rw [← FinEnum_card_eq_Fintype_card]
+    rw [← FinEnum.card_eq_fintypeCard]
     exact Nat.lt_size_self (FinEnum.card Γ)
   exact sum_testBit_eq h_bound
 
