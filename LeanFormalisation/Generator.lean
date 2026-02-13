@@ -471,8 +471,106 @@ lemma sum_testBit_eq {n W : ℕ} (h : n < 2 ^ W) :
     conv_rhs => rw [← Nat.div_add_mod n (2^W')]
     rw [add_comm (2^W' * (n / 2^W')) (n % 2^W')]
     congr 1
-    · sorry
-    · sorry
+    · convert ih (Nat.mod_lt n (Nat.pow_pos (by omega : 0 < 2))) using 3
+      simp only [Nat.testBit_mod_two_pow]
+      split_ifs with h1 h2
+      · rfl
+      · simp only [Bool.and_eq_true, decide_eq_true_eq, not_and, Bool.not_eq_true] at h2
+        rename_i x hx
+        have h3 : x < W' := Finset.mem_range.mp hx
+        have h4 : n.testBit x = false := h2 h3
+        rw [h1] at h4
+        exact Bool.noConfusion h4
+      · simp only [Bool.not_eq_true] at h1
+        rename_i x hx h2
+        simp only [Bool.and_eq_true, decide_eq_true_eq] at h2
+        have h3 : n.testBit x = true := h2.2
+        rw [h1] at h3
+        exact Bool.noConfusion h3
+      · rfl
+    · by_cases hbit : n.testBit W' = true
+      · simp only [hbit, ↓reduceIte, one_mul, ne_eq,
+        Nat.pow_eq_zero, OfNat.ofNat_ne_zero, false_and,
+        not_false_eq_true, left_eq_mul₀]
+        simp only [Nat.testBit] at hbit
+        have h_bound : n / 2 ^ W' < 2 := by
+          have : 2 ^ (W' + 1) = 2 * 2 ^ W' := by ring
+          rw [this] at h
+          apply Nat.div_lt_of_lt_mul
+          · omega
+        have : (n / 2 ^ W') % 2 = 1 := by
+          have h_shift : n >>> W' = n / 2 ^ W' := Nat.shiftRight_eq_div_pow n W'
+          rw [← h_shift]
+          have : 1 &&& (n >>> W') = 1 := by
+            have : 1 &&& (n >>> W') ≠ 0 := by simpa using hbit
+            -- rewrite the shift into division
+            rw [h_shift] at this ⊢
+            -- let m = n / 2 ^ W'
+            set m := n / 2 ^ W' with hm
+            -- now rewrite everything in terms of m
+            simp only [hm, Nat.one_and_eq_mod_two, ne_eq, Nat.mod_two_not_eq_zero] at this h_bound ⊢
+            -- from m < 2 we know m = 0 ∨ m = 1
+            have hm_cases : m = 0 ∨ m = 1 := by
+              rw [←hm] at h_bound
+              -- First, note that m < 2
+              have h : m < 2 := h_bound
+              -- Now, since m : ℕ, the only possibilities are 0 or 1
+              cases h : m with
+              | zero => exact Or.inl rfl
+              | succ m' =>
+                right
+                have : m' < 1 := by
+                  have : m = m' + 1 := h
+                  omega
+                simp only [Nat.lt_one_iff] at this
+                rw [this]
+            cases hm_cases with
+            | inl h0 =>
+                -- m = 0 contradicts nonzero bit
+                rw [← hm] at this
+                rw [h0] at this
+                simp at this
+            | inr h1 =>
+                -- m = 1 gives the goal
+                rw [← hm]
+                rw [h1]
+          simp only [Nat.one_and_eq_mod_two] at this
+          exact this
+        interval_cases n / 2 ^ W'
+        · simp at this
+        · rfl
+      · simp only [hbit, Bool.false_eq_true, ↓reduceIte, zero_mul,
+                zero_eq_mul, Nat.pow_eq_zero, OfNat.ofNat_ne_zero, ne_eq,
+                false_and, Nat.div_eq_zero_iff, false_or]
+        have h_n_div_2w_mod_2_eq_0 : n / 2 ^ W' % 2 = 0 := by
+          have : n.testBit W' = false := by simp_all
+          unfold Nat.testBit at this
+          simp only [Nat.one_and_eq_mod_two, Nat.mod_two_bne_zero, beq_eq_false_iff_ne,
+            ne_eq, Nat.mod_two_not_eq_one] at this
+          omega
+        have h_n_div_2_w_even : Even (n / 2 ^ W') := by
+          rw [even_iff_two_dvd]
+          exact Nat.dvd_of_mod_eq_zero h_n_div_2w_mod_2_eq_0
+        have h_n_div_2W_lt_2 : n / 2 ^ W' < 2 := by
+          have : n < 2 * 2 ^ W' := by calc n < 2 ^ (W' + 1) := h
+                                          _ = 2 * 2 ^ W' := by ring
+          have h_pow_pos : 0 < 2 ^ W' := Nat.pow_pos (by omega : 0 < 2)
+          rw [Nat.div_lt_iff_lt_mul h_pow_pos]
+          exact this
+        have h_n_div_2W_eq_0 : n / 2 ^ W' = 0 := by
+          -- n / 2^W' is even and n / 2^W' < 2
+          -- So n / 2^W' ∈ {0, 1} and even, therefore must be 0
+          interval_cases n / 2 ^ W'
+          · rfl
+          · -- Case n / 2^W' = 1, contradicts evenness
+            exfalso
+            rw [even_iff_two_dvd] at h_n_div_2_w_even
+            have : ¬(2 ∣ 1) := by omega
+            contradiction
+        have : n = n % 2 ^ W' := by
+          rw [← Nat.div_add_mod n (2 ^ W'), h_n_div_2W_eq_0]; simp
+        rw [this]
+        exact Nat.mod_lt n (Nat.pow_pos (by omega))
 
 /-- Reindex sum from MSB-first to LSB-first order -/
 lemma sum_reindex_msb_lsb {W : ℕ} (f : ℕ → ℕ) :
