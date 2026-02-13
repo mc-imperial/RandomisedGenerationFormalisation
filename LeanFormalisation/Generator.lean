@@ -468,23 +468,33 @@ lemma sum_testBit_eq {n W : ℕ} (h : n < 2 ^ W) :
 lemma sum_reindex_msb_lsb {W : ℕ} (f : ℕ → ℕ) :
   (Finset.range W).sum (fun i => f (W - 1 - i) * 2 ^ (W - 1 - i)) =
   (Finset.range W).sum (fun j => f j * 2 ^ j) := by
-  sorry
-  -- by_cases hW : W = 0
-  -- · simp [hW]
-  -- · apply Finset.sum_bij
-  --   · exact fun i _ => W - 1 - i
-  --   · intro i hi
-  --     simp at hi ⊢
-  --     omega
-  --   · intro i _
-  --     have : W - 1 - (W - 1 - i) = i := by omega
-  --     simp [this]
-  --   · intro i₁ i₂ _ _ heq
-  --     omega
-  --   · intro j hj
-  --     use W - 1 - j
-  --     simp at hj ⊢
-  --     omega
+  cases W with
+  | zero => simp
+  | succ W' =>
+    rw [← Finset.sum_bij (fun i _ => W' - i)]
+    · intro i hi
+      simp only [Finset.mem_range] at hi ⊢
+      omega
+    · intro i hi
+      simp only [Finset.mem_range] at hi
+      intro a₂ ha₂ heq
+      simp only [Finset.mem_range] at ha₂
+      omega
+    · intro b hb
+      use W' - b
+      simp only [Finset.mem_range] at hb ⊢
+      constructor
+      · omega
+      · omega
+    · intro j hj
+      congr 1
+      · congr 1
+        simp only [Finset.mem_range] at hj
+        omega
+      · congr 1
+        simp only [Finset.mem_range] at hj
+        have hj' : j ≤ W' := Nat.lt_succ_iff.mp hj
+        omega
 
 lemma readBlockOfBits_decodes_to_EOF {Γ : Type*}
   [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
