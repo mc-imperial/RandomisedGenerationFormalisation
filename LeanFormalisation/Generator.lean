@@ -459,10 +459,20 @@ def readBlockOfBitsW
     exact lt_of_lt_of_le h this
 ⟩
 
-/-- Binary representation: sum of bits equals the number -/
 lemma sum_testBit_eq {n W : ℕ} (h : n < 2 ^ W) :
   (Finset.range W).sum (fun i => (if n.testBit i then 1 else 0) * 2^i) = n := by
-  sorry
+  induction W generalizing n
+  case zero =>
+    -- W = 0, sum over empty range is 0, n < 1 ⇒ n = 0
+    simp at h
+    simp [h]
+  case succ W' ih =>
+    rw [Finset.sum_range_succ]
+    conv_rhs => rw [← Nat.div_add_mod n (2^W')]
+    rw [add_comm (2^W' * (n / 2^W')) (n % 2^W')]
+    congr 1
+    · sorry
+    · sorry
 
 /-- Reindex sum from MSB-first to LSB-first order -/
 lemma sum_reindex_msb_lsb {W : ℕ} (f : ℕ → ℕ) :
