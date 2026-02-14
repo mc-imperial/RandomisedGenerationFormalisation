@@ -206,6 +206,16 @@ lemma StepsTo.computes {Γw Γo Q : Type u}
     apply Computes.step cfg cfg' cfg''.output h_step
     exact ih h_halt
 
+-- This captures the idea of a generator not being able to loop forever without
+-- consuming an input bit.
+def InputProgressing {Γw Γo Q : Type u}
+[Fintype Γw]
+[Inhabited Γo] [Fintype Γo] [FinEnum Γo] [DecidableEq Γo]
+[Fintype Q]
+(gen : Generator Γw Γo Q) : Prop :=
+∀ cfg, ∃ cfg' n,
+  Steps gen cfg cfg' n ∧ (haltingConfig gen cfg' ∨ cfg'.inputIndex > cfg.inputIndex)
+
 lemma step_preserves_no_default {Γw Γo Q : Type u}
 [Fintype Γw]
 [Inhabited Γo] [Fintype Γo] [FinEnum Γo] [DecidableEq Γo]
@@ -213,7 +223,26 @@ lemma step_preserves_no_default {Γw Γo Q : Type u}
   (gen : Generator Γw Γo Q) (cfg cfg' : GeneratorConfig Γw Γo Q) :
   step gen cfg = some cfg' →
   default ∉ cfg.output →
-  default ∉ cfg'.output := by sorry
+  default ∉ cfg'.output := by
+  intro h_step h_no_default
+  unfold step at h_step
+  split at h_step
+  · contradiction
+  · rename_i q' w' out? inDir workDir h_δ
+    injection h_step with h_eq
+    rw [← h_eq]
+    simp only
+    intro h
+    cases out? with
+    | none =>
+      exact h_no_default h
+    | some γ =>
+      simp only [List.mem_append, List.mem_singleton] at h
+      cases h with
+      | inl h_old => exact h_no_default h_old
+      | inr h_new =>
+        have : γ ≠ default := gen.no_default_output _ _ _ _ _ _ _ _ h_δ γ rfl
+        exact this h_new.symm
 
 lemma Computes_no_default {Γw Γo Q : Type u}
 [Fintype Γw]
@@ -222,7 +251,14 @@ lemma Computes_no_default {Γw Γo Q : Type u}
   (gen : Generator Γw Γo Q) (cfg : GeneratorConfig Γw Γo Q) (out : List Γo) :
   Computes gen cfg out →
   default ∉ cfg.output →
-  default ∉ out := by sorry
+  default ∉ out := by
+  intro h_comp h_no_default
+  induction h_comp with
+  | halt cfg h_halt =>
+    exact h_no_default
+  | step cfg cfg' out h_step h_comp' ih =>
+    apply ih
+    exact step_preserves_no_default gen cfg cfg' h_step h_no_default
 
 def Language (Γ : Type u)
 [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
