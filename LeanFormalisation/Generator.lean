@@ -2,19 +2,7 @@ import Mathlib
 import Mathlib.Computability.Halting
 import Mathlib.Computability.PostTuringMachine
 
-def isRE {Γ : Type*} [Primcodable Γ] [Fintype Γ] (L : Set (List Γ)) : Prop :=
-  REPred fun w ↦ w ∈ L
-
-def reLanguages {Γ : Type*} [Primcodable Γ] [Fintype Γ] : Set (Set (List Γ)) :=
-{ L | isRE L }
-
-def TM0_language {Γ Λ : Type*} [Inhabited Γ] [Inhabited Λ]
-  (M : Turing.TM0.Machine (Γ := Γ) (Λ := Λ)) : Set (List Γ) :=
-  { input | (Turing.TM0.eval M input).Dom }
-
-def TM0_recognisableLanguages (Γ : Type*) [Inhabited Γ] : Set (Set (List Γ)) :=
-  { L | ∃ (Λ : Type*) (_ : Inhabited Λ) (M : Turing.TM0.Machine (Γ := Γ) (Λ := Λ)),
-    L = TM0_language M }
+namespace RandomisedGeneration
 
 inductive WorkTapeDirection
   | L     -- move left
@@ -39,7 +27,11 @@ instance : Coe InputTapeDirection ℕ :=
 -- Sigma is the working tape alphabet.
 -- Γ is the output tape alphabet.
 -- Q is the set of states.
-structure Generator (Γw Γo Q : Type*) [Fintype Γw] [Fintype Γo] [Fintype Q] where
+structure Generator (Γw Γo Q : Type u)
+[Fintype Γw]
+[Inhabited Γo] [Fintype Γo] [FinEnum Γo] [DecidableEq Γo]
+[Fintype Q]
+where
   init : Q -- Initial state
   blank : Γw -- Blank symbol for the working tape
   -- A transition is determined by:
@@ -54,9 +46,17 @@ structure Generator (Γw Γo Q : Type*) [Fintype Γw] [Fintype Γo] [Fintype Q] 
   -- - A value indicating whether the input tape head should move
   -- - A value indicating the direction in which the working tape head should move
   δ : Q -> Bool -> Γw → Option (Q × Γw × Option Γo × InputTapeDirection × WorkTapeDirection)
+  -- Constraint: outputs never contain the default symbol
+  no_default_output : ∀ q b w q' w' o itd wtd,
+    δ q b w = some (q', w', o, itd, wtd) →
+    ∀ γ, o = some γ → γ ≠ default
 
 @[ext]
-structure GeneratorConfig (Γw Γo Q : Type*) [Fintype Γw] [Fintype Γo] [Fintype Q] where
+structure GeneratorConfig (Γw Γo Q : Type u)
+[Fintype Γw]
+[Inhabited Γo] [Fintype Γo] [FinEnum Γo] [DecidableEq Γo]
+[Fintype Q]
+where
   (state : Q)
   (input : ℕ → Bool)
   (inputIndex : ℕ)
@@ -64,8 +64,11 @@ structure GeneratorConfig (Γw Γo Q : Type*) [Fintype Γw] [Fintype Γo] [Finty
   (workIndex : ℤ)
   (output : List Γo)
 
-def step {Γw Γo Q : Type*} [Fintype Γw] [Fintype Γo] [Fintype Q]
-  (gen : Generator Γw Γo Q) (cfg : GeneratorConfig Γw Γo Q) :
+def step {Γw Γo Q : Type u}
+[Fintype Γw]
+[Inhabited Γo] [Fintype Γo] [FinEnum Γo] [DecidableEq Γo]
+[Fintype Q]
+(gen : Generator Γw Γo Q) (cfg : GeneratorConfig Γw Γo Q) :
   Option (GeneratorConfig Γw Γo Q) :=
 match gen.δ cfg.state (cfg.input cfg.inputIndex) (cfg.work cfg.workIndex) with
   | none => none
@@ -82,8 +85,11 @@ match gen.δ cfg.state (cfg.input cfg.inputIndex) (cfg.work cfg.workIndex) with
         | some g => cfg.output ++ [g]
     }
 
-def initConfig {Γw Γo Q : Type*} [Fintype Γw] [Fintype Γo] [Fintype Q]
-  (gen : Generator Γw Γo Q) (input : ℕ → Bool) :
+def initConfig {Γw Γo Q : Type u}
+[Fintype Γw]
+[Inhabited Γo] [Fintype Γo] [FinEnum Γo] [DecidableEq Γo]
+[Fintype Q]
+(gen : Generator Γw Γo Q) (input : ℕ → Bool) :
   GeneratorConfig Γw Γo Q :=
 { state := gen.init
   input := input
@@ -93,20 +99,29 @@ def initConfig {Γw Γo Q : Type*} [Fintype Γw] [Fintype Γo] [Fintype Q]
   output := []
 }
 
-def haltingConfig {Γw Γo Q} [Fintype Γw] [Fintype Γo] [Fintype Q]
+def haltingConfig {Γw Γo Q}
+[Fintype Γw]
+[Inhabited Γo] [Fintype Γo] [FinEnum Γo] [DecidableEq Γo]
+[Fintype Q]
   (gen : Generator Γw Γo Q)
   (cfg : GeneratorConfig Γw Γo Q) : Prop :=
 step gen cfg = none
 
-inductive Computes {Γw Γo Q : Type*} [Fintype Γw] [Fintype Γo] [Fintype Q]
+inductive Computes {Γw Γo Q : Type u}
+[Fintype Γw]
+[Inhabited Γo] [Fintype Γo] [FinEnum Γo] [DecidableEq Γo]
+[Fintype Q]
 (gen : Generator Γw Γo Q) : GeneratorConfig Γw Γo Q → List Γo → Prop
   | halt (cfg : GeneratorConfig Γw Γo Q) :
       step gen cfg = none → Computes gen cfg cfg.output
   | step (cfg cfg' : GeneratorConfig Γw Γo Q) (out : List Γo) :
       step gen cfg = some cfg' → Computes gen cfg' out → Computes gen cfg out
 
-inductive Steps {Γw Γo Q} [Fintype Γw] [Fintype Γo] [Fintype Q]
-  (gen : Generator Γw Γo Q) :
+inductive Steps {Γw Γo Q}
+[Fintype Γw]
+[Inhabited Γo] [Fintype Γo] [FinEnum Γo] [DecidableEq Γo]
+[Fintype Q]
+(gen : Generator Γw Γo Q) :
   GeneratorConfig Γw Γo Q →
   GeneratorConfig Γw Γo Q →
   ℕ → Prop
@@ -117,7 +132,10 @@ inductive Steps {Γw Γo Q} [Fintype Γw] [Fintype Γo] [Fintype Q]
     Steps gen cfg' cfg'' n →
     Steps gen cfg cfg'' (n + 1)
 
-lemma Steps.trans {Γw Γo Q} [Fintype Γw] [Fintype Γo] [Fintype Q]
+lemma Steps.trans {Γw Γo Q}
+[Fintype Γw]
+[Inhabited Γo] [Fintype Γo] [FinEnum Γo] [DecidableEq Γo]
+[Fintype Q]
   {gen : Generator Γw Γo Q} {cfg1 cfg2 cfg3 : GeneratorConfig Γw Γo Q} {n m : ℕ} :
   Steps gen cfg1 cfg2 n → Steps gen cfg2 cfg3 m → Steps gen cfg1 cfg3 (n + m) := by
   intro h1 h2
@@ -131,13 +149,19 @@ lemma Steps.trans {Γw Γo Q} [Fintype Γw] [Fintype Γo] [Fintype Q]
     apply Steps.step cfg cfg' cfg3 (n + m) h_step
     exact ih h2
 
-def StepsTo {Γw Γo Q} [Fintype Γw] [Fintype Γo] [Fintype Q]
+def StepsTo {Γw Γo Q}
+[Fintype Γw]
+[Inhabited Γo] [Fintype Γo] [FinEnum Γo] [DecidableEq Γo]
+[Fintype Q]
 (gen : Generator Γw Γo Q)
 (cfg : GeneratorConfig Γw Γo Q)
 (cfg' : GeneratorConfig Γw Γo Q) : Prop :=
   ∃ n, Steps gen cfg cfg' n
 
-lemma StepsTo.refl {Γw Γo Q} [Fintype Γw] [Fintype Γo] [Fintype Q]
+lemma StepsTo.refl {Γw Γo Q}
+[Fintype Γw]
+[Inhabited Γo] [Fintype Γo] [FinEnum Γo] [DecidableEq Γo]
+[Fintype Q]
   (gen : Generator Γw Γo Q)
   {cfg : GeneratorConfig Γw Γo Q} :
   StepsTo gen cfg cfg :=
@@ -146,7 +170,10 @@ by
   refine ⟨0, ?_⟩
   exact Steps.refl cfg
 
-lemma StepsTo.trans {Γw Γo Q} [Fintype Γw] [Fintype Γo] [Fintype Q]
+lemma StepsTo.trans {Γw Γo Q}
+[Fintype Γw]
+[Inhabited Γo] [Fintype Γo] [FinEnum Γo] [DecidableEq Γo]
+[Fintype Q]
   (gen : Generator Γw Γo Q)
   {cfg1 cfg2 cfg3 : GeneratorConfig Γw Γo Q} :
   StepsTo gen cfg1 cfg2 → StepsTo gen cfg2 cfg3 → StepsTo gen cfg1 cfg3 :=
@@ -154,15 +181,20 @@ by
   rintro ⟨n, h1⟩ ⟨m, h2⟩
   exact ⟨n + m, Steps.trans h1 h2⟩
 
-def HaltsFrom {Γw Γo Q} [Fintype Γw] [Fintype Γo] [Fintype Q]
+def HaltsFrom {Γw Γo Q}
+[Fintype Γw]
+[Inhabited Γo] [Fintype Γo] [FinEnum Γo] [DecidableEq Γo]
+[Fintype Q]
 (gen : Generator Γw Γo Q)
 (cfg : GeneratorConfig Γw Γo Q) : Prop :=
   ∃ cfg' n,
     Steps gen cfg cfg' n ∧
     haltingConfig gen cfg'
 
--- Helper lemma: if we step to a halting config, then we compute its output
-lemma StepsTo.computes {Γw Γo Q : Type*} [Fintype Γw] [Fintype Γo] [Fintype Q]
+lemma StepsTo.computes {Γw Γo Q : Type u}
+[Fintype Γw]
+[Inhabited Γo] [Fintype Γo] [FinEnum Γo] [DecidableEq Γo]
+[Fintype Q]
   {gen : Generator Γw Γo Q} {cfg haltCfg : GeneratorConfig Γw Γo Q} :
   StepsTo gen cfg haltCfg → step gen haltCfg = none →
   Computes gen cfg haltCfg.output := by
@@ -174,39 +206,69 @@ lemma StepsTo.computes {Γw Γo Q : Type*} [Fintype Γw] [Fintype Γo] [Fintype 
     apply Computes.step cfg cfg' cfg''.output h_step
     exact ih h_halt
 
-def generatedLanguage {Γw Γo Q : Type*} [Fintype Γw] [Fintype Γo] [Fintype Q]
-(gen : Generator Γw Γo Q) : Set (List Γo) :=
-  { out | ∃ input, Computes gen (initConfig gen input) out }
+lemma step_preserves_no_default {Γw Γo Q : Type u}
+[Fintype Γw]
+[Inhabited Γo] [Fintype Γo] [FinEnum Γo] [DecidableEq Γo]
+[Fintype Q]
+  (gen : Generator Γw Γo Q) (cfg cfg' : GeneratorConfig Γw Γo Q) :
+  step gen cfg = some cfg' →
+  default ∉ cfg.output →
+  default ∉ cfg'.output := by sorry
 
-def generableLanguages {Γ : Type*} [Fintype Γ] : Set (Set (List Γ)) :=
-{ L | ∃ (Γw Q : Type*) (_ : Fintype Γw) (_ : Fintype Q)
-  (gen : Generator Γw Γ Q), generatedLanguage gen = L }
+lemma Computes_no_default {Γw Γo Q : Type u}
+[Fintype Γw]
+[Inhabited Γo] [Fintype Γo] [FinEnum Γo] [DecidableEq Γo]
+[Fintype Q]
+  (gen : Generator Γw Γo Q) (cfg : GeneratorConfig Γw Γo Q) (out : List Γo) :
+  Computes gen cfg out →
+  default ∉ cfg.output →
+  default ∉ out := by sorry
 
-structure Encoding (Γ : Type*) where
+def Language (Γ : Type u)
+[Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
+ : Type u :=
+  { L : Set (List Γ) // ∀ input ∈ L, default ∉ input }
+
+def generated_language {Γw Γo Q : Type u}
+[Fintype Γw]
+[Inhabited Γo] [Fintype Γo] [FinEnum Γo] [DecidableEq Γo]
+[Fintype Q]
+(gen : Generator Γw Γo Q) : Language Γo :=
+  ⟨{ out | ∃ input, Computes gen (initConfig gen input) out },
+   fun out ⟨input, h_comp⟩ =>
+     Computes_no_default gen (initConfig gen input) out h_comp (by simp [initConfig])⟩
+
+def generable_languages {Γ : Type u}
+[Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ] : Set (Language Γ) :=
+{ L | ∃ (Γw Q : Type u) (_ : Fintype Γw) (_ : Fintype Q)
+  (gen : Generator Γw Γ Q), generated_language gen = L }
+
+namespace GenerationByTM0Simulation
+
+structure Encoding (Γ : Type u) where
   W : ℕ
   W_pos : W > 0
   enum : Fin (2^W) → Option Γ
   complete : ∀ g : Γ, ∃ i, enum i = some g
 
-structure LoadState (Γ : Type*) (enc : Encoding Γ) where
+structure LoadState (Γ : Type u) (enc : Encoding Γ) where
   bitsRead : Fin (enc.W + 1)      -- 0 .. W
   acc      : Fin (2 ^ enc.W)      -- fixed width accumulator
   accBound : acc.val ≤ 2 ^ bitsRead.val - 1 -- invariant
 deriving Fintype
 
-inductive GenState (Λ Γ : Type*) [Fintype Λ] [Fintype Γ] [Inhabited Γ]
+inductive GenState (Λ Γ : Type u)
+[Fintype Λ]
+[Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
   (enc : Encoding Γ) where
   | load (ls : LoadState Γ enc)
   | rewind
   | sim  (q  : Λ)
 deriving Fintype
 
-def TM_generator {Γ Λ : Type*}
-  [Inhabited Λ]
-  [Fintype Λ]
-  [Inhabited Γ]
-  [Fintype Γ]
-  [DecidableEq Γ]
+def TM_generator {Γ Λ : Type u}
+[Inhabited Λ] [Fintype Λ]
+[Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
   {enc : Encoding Γ}
   (M : Turing.TM0.Machine (Γ := Γ) (Λ := Λ))
   : Generator (Γw := Γ) (Γo := Γ) (Q := GenState Λ Γ enc) :=
@@ -300,13 +362,12 @@ def TM_generator {Γ Λ : Type*}
           | Turing.TM0.Stmt.move Turing.Dir.left =>
             some (GenState.sim q', w, none, InputTapeDirection.N, WorkTapeDirection.L)
           | Turing.TM0.Stmt.move Turing.Dir.right =>
-            some (GenState.sim q', w, none, InputTapeDirection.N, WorkTapeDirection.R)
+            some (GenState.sim q', w, none, InputTapeDirection.N, WorkTapeDirection.R),
+    no_default_output := sorry
   }
 
-namespace RecognisableEqualsGenerable
-
 /-- Standard encoding using FinEnum, which provides a computable enumeration. -/
-def standardEncoding (Γ : Type*) [Inhabited Γ] [FinEnum Γ] [DecidableEq Γ] : Encoding Γ where
+def standardEncoding (Γ : Type u) [Inhabited Γ] [FinEnum Γ] [DecidableEq Γ] : Encoding Γ where
   W := Nat.size (FinEnum.card Γ)
   W_pos := by
     -- Γ is inhabited, so card ≥ 1
@@ -331,7 +392,7 @@ def standardEncoding (Γ : Type*) [Inhabited Γ] [FinEnum Γ] [DecidableEq Γ] :
     ⟩
     simp [idx]
 
-abbrev WIDTH (Γ : Type*) [Inhabited Γ] [FinEnum Γ] [DecidableEq Γ] :=
+abbrev WIDTH (Γ : Type u) [Inhabited Γ] [FinEnum Γ] [DecidableEq Γ] :=
   (standardEncoding Γ).W
 
 -- Helper function to get the i-th bit of a natural number in MSB-first order
@@ -343,18 +404,18 @@ def getNthBitMSB (n : ℕ) (width : ℕ) (i : ℕ) : Bool :=
     false
 
 -- Encode a symbol as its index in the finite enumeration
-def symbolToNat {Γ : Type*} [FinEnum Γ] (g : Γ) : ℕ :=
+def symbolToNat {Γ : Type u} [FinEnum Γ] (g : Γ) : ℕ :=
   (FinEnum.equiv g).val
 
 -- Get the k-th bit of the encoding of symbol g (MSB-first)
-def getEncodingBit {Γ : Type*} [FinEnum Γ] (enc : Encoding Γ) (g : Γ) (k : ℕ) : Bool :=
+def getEncodingBit {Γ : Type u} [FinEnum Γ] (enc : Encoding Γ) (g : Γ) (k : ℕ) : Bool :=
   getNthBitMSB (symbolToNat g) enc.W k
 
 -- The special "end of input" encoding
-def getEOFBit {Γ : Type*} [Fintype Γ] (enc : Encoding Γ) (k : ℕ) : Bool :=
+def getEOFBit {Γ : Type u} [Fintype Γ] (enc : Encoding Γ) (k : ℕ) : Bool :=
   getNthBitMSB (Fintype.card Γ) enc.W k
 
-def bitstreamFromInput {Γ : Type*} [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
+def bitstreamFromInput {Γ : Type u} [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
  (input : List Γ) : ℕ → Bool :=
   let enc := standardEncoding Γ
   fun i : ℕ => if h : i < input.length * enc.W then
@@ -604,7 +665,7 @@ lemma sum_reindex_msb_lsb {W : ℕ} (f : ℕ → ℕ) :
         have hj' : j ≤ W' := Nat.lt_succ_iff.mp hj
         omega
 
-lemma readBlockOfBits_decodes_to_EOF {Γ : Type*}
+lemma readBlockOfBits_decodes_to_EOF {Γ : Type u}
   [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
   (input : List Γ) :
   readBlockOfBitsNat
@@ -741,7 +802,7 @@ lemma readBlockOfBits_decodes_to_EOF {Γ : Type*}
     exact Nat.lt_size_self (FinEnum.card Γ)
   exact sum_testBit_eq h_bound
 
-lemma bitstreamFromInput_in_range {Γ : Type*}
+lemma bitstreamFromInput_in_range {Γ : Type u}
   [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
   (input : List Γ) (i : ℕ) (hi : i < input.length * (WIDTH Γ)) :
   bitstreamFromInput input i =
@@ -751,7 +812,7 @@ lemma bitstreamFromInput_in_range {Γ : Type*}
   unfold bitstreamFromInput WIDTH
   simp [hi]
 
-lemma readBlockOfBits_extracts_symbol {Γ : Type*}
+lemma readBlockOfBits_extracts_symbol {Γ : Type u}
   [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
   (input : List Γ) {k : ℕ} (hk : k < input.length) :
   (Finset.range (WIDTH Γ)).sum (fun i =>
@@ -828,7 +889,7 @@ lemma readBlockOfBits_extracts_symbol {Γ : Type*}
          _ = 2^W := rfl
   exact sum_testBit_eq h_bound
 
-lemma readBlockOfBits_decodes_to_input {Γ : Type*}
+lemma readBlockOfBits_decodes_to_input {Γ : Type u}
   [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
   (input : List Γ) {k : ℕ} (hk : k < input.length) :
   (standardEncoding Γ).enum (
@@ -863,7 +924,7 @@ lemma readBlockOfBits_decodes_to_input {Γ : Type*}
     unfold symbolToNat
     exact Equiv.symm_apply_apply (FinEnum.equiv) g
 
-lemma EOF_enum_is_none {Γ : Type*}
+lemma EOF_enum_is_none {Γ : Type u}
   [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
   (input : List Γ) :
   (standardEncoding Γ).enum
@@ -887,7 +948,7 @@ lemma EOF_enum_is_none {Γ : Type*}
   have h_card : FinEnum.card Γ = Fintype.card Γ := FinEnum.card_eq_fintypeCard
   omega
 
-def DecodeBitInv {Γ Λ : Type*}
+def DecodeBitInv {Γ Λ : Type u}
   [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
   (input : List Γ)
   (cfg : GeneratorConfig Γ Γ (GenState Λ Γ (standardEncoding Γ)))
@@ -908,7 +969,7 @@ cfg.state = GenState.load {
 ∧ cfg.input = bitstreamFromInput input
 ∧ cfg.output = input.take k
 
-def DecodeSymbolInv {Γ Λ : Type*}
+def DecodeSymbolInv {Γ Λ : Type u}
   [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
   (input : List Γ) (cfg : GeneratorConfig Γ Γ (GenState Λ Γ (standardEncoding Γ)))
   {k : ℕ} (hk : k ≤ input.length)
@@ -924,7 +985,7 @@ def DecodeSymbolInv {Γ Λ : Type*}
   ∧ cfg.input = bitstreamFromInput input
   ∧ cfg.output = input.take k
 
-lemma decodeBitWithinSymbol {Γ Λ : Type*}
+lemma decodeBitWithinSymbol {Γ Λ : Type u}
   [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
   (M : Turing.TM0.Machine (Γ := Γ) (Λ := Λ))
   (input : List Γ)
@@ -1025,7 +1086,7 @@ lemma decodeBitWithinSymbol {Γ Λ : Type*}
   · exact h_input
   · exact h_output
 
-lemma writeDecodedSymbol {Γ Λ : Type*}
+lemma writeDecodedSymbol {Γ Λ : Type u}
   [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
   (M : Turing.TM0.Machine (Γ := Γ) (Λ := Λ))
   (input : List Γ)
@@ -1117,7 +1178,7 @@ lemma writeDecodedSymbol {Γ Λ : Type*}
   · simp only [h_output]
     simp
 
-lemma decodeOneSymbol {Γ Λ : Type*}
+lemma decodeOneSymbol {Γ Λ : Type u}
   [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ]
   [FinEnum Γ] [DecidableEq Γ]
   (M : Turing.TM0.Machine (Γ := Γ) (Λ := Λ))
@@ -1236,7 +1297,7 @@ lemma decodeOneSymbol {Γ Λ : Type*}
       Steps.step cfgW cfg' cfg' 0 h_step_write
         (Steps.refl _)⟩
 
-lemma detectEOF {Γ Λ : Type*}
+lemma detectEOF {Γ Λ : Type u}
   [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
   (M : Turing.TM0.Machine (Γ := Γ) (Λ := Λ))
   (input : List Γ)
@@ -1311,7 +1372,7 @@ lemma detectEOF {Γ Λ : Type*}
   · -- cfg'.output = cfg.output
     rfl
 
-lemma decodeEOFMarker {Γ Λ : Type*}
+lemma decodeEOFMarker {Γ Λ : Type u}
   [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
   (M : Turing.TM0.Machine (Γ := Γ) (Λ := Λ))
   (input : List Γ)
@@ -1440,7 +1501,7 @@ StepsTo (TM_generator (enc := standardEncoding Γ) M) cfg cfg'
   · -- Prove output: cfg'.output = input
     rw [h_output', h_outputW']
 
-lemma weGetReadyToRewind {Γ Λ : Type*}
+lemma weGetReadyToRewind {Γ Λ : Type u}
   [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
   (M : Turing.TM0.Machine (Γ := Γ) (Λ := Λ))
   (input : List Γ)
@@ -1520,7 +1581,7 @@ lemma weGetReadyToRewind {Γ Λ : Type*}
         h_output_cfg_final,
         h_initial_stepsto_final⟩
 
-lemma rewindWithNonNegativeIndexOneStep {Γ Λ : Type*}
+lemma rewindWithNonNegativeIndexOneStep {Γ Λ : Type u}
   [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
   (M : Turing.TM0.Machine (Γ := Γ) (Λ := Λ))
   (input : List Γ)
@@ -1564,7 +1625,7 @@ lemma rewindWithNonNegativeIndexOneStep {Γ Λ : Type*}
   · -- Prove cfg.workIndex + -1 = cfg.workIndex - 1
     ring
 
-lemma rewindWithNonNegativeIndexManySteps {Γ Λ : Type*}
+lemma rewindWithNonNegativeIndexManySteps {Γ Λ : Type u}
   [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
   (M : Turing.TM0.Machine (Γ := Γ) (Λ := Λ))
   (input : List Γ)
@@ -1657,7 +1718,7 @@ lemma rewindWithNonNegativeIndexManySteps {Γ Λ : Type*}
     exact Steps.step cfg cfg_next cfg' k h_step h_steps
 termination_by cfg.workIndex.toNat
 
-lemma rewindWithNegativeIndex {Γ Λ : Type*}
+lemma rewindWithNegativeIndex {Γ Λ : Type u}
   [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
   (M : Turing.TM0.Machine (Γ := Γ) (Λ := Λ))
   (cfg : GeneratorConfig Γ Γ (GenState Λ Γ (standardEncoding Γ)))
@@ -1681,7 +1742,7 @@ lemma rewindWithNegativeIndex {Γ Λ : Type*}
   · rw [hx, h_blank]
   · rfl
 
-lemma rewindingLeadsToSimulationReadiness {Γ Λ : Type*}
+lemma rewindingLeadsToSimulationReadiness {Γ Λ : Type u}
   [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
   (M : Turing.TM0.Machine (Γ := Γ) (Λ := Λ))
   (input : List Γ)
@@ -1782,7 +1843,7 @@ lemma rewindingLeadsToSimulationReadiness {Γ Λ : Type*}
         exact Steps.refl _
       exact Steps.trans steps1 step_final
 
-lemma weGetReadyToSimulate {Γ Λ : Type*}
+lemma weGetReadyToSimulate {Γ Λ : Type u}
   [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
   (M : Turing.TM0.Machine (Γ := Γ) (Λ := Λ))
   (input : List Γ)
@@ -1829,7 +1890,7 @@ lemma weGetReadyToSimulate {Γ Λ : Type*}
     use n1 + n2
     exact Steps.trans steps1 steps2
 
-structure configurationsMatch {Γ Λ : Type*}
+structure configurationsMatch {Γ Λ : Type u}
   [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
   (genCfg : GeneratorConfig Γ Γ (GenState Λ Γ (standardEncoding Γ)))
   (tm0Cfg : Turing.TM0.Cfg Γ Λ) : Prop where
@@ -1840,7 +1901,7 @@ structure configurationsMatch {Γ Λ : Type*}
   tape_match_left : ∀ (d : ℕ), genCfg.work (genCfg.workIndex - 1 - d) =
     Turing.ListBlank.nth tm0Cfg.Tape.left d
 
-def maybeConfigurationsMatch {Γ Λ : Type*}
+def maybeConfigurationsMatch {Γ Λ : Type u}
   [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
   (maybeGenCfg : Option (GeneratorConfig Γ Γ (GenState Λ Γ (standardEncoding Γ))))
   (maybeTm0Cfg : Option (Turing.TM0.Cfg Γ Λ)) : Prop :=
@@ -1849,7 +1910,7 @@ match maybeGenCfg, maybeTm0Cfg with
 | some genCfg, some tm0Cfg => configurationsMatch genCfg tm0Cfg
 | _, _ => False
 
-lemma matchingConfigurationsStepSimultaneously {Γ Λ : Type*}
+lemma matchingConfigurationsStepSimultaneously {Γ Λ : Type u}
   [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
   (M : Turing.TM0.Machine Γ Λ)
   (genCfg : GeneratorConfig Γ Γ (GenState Λ Γ (standardEncoding Γ)))
@@ -2028,7 +2089,7 @@ lemma matchingConfigurationsStepSimultaneously {Γ Λ : Type*}
               omega
             rw [this, Nat.pred_eq_sub_one]
 
-lemma simStaysInSimAndPreservesOutput {Γ Λ : Type*}
+lemma simStaysInSimAndPreservesOutput {Γ Λ : Type u}
   [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
   (M : Turing.TM0.Machine (Γ := Γ) (Λ := Λ))
   (cfg cfg' : GeneratorConfig Γ Γ (GenState Λ Γ (standardEncoding Γ)))
@@ -2062,7 +2123,7 @@ lemma simStaysInSimAndPreservesOutput {Γ Λ : Type*}
         · rw [← h_step]
         · rw [← h_step]; exact ⟨q', rfl⟩
 
-lemma simulationWorksOnceWeAreReady {Γ Λ : Type*}
+lemma simulationWorksOnceWeAreReady {Γ Λ : Type u}
   [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
   (M : Turing.TM0.Machine (Γ := Γ) (Λ := Λ))
   (input : List Γ)
@@ -2220,13 +2281,13 @@ lemma simulationWorksOnceWeAreReady {Γ Λ : Type*}
   --
   refine ⟨h_steps, h_haltCfg_halts, h_output_input⟩
 
-theorem recognised_implies_generable {Γ Λ : Type*}
+theorem anything_a_TM0_recognises_can_be_generated_by_a_TM_generator {Γ Λ : Type u}
   [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
   (M : Turing.TM0.Machine (Γ := Γ) (Λ := Λ))
   (input : List Γ)
   (h_nodefault : default ∉ input)
   (h_halts : (Turing.TM0.eval M input).Dom) :
-  input ∈ generatedLanguage (TM_generator (enc := standardEncoding Γ) M) := by
+  input ∈ (generated_language (TM_generator (enc := standardEncoding Γ) M)).val := by
     let enc := standardEncoding Γ
     let gen := (TM_generator (enc := enc) M)
     rcases weGetReadyToSimulate M input h_nodefault
@@ -2267,20 +2328,56 @@ theorem recognised_implies_generable {Γ Λ : Type*}
     -- Show input ∈ generatedLanguage gen
     use bitstreamFromInput input
 
-end RecognisableEqualsGenerable
+end GenerationByTM0Simulation
 
--- theorem TM0_recognisable_eq_RE {Γ : Type*} [Primcodable Γ] [Fintype Γ] [Inhabited Γ] :
---   TM0_recognisableLanguages Γ = reLanguages (Γ := Γ) := by
---   sorry
+theorem anything_a_TM0_recognises_can_be_generated {Γ Λ : Type u}
+  [Inhabited Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
+  (M : Turing.TM0.Machine (Γ := Γ) (Λ := Λ)) :
+  ∃ (Γw Q : Type u) (_ : Fintype Γw) (_ : Fintype Q) (G : Generator Γw Γ Q),
+    ∀ input : List Γ, default ∉ input → (Turing.TM0.eval M input).Dom →
+      input ∈ (generated_language G).val := by
+  sorry
 
--- lemma generableLanguages_subset_reLanguages {Γ : Type*} [Primcodable Γ] [Fintype Γ]
--- : generableLanguages (Γ := Γ) ⊆ reLanguages (Γ := Γ) := by sorry
+def TM0_language {Γ Λ : Type u}
+[Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
+  (M : Turing.TM0.Machine (Γ := Γ) (Λ := Λ)) : Language Γ :=
+  ⟨{ input | default ∉ input ∧ (Turing.TM0.eval M input).Dom },
+   fun _ hInput => hInput.1⟩
 
--- lemma reLanguages_subset_generableLanguages {Γ : Type*} [Primcodable Γ] [Fintype Γ]
--- : reLanguages (Γ := Γ) ⊆ generableLanguages (Γ := Γ) := by sorry
+def TM0_recognisable_languages (Γ : Type u)
+[Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
+: Set (Language Γ) :=
+  { L | ∃ (Λ : Type u) (_ : Inhabited Λ) (_ : Fintype Λ) (M : Turing.TM0.Machine (Γ := Γ) (Λ := Λ)),
+    L = TM0_language M }
 
--- theorem generatebleLanguages_eq_reLanguages {Γ : Type*} [Primcodable Γ] [Fintype Γ]
--- : generableLanguages (Γ := Γ) = reLanguages (Γ := Γ) := by
---   exact
---     Set.Subset.antisymm generableLanguages_subset_reLanguages
---       reLanguages_subset_generableLanguages
+lemma TM0_recognisable_language_has_halting_machine {Γ : Type u}
+[Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
+(L : Language Γ) (hL : L ∈ TM0_recognisable_languages Γ) :
+  ∃ (Λ : Type u) (_ : Inhabited Λ) (_ : Fintype Λ)
+    (M : Turing.TM0.Machine (Γ := Γ) (Λ := Λ)),
+      ∀ input ∈ L.val, (Turing.TM0.eval M input).Dom := by
+  obtain ⟨Λ, instΛ, instΛfin, M, rfl⟩ := hL
+  exact ⟨Λ, instΛ, instΛfin, M, fun input hInput => hInput.2⟩
+
+lemma TM0_recognisable_language_input_halts {Γ : Type u}
+[Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
+(L : Language Γ) (hL : L ∈ TM0_recognisable_languages Γ)
+(input : List Γ) (hInput : input ∈ L.val) :
+  ∃ (Λ : Type u) (_ : Inhabited Λ) (_ : Fintype Λ)
+    (M : Turing.TM0.Machine (Γ := Γ) (Λ := Λ)),
+      (Turing.TM0.eval M input).Dom := by
+  obtain ⟨Λ, instΛ, instΛfin, M, rfl⟩ := hL
+  exact ⟨Λ, instΛ, instΛfin, M, hInput.2⟩
+
+theorem TM0_recognisable_subset_generable {Γ : Type u}
+[Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ] :
+TM0_recognisable_languages Γ ⊆ generable_languages := by
+  intro L hL
+  obtain ⟨Λ, instΛ, instΛfin, M, rfl⟩ := hL
+  -- Use the theorem to get a generator for M
+  obtain ⟨Γw, Q, instΓw, instQ, G, hG⟩ := anything_a_TM0_recognises_can_be_generated M
+  -- Show that generated_language G = TM0_language M
+  use Γw, Q, instΓw, instQ, G
+  sorry
+
+end RandomisedGeneration
