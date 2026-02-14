@@ -2362,27 +2362,45 @@ lemma language_TM0_subset_language_TM_generator {Γ Λ : Type u}
     (enc := (GenerationByTM0Simulation.StandardEncoding Γ)))).val := by
   sorry
 
-lemma TM0_recognisable_language_has_halting_machine {Γ : Type u}
-[Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
-(L : Language Γ) (hL : L ∈ TM0_recognisable_languages Γ) :
-  ∃ (Λ : Type u) (_ : Inhabited Λ) (_ : Fintype Λ)
-    (M : Turing.TM0.Machine (Γ := Γ) (Λ := Λ)),
-      ∀ input ∈ L.val, (Turing.TM0.eval M input).Dom := by
-  obtain ⟨Λ, instΛ, instΛfin, M, rfl⟩ := hL
-  exact ⟨Λ, instΛ, instΛfin, M, fun input hInput => hInput.2⟩
+lemma language_TM_generator_subset_language_TM0 {Γ Λ : Type u}
+  [Fintype Λ] [Inhabited Λ]
+  [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
+  (M : Turing.TM0.Machine (Γ := Γ) (Λ := Λ)) :
+  (generated_language (GenerationByTM0Simulation.TM_generator M
+    (Λ := Λ)
+    (Γ := Γ)
+    (enc := (GenerationByTM0Simulation.StandardEncoding Γ)))).val
+  ⊆
+  (TM0_language M (Γ := Γ) (Λ := Λ)).val
+ := by
+  sorry
 
-lemma TM0_recognisable_language_input_halts {Γ : Type u}
-[Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
-(L : Language Γ) (hL : L ∈ TM0_recognisable_languages Γ)
-(input : List Γ) (hInput : input ∈ L.val) :
-  ∃ (Λ : Type u) (_ : Inhabited Λ) (_ : Fintype Λ)
-    (M : Turing.TM0.Machine (Γ := Γ) (Λ := Λ)),
-      (Turing.TM0.eval M input).Dom := by
-  obtain ⟨Λ, instΛ, instΛfin, M, rfl⟩ := hL
-  exact ⟨Λ, instΛ, instΛfin, M, hInput.2⟩
+lemma language_TM0_eq_language_TM_generator {Γ Λ : Type u}
+  [Fintype Λ] [Inhabited Λ]
+  [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
+  (M : Turing.TM0.Machine (Γ := Γ) (Λ := Λ)) :
+  (generated_language (GenerationByTM0Simulation.TM_generator M
+    (Λ := Λ)
+    (Γ := Γ)
+    (enc := (GenerationByTM0Simulation.StandardEncoding Γ)))).val
+  =
+  (TM0_language M (Γ := Γ) (Λ := Λ)).val
+ := by
+  apply Set.Subset.antisymm
+  · exact language_TM_generator_subset_language_TM0 M
+  · exact language_TM0_subset_language_TM_generator M
 
 theorem TM0_recognisable_subset_generable {Γ : Type u}
 [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ] :
-TM0_recognisable_languages Γ ⊆ generable_languages := by sorry
+TM0_recognisable_languages Γ ⊆ generable_languages := by
+  intro L hL
+  rcases hL with ⟨Λ, hΛinh, hΛfin, M, rfl⟩
+  refine ⟨Γ, ?_⟩
+  refine ⟨GenerationByTM0Simulation.GenState Λ Γ (GenerationByTM0Simulation.StandardEncoding Γ), ?_⟩
+  refine ⟨inferInstance, ?_⟩
+  refine ⟨inferInstance, ?_⟩
+  refine ⟨GenerationByTM0Simulation.TM_generator M, ?_⟩
+  apply Subtype.ext
+  exact language_TM0_eq_language_TM_generator M
 
 end RandomisedGeneration
