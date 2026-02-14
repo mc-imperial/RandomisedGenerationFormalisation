@@ -243,6 +243,18 @@ def generable_languages {Γ : Type u}
 { L | ∃ (Γw Q : Type u) (_ : Fintype Γw) (_ : Fintype Q)
   (gen : Generator Γw Γ Q), generated_language gen = L }
 
+def TM0_language {Γ Λ : Type u}
+[Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
+  (M : Turing.TM0.Machine (Γ := Γ) (Λ := Λ)) : Language Γ :=
+  ⟨{ input | default ∉ input ∧ (Turing.TM0.eval M input).Dom },
+   fun _ hInput => hInput.1⟩
+
+def TM0_recognisable_languages (Γ : Type u)
+[Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
+: Set (Language Γ) :=
+  { L | ∃ (Λ : Type u) (_ : Inhabited Λ) (_ : Fintype Λ) (M : Turing.TM0.Machine (Γ := Γ) (Λ := Λ)),
+    L = TM0_language M }
+
 namespace GenerationByTM0Simulation
 
 structure Encoding (Γ : Type u) where
@@ -2281,7 +2293,7 @@ lemma simulationWorksOnceWeAreReady {Γ Λ : Type u}
   --
   refine ⟨h_steps, h_haltCfg_halts, h_output_input⟩
 
-theorem anything_a_TM0_recognises_can_be_generated_by_a_TM_generator {Γ Λ : Type u}
+theorem anything_a_TM0_recognises_can_be_generated_by_its_TM_generator {Γ Λ : Type u}
   [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
   (M : Turing.TM0.Machine (Γ := Γ) (Λ := Λ))
   (input : List Γ)
@@ -2328,6 +2340,14 @@ theorem anything_a_TM0_recognises_can_be_generated_by_a_TM_generator {Γ Λ : Ty
     -- Show input ∈ generatedLanguage gen
     use bitstreamFromInput input
 
+theorem anything_a_TM_generator_generates_is_recognised_by_its_TM0 {Γ Λ : Type u}
+  [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
+  (M : Turing.TM0.Machine (Γ := Γ) (Λ := Λ))
+  (input : List Γ)
+  (h_nodefault : default ∉ input)
+  (h_generated : input ∈ (generated_language (TM_generator (enc := standardEncoding Γ) M)).val) :
+  input ∈ (TM0_language M (Γ := Γ) (Λ := Λ)).val := by sorry
+
 end GenerationByTM0Simulation
 
 theorem anything_a_TM0_recognises_can_be_generated {Γ Λ : Type u}
@@ -2337,18 +2357,6 @@ theorem anything_a_TM0_recognises_can_be_generated {Γ Λ : Type u}
     ∀ input : List Γ, default ∉ input → (Turing.TM0.eval M input).Dom →
       input ∈ (generated_language G).val := by
   sorry
-
-def TM0_language {Γ Λ : Type u}
-[Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
-  (M : Turing.TM0.Machine (Γ := Γ) (Λ := Λ)) : Language Γ :=
-  ⟨{ input | default ∉ input ∧ (Turing.TM0.eval M input).Dom },
-   fun _ hInput => hInput.1⟩
-
-def TM0_recognisable_languages (Γ : Type u)
-[Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
-: Set (Language Γ) :=
-  { L | ∃ (Λ : Type u) (_ : Inhabited Λ) (_ : Fintype Λ) (M : Turing.TM0.Machine (Γ := Γ) (Λ := Λ)),
-    L = TM0_language M }
 
 lemma TM0_recognisable_language_has_halting_machine {Γ : Type u}
 [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
