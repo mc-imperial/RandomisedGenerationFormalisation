@@ -2382,7 +2382,10 @@ theorem anything_a_TM_generator_generates_is_recognised_by_its_TM0 {Γ Λ : Type
   (input : List Γ)
   (h_nodefault : default ∉ input)
   (h_generated : input ∈ (generated_language (TM_generator (enc := StandardEncoding Γ) M)).val) :
-  input ∈ (TM0_language M (Γ := Γ) (Λ := Λ)).val := by sorry
+  input ∈ (TM0_language M (Γ := Γ) (Λ := Λ)).val := by
+  let enc := StandardEncoding Γ
+  let gen := (TM_generator (enc := enc) M)
+  sorry
 
 end GenerationByTM0Simulation
 
@@ -2396,7 +2399,10 @@ lemma language_TM0_subset_language_TM_generator {Γ Λ : Type u}
     (Λ := Λ)
     (Γ := Γ)
     (enc := (GenerationByTM0Simulation.StandardEncoding Γ)))).val := by
-  sorry
+  intro input h_in_TM0_lang
+  obtain ⟨h_nodefault, h_halts⟩ := h_in_TM0_lang
+  exact GenerationByTM0Simulation.anything_a_TM0_recognises_can_be_generated_by_its_TM_generator
+    M input h_nodefault h_halts
 
 lemma language_TM_generator_subset_language_TM0 {Γ Λ : Type u}
   [Fintype Λ] [Inhabited Λ]
@@ -2409,7 +2415,14 @@ lemma language_TM_generator_subset_language_TM0 {Γ Λ : Type u}
   ⊆
   (TM0_language M (Γ := Γ) (Λ := Λ)).val
  := by
-  sorry
+  intro input h_generated
+  have h_nodefault : default ∉ input :=
+    (generated_language (GenerationByTM0Simulation.TM_generator M
+      (Λ := Λ)
+      (Γ := Γ)
+      (enc := (GenerationByTM0Simulation.StandardEncoding Γ)))).property input h_generated
+  exact GenerationByTM0Simulation.anything_a_TM_generator_generates_is_recognised_by_its_TM0
+    M input h_nodefault h_generated
 
 lemma language_TM0_eq_language_TM_generator {Γ Λ : Type u}
   [Fintype Λ] [Inhabited Λ]
