@@ -1858,16 +1858,62 @@ theorem anything_a_TM0_recognises_can_be_generated_by_its_TM_generator {Γ Λ : 
     -- Show input ∈ generatedLanguage gen
     use bitstreamFromInput input
 
+lemma generator_computes_implies_simulation_ready {Γ Λ : Type u}
+  [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
+  (M : Turing.TM0.Machine (Γ := Γ) (Λ := Λ))
+  (output : List Γ)
+  (bitstream : ℕ → Bool)
+  (h_computes : Computes (TM_generator M (enc := StandardEncoding Γ))
+    (initConfig (TM_generator M) bitstream)
+    output) :
+  ∃ cfg,
+    let gen := TM_generator (enc := StandardEncoding Γ) M
+    StepsTo gen (initConfig gen bitstream) cfg
+    ∧ cfg.state = GenState.sim (default : Λ)
+    ∧ cfg.workIndex = 0
+    ∧ (∀ i (h : i < output.length), cfg.work (i : ℤ) = output.get ⟨i, h⟩)
+    ∧ (∀ i : ℕ, i ≥ output.length → cfg.work (i : ℤ) = default)
+    ∧ (∀ i : ℤ, i < 0 → cfg.work i = default)
+    ∧ cfg.output = output
+:= by sorry
+
+lemma simulation_ready_implies_TM0_halts {Γ Λ : Type u}
+  [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
+  (M : Turing.TM0.Machine (Γ := Γ) (Λ := Λ))
+  (output : List Γ)
+  (cfg : GeneratorConfig Γ Γ (GenState Λ Γ (StandardEncoding Γ)))
+  (h_sim_ready :
+    cfg.state = GenState.sim (default : Λ)
+    ∧ cfg.workIndex = 0
+    ∧ (∀ i (h : i < output.length), cfg.work (i : ℤ) = output.get ⟨i, h⟩)
+    ∧ (∀ i : ℕ, i ≥ output.length → cfg.work (i : ℤ) = default)
+    ∧ (∀ i : ℤ, i < 0 → cfg.work i = default)
+    ∧ cfg.output = output)
+  (h_gen_halts : HaltsFrom (TM_generator M) cfg) :
+  (Turing.TM0.eval M output).Dom
+:= by sorry
+
 theorem anything_a_TM_generator_generates_is_recognised_by_its_TM0 {Γ Λ : Type u}
   [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
   (M : Turing.TM0.Machine (Γ := Γ) (Λ := Λ))
   (input : List Γ)
   (h_no_default : default ∉ input)
   (h_generated : input ∈ (generated_language (TM_generator (enc := StandardEncoding Γ) M)).val) :
-  input ∈ (TM0_language M (Γ := Γ) (Λ := Λ)).val := by
+  input ∈ (TM0_language M (Γ := Γ) (Λ := Λ)).val
+:= by
   let enc := StandardEncoding Γ
   let gen := (TM_generator (enc := enc) M)
-  sorry
+  -- From h_generated, get the bitstream
+  obtain ⟨bs, h_computes⟩ := h_generated
+  -- Get the simulation-ready configuration
+  obtain ⟨cfg, h_steps, h_ready⟩ :=
+    generator_computes_implies_simulation_ready M input bs h_computes
+  -- Extract halting from Computes
+  have h_halts : HaltsFrom (TM_generator M) cfg := sorry
+  -- Apply reverse simulation
+  have h_tm0_halts := simulation_ready_implies_TM0_halts M input cfg h_ready h_halts
+  -- Conclude
+  exact ⟨h_no_default, h_tm0_halts⟩
 
 end GenerationByTM0Simulation
 
