@@ -340,16 +340,26 @@ def TM_generator {Γ Λ : Type u}
               WorkTapeDirection.L
             )
           | some (g : Γ) =>
-            -- A symbol has been fully decoded. Write it to the work tape
-            -- and produce it as an output. Reset the load state to start
-            -- on the next symbol.
-            some (
-              GenState.load { bitsRead := 0, acc := 0, accBound := by simp},
-              g,
-              g,
-              InputTapeDirection.N,
-              WorkTapeDirection.R
-            )
+            if g = default then
+              -- Default symbol decoded; switch to rewind mode
+              some (
+                GenState.rewind,
+                w,
+                none,
+                InputTapeDirection.N,
+                WorkTapeDirection.L
+              )
+            else
+              -- A non-default symbol has been fully decoded. Write it to the work tape
+              -- and produce it as an output. Reset the load state to start
+              -- on the next symbol.
+              some (
+                GenState.load { bitsRead := 0, acc := 0, accBound := by simp},
+                g,
+                g,
+                InputTapeDirection.N,
+                WorkTapeDirection.R
+              )
         else
           let newBits : Fin (enc.W + 1) := ⟨ls.bitsRead.val + 1, by omega⟩
           --
@@ -411,8 +421,61 @@ def TM_generator {Γ Λ : Type u}
             some (GenState.sim q', w, none, InputTapeDirection.N, WorkTapeDirection.L)
           | Turing.TM0.Stmt.move Turing.Dir.right =>
             some (GenState.sim q', w, none, InputTapeDirection.N, WorkTapeDirection.R),
-    no_default_output := sorry
-  }
+    no_default_output := by
+      intros q b w q' w' o itd wtd h_δ γ h_o
+      cases q with
+      | load ls =>
+        simp only at h_δ
+        split at h_δ
+        · -- bitsRead.val = enc.W
+          split at h_δ
+          · -- enc.enum ls.acc = none
+            simp only [Option.some.injEq] at h_δ
+            obtain ⟨_, _, h_o_eq, _, _⟩ := h_δ
+            simp at h_o
+          · -- enc.enum ls.acc = some g
+            rename_i g
+            split at h_δ
+            · -- g = default
+              simp only [Option.some.injEq] at h_δ
+              obtain ⟨_, _, h_o_eq, _, _⟩ := h_δ
+              simp at h_o
+            · -- g ≠ default
+              rename_i h_ne
+              simp only [Option.some.injEq] at h_δ
+              obtain ⟨_, _, h_o_eq, _, _⟩ := h_δ
+              simp only [Option.some.injEq] at h_o
+              rw [← h_o]
+              exact h_ne
+        · -- bitsRead.val ≠ enc.W
+          simp only [Option.some.injEq] at h_δ
+          obtain ⟨_, _, h_o_eq, _, _⟩ := h_δ
+          simp at h_o
+      | rewind =>
+        simp only at h_δ
+        split at h_δ <;> simp_all
+      | sim q_tm =>
+        simp only at h_δ
+        split at h_δ
+        · contradiction
+        · rename_i q'_tm stmt heq_M
+          cases stmt
+          · -- move case
+            rename_i dir
+            cases dir
+            · -- left
+              simp only [Option.some.injEq] at h_δ
+              obtain ⟨_, _, h_o_eq, _, _⟩ := h_δ
+              simp at h_o
+            · -- right
+              simp only [Option.some.injEq] at h_δ
+              obtain ⟨_, _, h_o_eq, _, _⟩ := h_δ
+              simp at h_o
+          · -- write case
+            simp only [Option.some.injEq] at h_δ
+            obtain ⟨_, _, h_o_eq, _, _⟩ := h_δ
+            simp at h_o
+}
 
 /-- Standard encoding using FinEnum, which provides a computable enumeration. -/
 def StandardEncoding (Γ : Type u) [Inhabited Γ] [FinEnum Γ] [DecidableEq Γ] : Encoding Γ where
@@ -1134,10 +1197,21 @@ lemma decodeBitWithinSymbol {Γ Λ : Type u}
   · exact h_input
   · exact h_output
 
+lemma input_symbols_not_default {Γ : Type u}
+  [Inhabited Γ]
+  (input : List Γ) (h_no_default : default ∉ input)
+  {k : ℕ} (hk : k < input.length) :
+  input.get ⟨k, hk⟩ ≠ default := by
+  intro h_eq
+  apply h_no_default
+  rw [← h_eq]
+  exact List.get_mem input ⟨k, hk⟩
+
 lemma writeDecodedSymbol {Γ Λ : Type u}
   [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
   (M : Turing.TM0.Machine (Γ := Γ) (Λ := Λ))
   (input : List Γ)
+  (h_no_default : default ∉ input)
   {k : ℕ} (hk : k < input.length)
   (cfg : GeneratorConfig Γ Γ (GenState Λ Γ (StandardEncoding Γ)))
   (acc : Fin (2 ^ (StandardEncoding Γ).W))
@@ -1161,6 +1235,8 @@ lemma writeDecodedSymbol {Γ Λ : Type u}
   rw [h_state, h_inputIndex, h_workIndex]
   -- We're in the case where bitsRead = W, so h_eq holds
   have h_eq : (StandardEncoding Γ).W = (StandardEncoding Γ).W := rfl
+  have h_not_default : input.get ⟨k, hk⟩ ≠ default :=
+    input_symbols_not_default input h_no_default hk
   simp only [↓reduceDIte, Int.reduceNeg]
   -- Now we construct the next configuration
   use {
@@ -1176,7 +1252,11 @@ lemma writeDecodedSymbol {Γ Λ : Type u}
     output := cfg.output ++ [input.get ⟨k, hk⟩]
   }
   constructor
-  · simp [h_enum, h_inputIndex, h_workIndex]
+  · simp only [List.get_eq_getElem, h_enum, List.get_eq_getElem, Int.reduceNeg,
+      h_inputIndex, h_workIndex]
+    have h_get_eq : input[k] = input.get ⟨k, hk⟩ := by rfl
+    rw [h_get_eq]
+    simp only [h_not_default, ↓reduceIte, add_zero]
   -- Prove DecodeSymbolInv
   unfold DecodeSymbolInv
   simp only [h_inputIndex, h_workIndex]
@@ -1231,6 +1311,7 @@ lemma decodeOneSymbol {Γ Λ : Type u}
   [FinEnum Γ] [DecidableEq Γ]
   (M : Turing.TM0.Machine (Γ := Γ) (Λ := Λ))
   (input : List Γ)
+  (h_no_default : default ∉ input)
   (cfg : GeneratorConfig Γ Γ (GenState Λ Γ (StandardEncoding Γ)))
   {k : ℕ} (hk : k < input.length)
 :
@@ -1324,7 +1405,7 @@ lemma decodeOneSymbol {Γ Λ : Type u}
     rw [h_inputIndexW]
     ring
   obtain ⟨cfg', h_step_write, h_final⟩ :=
-    writeDecodedSymbol M input hk
+    writeDecodedSymbol M input h_no_default hk
       cfgW
       _
       h_stateW
@@ -1553,6 +1634,7 @@ lemma weGetReadyToRewind {Γ Λ : Type u}
   [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
   (M : Turing.TM0.Machine (Γ := Γ) (Λ := Λ))
   (input : List Γ)
+  (h_no_default : default ∉ input)
 : ∃ cfg : GeneratorConfig Γ Γ (GenState Λ Γ (StandardEncoding Γ)),
     let gen := TM_generator (enc := StandardEncoding Γ) M
     cfg.state = GenState.rewind
@@ -1594,7 +1676,7 @@ lemma weGetReadyToRewind {Γ Λ : Type u}
         ih (Nat.le_of_lt h_lt)
       rcases h_prev with ⟨cfg_i, hInv_i, h_steps_to_i⟩
       have h_next :=
-        decodeOneSymbol M input cfg_i h_lt hInv_i
+        decodeOneSymbol M input h_no_default cfg_i h_lt hInv_i
       obtain ⟨cfg', h_steps_cfg_i_to_cfg', h_inv_cfg'⟩ := h_next
       have h_steps_to_init_cfg' :
           StepsTo gen initialCfg cfg' := by
@@ -1812,7 +1894,7 @@ lemma rewindingLeadsToSimulationReadiness {Γ Λ : Type u}
     ∧ cfg'.output = input
     ∧ StepsTo gen cfg cfg' := by
   let gen := TM_generator (enc := StandardEncoding Γ) M
-  obtain ⟨h_state, h_idx, h_work_input, h_work_blank_high, h_work_blank_low, h_output, h_nodefault⟩
+  obtain ⟨h_state, h_idx, h_work_input, h_work_blank_high, h_work_blank_low, h_output, h_no_default⟩
     := h
   -- Bind the length to avoid generalization issues
   by_cases h_empty : input.length = 0
@@ -1858,7 +1940,7 @@ lemma rewindingLeadsToSimulationReadiness {Γ Λ : Type u}
       ∧ cfg.output = input
       ∧ default ∉ input :=
         ⟨h_state, h_idx_bound, h_idx_nonneg, h_work_input,
-         h_work_blank_high, h_work_blank_low, h_output, h_nodefault⟩
+         h_work_blank_high, h_work_blank_low, h_output, h_no_default⟩
     obtain ⟨rewindCfg, h_rewind_state, h_rewind_idx, h_rewind_work_input,
             h_rewind_work_blank_high, h_rewind_work_blank_low, h_rewind_output,
             h_steps_to_rewind⟩ :=
@@ -1895,7 +1977,7 @@ lemma weGetReadyToSimulate {Γ Λ : Type u}
   [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
   (M : Turing.TM0.Machine (Γ := Γ) (Λ := Λ))
   (input : List Γ)
-  (h_nodefault : default ∉ input)
+  (h_no_default : default ∉ input)
 : ∃ cfg : GeneratorConfig Γ Γ (GenState Λ Γ (StandardEncoding Γ)),
     let gen := TM_generator (enc := StandardEncoding Γ) M
     cfg.state = GenState.sim (default : Λ)
@@ -1912,7 +1994,7 @@ lemma weGetReadyToSimulate {Γ Λ : Type u}
     -- First, get to the rewind state
     obtain ⟨rewindCfg, h_rewind_state, h_rewind_idx, h_rewind_work_input,
             h_rewind_work_blank_high, h_rewind_work_blank_low, h_rewind_output, h_init_to_rewind⟩ :=
-      weGetReadyToRewind M input
+      weGetReadyToRewind M input h_no_default
     -- Build the hypothesis for rewindingLeadsToSimulationReadiness
     have h_rewind_conditions : rewindCfg.state = GenState.rewind
       ∧ rewindCfg.workIndex = input.length - 1
@@ -1923,7 +2005,7 @@ lemma weGetReadyToSimulate {Γ Λ : Type u}
       ∧ default ∉ input
        := by
         exact ⟨h_rewind_state, h_rewind_idx, h_rewind_work_input,
-               h_rewind_work_blank_high, h_rewind_work_blank_low, h_rewind_output, h_nodefault⟩
+               h_rewind_work_blank_high, h_rewind_work_blank_low, h_rewind_output, h_no_default⟩
     -- Apply rewindingLeadsToSimulationReadiness with rewindCfg
     obtain ⟨simCfg, h_sim_state, h_sim_idx, h_sim_work_input, h_sim_work_blank_high,
             h_sim_work_blank_low, h_sim_output, h_rewind_to_sim⟩ :=
@@ -2193,7 +2275,7 @@ lemma simulationWorksOnceWeAreReady {Γ Λ : Type u}
     ∧ haltCfg.output = input := by
   --
   obtain ⟨h_state, h_idx, h_work_input, h_work_blank_high, h_work_blank_low,
-    h_output, h_nodefault⟩ := h_cfg
+    h_output, h_no_default⟩ := h_cfg
   --
   -- Step 1: Show `cfg` matches the TM0 initial configuration
   have h_match_init : configurationsMatch cfg (Turing.TM0.init input) := by
@@ -2333,12 +2415,12 @@ theorem anything_a_TM0_recognises_can_be_generated_by_its_TM_generator {Γ Λ : 
   [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
   (M : Turing.TM0.Machine (Γ := Γ) (Λ := Λ))
   (input : List Γ)
-  (h_nodefault : default ∉ input)
+  (h_no_default : default ∉ input)
   (h_halts : (Turing.TM0.eval M input).Dom) :
   input ∈ (generated_language (TM_generator (enc := StandardEncoding Γ) M)).val := by
     let enc := StandardEncoding Γ
     let gen := (TM_generator (enc := enc) M)
-    rcases weGetReadyToSimulate M input h_nodefault
+    rcases weGetReadyToSimulate M input h_no_default
       with ⟨
         readyCfg,
         h_readyCfg_initial_state,
@@ -2359,7 +2441,7 @@ theorem anything_a_TM0_recognises_can_be_generated_by_its_TM_generator {Γ Λ : 
       ∧ default ∉ input := by
         exact ⟨h_readyCfg_initial_state, h_readyCfg_work_index_zero,
               h_readyCfg_work_tape_contains_input, h_readyCfg_work_tape_blank_above,
-              h_readyCfg_work_tape_blank_below, h_readyCfg_output_is_input, h_nodefault⟩
+              h_readyCfg_work_tape_blank_below, h_readyCfg_output_is_input, h_no_default⟩
     rcases simulationWorksOnceWeAreReady M input h_halts readyCfg h_ready
       with ⟨haltCfg, h_steps_to_halt, h_is_halting, h_halt_output⟩
     --
@@ -2380,7 +2462,7 @@ theorem anything_a_TM_generator_generates_is_recognised_by_its_TM0 {Γ Λ : Type
   [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
   (M : Turing.TM0.Machine (Γ := Γ) (Λ := Λ))
   (input : List Γ)
-  (h_nodefault : default ∉ input)
+  (h_no_default : default ∉ input)
   (h_generated : input ∈ (generated_language (TM_generator (enc := StandardEncoding Γ) M)).val) :
   input ∈ (TM0_language M (Γ := Γ) (Λ := Λ)).val := by
   let enc := StandardEncoding Γ
@@ -2400,9 +2482,9 @@ lemma language_TM0_subset_language_TM_generator {Γ Λ : Type u}
     (Γ := Γ)
     (enc := (GenerationByTM0Simulation.StandardEncoding Γ)))).val := by
   intro input h_in_TM0_lang
-  obtain ⟨h_nodefault, h_halts⟩ := h_in_TM0_lang
+  obtain ⟨h_no_default, h_halts⟩ := h_in_TM0_lang
   exact GenerationByTM0Simulation.anything_a_TM0_recognises_can_be_generated_by_its_TM_generator
-    M input h_nodefault h_halts
+    M input h_no_default h_halts
 
 lemma language_TM_generator_subset_language_TM0 {Γ Λ : Type u}
   [Fintype Λ] [Inhabited Λ]
@@ -2416,13 +2498,13 @@ lemma language_TM_generator_subset_language_TM0 {Γ Λ : Type u}
   (TM0_language M (Γ := Γ) (Λ := Λ)).val
  := by
   intro input h_generated
-  have h_nodefault : default ∉ input :=
+  have h_no_default : default ∉ input :=
     (generated_language (GenerationByTM0Simulation.TM_generator M
       (Λ := Λ)
       (Γ := Γ)
       (enc := (GenerationByTM0Simulation.StandardEncoding Γ)))).property input h_generated
   exact GenerationByTM0Simulation.anything_a_TM_generator_generates_is_recognised_by_its_TM0
-    M input h_nodefault h_generated
+    M input h_no_default h_generated
 
 lemma language_TM0_eq_language_TM_generator {Γ Λ : Type u}
   [Fintype Λ] [Inhabited Λ]
