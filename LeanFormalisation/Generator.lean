@@ -261,6 +261,28 @@ lemma Computes_no_default {Γw Γo Q : Type u}
     apply ih
     exact step_preserves_no_default gen cfg cfg' h_step h_no_default
 
+lemma Computes.of_StepsTo {Γw Γo Q : Type u}
+[Fintype Γw]
+[Inhabited Γo] [Fintype Γo] [FinEnum Γo] [DecidableEq Γo]
+[Fintype Q]
+  {gen : Generator Γw Γo Q} {cfg cfg' : GenConfig Γw Γo Q} {out : List Γo} :
+  Computes gen cfg out → StepsTo gen cfg cfg' → Computes gen cfg' out := by
+  intro h_comp ⟨n, h_steps⟩
+  induction h_steps generalizing out with
+  | refl =>
+    exact h_comp
+  | step cfg cfg'' cfg' n h_step h_steps' ih =>
+    cases h_comp with
+    | halt cfg h_halt =>
+      rw [h_halt] at h_step
+      contradiction
+    | step cfg cfg_next out' h_step' h_comp' =>
+      have : cfg_next = cfg'' := by
+        rw [h_step'] at h_step
+        injection h_step
+      rw [← this] at h_steps' ih
+      exact ih h_comp'
+
 def Language (Γ : Type u)
 [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
  : Type u :=
@@ -2259,13 +2281,14 @@ lemma generation_must_get_ready_to_simulate {Γ Λ : Type u}
     ∧ (∀ i : ℤ, i < 0 → cfg.work (i : ℤ) = (default : Γ))
     ∧ default ∉ cfg.output
     ∧ StepsTo gen (initConfig gen bitstream) cfg
+    ∧ Computes (TM_generator (enc := StandardEncoding Γ) M) cfg output
 := by
   let enc := StandardEncoding Γ
   let gen := TM_generator (enc := enc) M
   -- First, get to the rewind state
   obtain ⟨rewindCfg, h_rewind_inv, h_steps_to_rewind, h_no_default_output⟩ :=
     generation_must_get_ready_to_rewind M bitstream output h_computes
-  -- Extract the components of RewindingConfig (now includes default ∉ cfg.output)
+  -- Extract the components of RewindingConfig
   obtain ⟨h_rewind_state, h_rewind_idx, h_rewind_work_input,
           h_rewind_work_blank_high, h_rewind_work_blank_low, h_no_default⟩ := h_rewind_inv
   -- Build the hypothesis for rewindingLeadsToSimulationReadiness
@@ -2277,33 +2300,37 @@ lemma generation_must_get_ready_to_simulate {Γ Λ : Type u}
     ∧ rewindCfg.output = rewindCfg.output
     ∧ default ∉ rewindCfg.output :=
       ⟨h_rewind_state, h_rewind_idx, h_rewind_work_input,
-       h_rewind_work_blank_high, h_rewind_work_blank_low, rfl, h_no_default⟩
+      h_rewind_work_blank_high, h_rewind_work_blank_low, rfl, h_no_default⟩
   -- Apply rewindingLeadsToSimulationReadiness
   obtain ⟨simCfg, h_sim_state, h_sim_idx, h_sim_work_input, h_sim_work_blank_high,
           h_sim_work_blank_low, h_sim_output, h_rewind_to_sim⟩ :=
     rewindingLeadsToSimulationReadiness M rewindCfg.output rewindCfg h_rewind_conditions
-  -- Return simCfg
+  -- Combine the steps: initConfig → rewindCfg → simCfg
+  have h_steps_to_sim : StepsTo gen (initConfig gen bitstream) simCfg :=
+    StepsTo.trans gen h_steps_to_rewind h_rewind_to_sim
+  -- Use Computes.of_StepsTo to get Computes gen simCfg output
+  have h_computes_from_sim : Computes gen simCfg output :=
+    Computes.of_StepsTo h_computes h_steps_to_sim
+  -- Return simCfg with all properties
   use simCfg
-  -- Build the conjunction in the right order
   constructor
   · exact h_sim_state
   constructor
   · exact h_sim_idx
   constructor
-  · -- ∀ i (h : i < simCfg.output.length), simCfg.work ↑i = simCfg.output.get ⟨i, h⟩
-    rw [h_sim_output]
+  · rw [h_sim_output]
     exact h_sim_work_input
   constructor
-  · -- ∀ i : ℕ, i ≥ simCfg.output.length → simCfg.work ↑i = default
-    rw [h_sim_output]
+  · rw [h_sim_output]
     exact h_sim_work_blank_high
   constructor
   · exact h_sim_work_blank_low
   constructor
-  · -- default ∉ simCfg.output
-    rw [h_sim_output]
+  · rw [h_sim_output]
     exact h_no_default
-  · exact StepsTo.trans gen h_steps_to_rewind h_rewind_to_sim
+  constructor
+  · exact h_steps_to_sim
+  · exact h_computes_from_sim
 
 theorem anything_a_TM_generator_generates_is_recognised_by_its_TM0 {Γ Λ : Type u}
   [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
