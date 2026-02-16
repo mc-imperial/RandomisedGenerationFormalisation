@@ -2263,6 +2263,24 @@ lemma generation_must_get_ready_to_rewind {Γ Λ : Type u}
   obtain ⟨cfg, h_steps, h_rewind, h_no_default⟩ := eventually_rewinding
   exact ⟨cfg, h_rewind, h_steps, h_no_default⟩
 
+-- Helper lemma: if we're in sim state and compute output, our current output equals the
+-- final output
+lemma sim_output_eq_final_output {Γ Λ : Type u}
+  [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
+  (M : Turing.TM0.Machine (Γ := Γ) (Λ := Λ))
+  (cfg : GenConfig Γ Γ (GenState Λ Γ (StandardEncoding Γ)))
+  (output : List Γ)
+  (h_sim : ∃ q, cfg.state = GenState.sim q)
+  (h_comp : Computes (TM_generator M) cfg output) :
+  cfg.output = output := by
+  induction h_comp with
+  | halt cfg h_halt => rfl
+  | step cfg cfg' out h_step h_comp' ih =>
+    have ⟨h_preserve, h_sim'⟩ := simStaysInSimAndPreservesOutput M cfg cfg' h_sim h_step
+    have : cfg'.output = out := ih h_sim'
+    rw [← h_preserve]
+    exact this
+
 lemma generation_must_get_ready_to_simulate {Γ Λ : Type u}
   [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
   (M : Turing.TM0.Machine (Γ := Γ) (Λ := Λ))
@@ -2282,6 +2300,7 @@ lemma generation_must_get_ready_to_simulate {Γ Λ : Type u}
     ∧ default ∉ cfg.output
     ∧ StepsTo gen (initConfig gen bitstream) cfg
     ∧ Computes (TM_generator (enc := StandardEncoding Γ) M) cfg output
+    ∧ cfg.output = output
 := by
   let enc := StandardEncoding Γ
   let gen := TM_generator (enc := enc) M
@@ -2300,7 +2319,7 @@ lemma generation_must_get_ready_to_simulate {Γ Λ : Type u}
     ∧ rewindCfg.output = rewindCfg.output
     ∧ default ∉ rewindCfg.output :=
       ⟨h_rewind_state, h_rewind_idx, h_rewind_work_input,
-      h_rewind_work_blank_high, h_rewind_work_blank_low, rfl, h_no_default⟩
+       h_rewind_work_blank_high, h_rewind_work_blank_low, rfl, h_no_default⟩
   -- Apply rewindingLeadsToSimulationReadiness
   obtain ⟨simCfg, h_sim_state, h_sim_idx, h_sim_work_input, h_sim_work_blank_high,
           h_sim_work_blank_low, h_sim_output, h_rewind_to_sim⟩ :=
@@ -2311,26 +2330,101 @@ lemma generation_must_get_ready_to_simulate {Γ Λ : Type u}
   -- Use Computes.of_StepsTo to get Computes gen simCfg output
   have h_computes_from_sim : Computes gen simCfg output :=
     Computes.of_StepsTo h_computes h_steps_to_sim
+  -- Prove that simCfg.output = output using the helper lemma
+  have h_output_eq : simCfg.output = output :=
+    sim_output_eq_final_output M simCfg output ⟨default, h_sim_state⟩ h_computes_from_sim
+  -- Establish that rewindCfg.output = output
+  have h_rewind_output_eq : rewindCfg.output = output := by
+    rw [← h_output_eq, h_sim_output]
   -- Return simCfg with all properties
   use simCfg
-  constructor
-  · exact h_sim_state
-  constructor
-  · exact h_sim_idx
-  constructor
-  · rw [h_sim_output]
-    exact h_sim_work_input
-  constructor
-  · rw [h_sim_output]
-    exact h_sim_work_blank_high
-  constructor
-  · exact h_sim_work_blank_low
-  constructor
-  · rw [h_sim_output]
+  refine ⟨h_sim_state, h_sim_idx, ?_, ?_, h_sim_work_blank_low, ?_, h_steps_to_sim,
+    h_computes_from_sim, h_output_eq⟩
+  · -- ∀ i (h : i < simCfg.output.length), simCfg.work ↑i = simCfg.output.get ⟨i, h⟩
+    intro i hi
+    have hi' : i < rewindCfg.output.length := by
+      calc i < simCfg.output.length := hi
+        _ = output.length := by rw [h_output_eq]
+        _ = rewindCfg.output.length := by rw [← h_rewind_output_eq]
+    convert h_sim_work_input i hi' using 1
+    congr 1
+    congr 2
+    have : simCfg.output = rewindCfg.output := h_sim_output
+    subst_vars
+    simp only [this]
+    rfl
+  · -- ∀ i : ℕ, i ≥ simCfg.output.length → simCfg.work ↑i = default
+    intro i hi
+    rw [h_output_eq] at hi
+    rw [← h_rewind_output_eq] at hi
+    exact h_sim_work_blank_high i hi
+  · -- default ∉ simCfg.output
+    rw [h_output_eq]
+    rw [← h_rewind_output_eq]
     exact h_no_default
-  constructor
-  · exact h_steps_to_sim
-  · exact h_computes_from_sim
+
+lemma sim_steps_imply_tm0_steps {Γ Λ : Type u}
+  [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
+  (M : Turing.TM0.Machine (Γ := Γ) (Λ := Λ))
+  (genCfg : GenConfig Γ Γ (GenState Λ Γ (StandardEncoding Γ)))
+  (tm0Cfg : Turing.TM0.Cfg Γ Λ)
+  (output : List Γ)
+  (h_match : configurationsMatch genCfg tm0Cfg)
+  (h_computes : Computes (TM_generator M) genCfg output)
+  (h_output : genCfg.output = output) :
+  ∃ tm0HaltCfg,
+    Turing.TM0.Reaches M tm0Cfg tm0HaltCfg
+    ∧ Turing.TM0.step M tm0HaltCfg = none
+:= by
+  -- We need to generalize both tm0Cfg and h_output before induction
+  -- Revert in the order: h_output, then tm0Cfg (they come back in reverse)
+  revert h_output tm0Cfg
+  induction h_computes with
+  | halt cfg h_halt =>
+    intro tm0Cfg h_match h_output
+    use tm0Cfg
+    constructor
+    · exact Relation.ReflTransGen.refl
+    · unfold haltingConfig step at h_halt
+      have h_sim := matchingConfigurationsStepSimultaneously M cfg tm0Cfg h_match
+      unfold maybeConfigurationsMatch at h_sim
+      cases h_tm0 : Turing.TM0.step M tm0Cfg
+      · trivial
+      · rw [h_tm0] at h_sim
+        simp only [reduceCtorEq]
+        have h_step_none : step (TM_generator M) cfg = none := h_halt
+        rw [h_step_none] at h_sim
+        exact h_sim
+  | step cfg cfg' out h_step h_computes' ih =>
+    intro tm0Cfg h_match h_output
+    have h_sim := matchingConfigurationsStepSimultaneously M cfg tm0Cfg h_match
+    unfold maybeConfigurationsMatch at h_sim
+    rw [h_step] at h_sim
+    cases h_tm0_step : Turing.TM0.step M tm0Cfg with
+    | none =>
+      rw [h_tm0_step] at h_sim
+      contradiction
+    | some tm0Cfg' =>
+      rw [h_tm0_step] at h_sim
+      -- h_sim now gives us: configurationsMatch cfg' tm0Cfg'
+      -- We need to show cfg'.output = out to apply ih
+      have h_output' : cfg'.output = out := by
+        -- Use simStaysInSimAndPreservesOutput to show cfg'.output = cfg.output
+        -- First, extract that cfg is in a sim state from h_match
+        have h_q : cfg.state = GenState.sim tm0Cfg.q := h_match.states_match
+        have h_sim_state : ∃ q, cfg.state = GenState.sim q := ⟨tm0Cfg.q, h_q⟩
+        -- Apply simStaysInSimAndPreservesOutput
+        obtain ⟨h_preserve, _⟩ := simStaysInSimAndPreservesOutput M cfg cfg' h_sim_state h_step
+        -- Now cfg'.output = cfg.output
+        rw [h_preserve]
+        -- And cfg.output = out by h_output
+        exact h_output
+      -- Now apply ih with the correct argument order: tm0Cfg', h_sim, h_output'
+      obtain ⟨tm0HaltCfg, h_reaches', h_halt⟩ := ih tm0Cfg' h_sim h_output'
+      use tm0HaltCfg
+      constructor
+      · exact Relation.ReflTransGen.head h_tm0_step h_reaches'
+      · exact h_halt
 
 theorem anything_a_TM_generator_generates_is_recognised_by_its_TM0 {Γ Λ : Type u}
   [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
@@ -2342,8 +2436,110 @@ theorem anything_a_TM_generator_generates_is_recognised_by_its_TM0 {Γ Λ : Type
 := by
   let enc := StandardEncoding Γ
   let gen := (TM_generator (enc := enc) M)
+  -- Get the bitstream that generates output
   obtain ⟨bitstream, h_computes⟩ := h_generated
-  sorry
+  -- Get to the simulation-ready configuration
+  obtain ⟨cfg, h_sim_state, h_sim_idx, h_sim_work_input, h_sim_work_blank_high,
+          h_sim_work_blank_low, h_no_default_cfg, h_steps_to_sim, h_computes_from_cfg,
+          h_output_eq⟩ :=
+    generation_must_get_ready_to_simulate M bitstream output h_computes
+  -- Show that cfg matches TM0.init output
+  have h_match : configurationsMatch cfg (Turing.TM0.init output) := by
+    constructor
+    · exact h_sim_state
+    · -- heads_match
+      rw [h_sim_idx]
+      unfold Turing.TM0.init Turing.Tape.mk₁
+      cases h : output with
+      | nil =>
+        simp only [Turing.Tape.mk₂, Turing.Tape.mk'_head, Turing.ListBlank.head_mk, List.headI_nil]
+        have : output.length = 0 := by simp [h]
+        apply h_sim_work_blank_high
+        rw [h_output_eq, h]
+        simp
+      | cons head tail =>
+        simp only [Turing.Tape.mk₂, Turing.Tape.mk'_head, Turing.ListBlank.head_mk, List.headI_cons]
+        have h0 : 0 < cfg.output.length := by
+          rw [h_output_eq, h]
+          simp
+        have : cfg.output.get ⟨0, h0⟩ = head := by
+          have eq : (head :: tail).get ⟨0, by simp⟩ = head := rfl
+          rw [← eq]
+          subst h_output_eq
+          simp [h]
+        rw [← this]
+        exact h_sim_work_input 0 h0
+    · intro d
+      rw [h_sim_idx]
+      simp only [Turing.TM0.init, Turing.Tape.mk₁, zero_add]
+      unfold Turing.Tape.mk₂ Turing.Tape.mk'
+      simp only [Turing.ListBlank.nth]
+      -- Goal is now: cfg.work (1 + ↑d) = output.nth d (from the right tape of init)
+      cases h : output with
+      | nil =>
+        simp only [Turing.ListBlank.mk]
+        apply h_sim_work_blank_high
+        rw [h_output_eq, h]
+        simp
+      | cons head tail =>
+        simp only [Turing.ListBlank.mk]
+        simp only [List.getI, List.getD_eq_getElem?_getD]
+        by_cases hd : d < tail.length
+        · -- d is in bounds
+          have : tail[d]? = some tail[d] := List.getElem?_eq_getElem hd
+          have hlen : 1 + d < cfg.output.length := by
+            rw [h_output_eq, h]
+            simp
+            omega
+          rw [Turing.ListBlank.tail]
+          simp only [Quotient.liftOn'_mk'', List.tail_cons]
+          change cfg.work (1 + ↑d) = tail[d]?.getD default
+          simp only [this, Option.getD_some]
+          have : cfg.output.get ⟨1 + d, hlen⟩ = tail[d] := by
+              simp only [h_output_eq, h, List.get_eq_getElem]
+              have : 1 + d = d + 1 := add_comm 1 d
+              subst_vars
+              conv_lhs => arg 2; rw [add_comm]
+              rw [List.getElem_cons_succ]
+          rw [← this]
+          exact h_sim_work_input (1 + d) hlen
+        · -- d is out of bounds
+          change cfg.work (1 + ↑d) = tail[d]?.getD default
+          have : tail[d]? = none := by
+            rw [List.getElem?_eq_none]
+            omega
+          simp only [this, Option.getD_none]
+          apply h_sim_work_blank_high
+          rw [h_output_eq, h]
+          simp
+          omega
+    · -- tape_match_left
+      intro d
+      rw [h_sim_idx]
+      unfold Turing.TM0.init Turing.Tape.mk₁
+      simp only [zero_sub, Int.reduceNeg, Turing.ListBlank.nth, Turing.Tape.mk₂,
+        Turing.Tape.mk'_left]
+      have : (0 : ℤ) - 1 - (d : ℤ) < 0 := by omega
+      exact h_sim_work_blank_low _ this
+  -- Use the lemma to show TM0 halts
+  obtain ⟨tm0HaltCfg, h_reaches, h_tm0_halt⟩ :=
+    sim_steps_imply_tm0_steps M cfg (Turing.TM0.init output) output
+    h_match h_computes_from_cfg h_output_eq
+  -- Show output ∈ TM0_language M
+  unfold TM0_language
+  simp only [Set.mem_setOf_eq]
+  constructor
+  · exact h_no_default
+  · -- Show (Turing.TM0.eval M output).Dom
+    unfold Turing.TM0.eval
+    rw [Part.dom_iff_mem]
+    use tm0HaltCfg.Tape.right₀
+    rw [Part.mem_map_iff]
+    use tm0HaltCfg
+    constructor
+    · rw [Turing.mem_eval]
+      exact ⟨h_reaches, h_tm0_halt⟩
+    · rfl
 
 end GenerationByTM0Simulation
 
