@@ -308,7 +308,7 @@ def TM0_language {Γ Λ : Type u}
   ⟨{ input | default ∉ input ∧ (Turing.TM0.eval M input).Dom },
    fun _ hInput => hInput.1⟩
 
-def TM0_recognisable_languages (Γ : Type u)
+def TM0_recognisable_languages {Γ : Type u}
 [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
 : Set (Language Γ) :=
   { L | ∃ (Λ : Type u) (_ : Inhabited Λ) (_ : Fintype Λ) (M : Turing.TM0.Machine (Γ := Γ) (Λ := Λ)),
@@ -2595,7 +2595,7 @@ lemma language_TM0_eq_language_TM_generator {Γ Λ : Type u}
 
 theorem TM0_recognisable_subset_generable {Γ : Type u}
 [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ] :
-TM0_recognisable_languages Γ ⊆ generable_languages := by
+TM0_recognisable_languages (Γ := Γ) ⊆ generable_languages := by
   intro L hL
   rcases hL with ⟨Λ, hΛinh, hΛfin, M, rfl⟩
   refine ⟨Γ, ?_⟩
