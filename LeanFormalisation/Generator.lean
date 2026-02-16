@@ -2146,7 +2146,100 @@ lemma generation_must_get_ready_to_rewind {Γ Λ : Type u}
     ∧ StepsTo gen (initConfig gen bitstream) cfg
     ∧ default ∉ cfg.output
 := by
-  sorry
+  let enc := StandardEncoding Γ
+  let gen := TM_generator (enc := enc) M
+  -- First, show that the initial configuration satisfies LoadingInv
+  have h_init_loading : LoadingInv (initConfig gen bitstream) := by
+    unfold LoadingInv initConfig
+    simp only [List.get_eq_getElem, CharP.cast_eq_zero,
+      List.not_mem_nil, true_and]
+    constructor
+    · use { bitsRead := 0, acc := 0, accBound := by simp }
+      rfl
+    constructor
+    · intro i hi
+      simp at hi
+    constructor
+    · intro i hi
+      rfl
+    constructor
+    · intro i _
+      rfl
+    · simp
+  -- Key lemma: a loading state is never a halting configuration
+  have load_not_halting : ∀ cfg, LoadingInv cfg → ¬haltingConfig gen cfg := by
+    intro cfg h_load h_halt
+    unfold haltingConfig at h_halt
+    unfold step at h_halt
+    obtain ⟨⟨ls, h_state⟩, _⟩ := h_load
+    simp only [h_state] at h_halt
+    -- In the load state, we always split on whether bitsRead = W
+    -- In both branches, we get some (not none)
+    split at h_halt
+    · -- bitsRead = W case
+      rename_i heq
+      show False
+      have : gen = TM_generator M := rfl
+      rw [this] at heq
+      unfold TM_generator at heq
+      simp at heq
+      split at heq
+      · split at heq
+        · simp at heq
+        · split at heq <;> simp at heq
+      · simp at heq
+    · -- bitsRead ≠ W case
+      simp at h_halt
+  -- Since Computes holds and we start in LoadingInv,
+  -- we must eventually reach RewindingConfig
+  -- (because we can't halt in LoadingInv and LoadingInv either persists or becomes RewindingConfig)
+  have eventually_rewinding : ∃ cfg,
+      StepsTo gen (initConfig gen bitstream) cfg ∧
+      RewindingConfig cfg ∧
+      default ∉ cfg.output := by
+    -- Generalize to arbitrary starting configuration
+    suffices ∀ start_cfg, LoadingInv start_cfg →
+      Computes gen start_cfg output →
+      ∃ cfg, StepsTo gen start_cfg cfg ∧ RewindingConfig cfg ∧ default ∉ cfg.output
+    by exact this (initConfig gen bitstream) h_init_loading h_computes
+    intro start_cfg h_loading h_comp
+    induction h_comp with
+    | halt cfg h_halt =>
+      exfalso
+      exact load_not_halting cfg h_loading h_halt
+    | step cfg cfg' out h_step h_comp' ih =>
+      -- Apply loadingInv_preserved_or_becomes_rewinding
+      have h_inv := loadingInv_preserved_or_becomes_rewinding M cfg cfg' h_loading h_step
+      cases h_inv with
+      | inl h_still_loading =>
+        -- Still in LoadingInv, continue with IH
+        -- Apply IH to cfg' which still satisfies LoadingInv
+        obtain ⟨final_cfg, h_steps_from_cfg', h_rewind, h_no_default⟩ :=
+          ih h_computes h_still_loading
+        -- Combine the steps: cfg → cfg' → final_cfg
+        use final_cfg
+        constructor
+        · -- StepsTo gen cfg final_cfg
+          refine StepsTo.trans gen ?_ h_steps_from_cfg'
+          use 1
+          exact Steps.step cfg cfg' cfg' 0 h_step (Steps.refl cfg')
+        constructor
+        · exact h_rewind
+        · exact h_no_default
+      | inr h_rewinding =>
+        -- We've reached RewindingConfig at cfg', so we're done
+        use cfg'
+        constructor
+        · -- StepsTo gen cfg cfg'
+          use 1
+          exact Steps.step cfg cfg' cfg' 0 h_step (Steps.refl cfg')
+        constructor
+        · exact h_rewinding
+        · -- Extract default ∉ cfg'.output from RewindingConfig
+          obtain ⟨_, _, _, _, _, h_no_default⟩ := h_rewinding
+          exact h_no_default
+  obtain ⟨cfg, h_steps, h_rewind, h_no_default⟩ := eventually_rewinding
+  exact ⟨cfg, h_rewind, h_steps, h_no_default⟩
 
 lemma generation_must_get_ready_to_simulate {Γ Λ : Type u}
   [Inhabited Λ] [Fintype Λ] [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
