@@ -1,9 +1,9 @@
 import Mathlib
 import Mathlib.Computability.Halting
 import Mathlib.Computability.PostTuringMachine
-import LeanFormalisation.Encoding
-import LeanFormalisation.Generator
-import LeanFormalisation.Language
+import RandomisedGeneration.Encoding
+import RandomisedGeneration.Generator
+import RandomisedGeneration.Language
 
 namespace RandomisedGeneration
 

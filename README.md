@@ -1,4 +1,4 @@
-# LeanFormalisation
+# RandomisedGeneration
 
 ## GitHub configuration
 

@@ -1,7 +1,7 @@
 import Mathlib
 import Mathlib.Computability.Halting
 import Mathlib.Computability.PostTuringMachine
-import LeanFormalisation.Generator
+import RandomisedGeneration.Generator
 
 namespace RandomisedGeneration
 
