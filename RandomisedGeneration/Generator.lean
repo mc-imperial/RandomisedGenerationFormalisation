@@ -274,6 +274,7 @@ end Computes
 
 -- This captures the idea of a generator not being able to loop forever without
 -- consuming an input bit.
+-- This is not currently used, but it might be necessary to assume at some point.
 def input_progressing {Γw Γo Q : Type u}
 [Fintype Γw]
 [Inhabited Γo] [Fintype Γo] [FinEnum Γo] [DecidableEq Γo]
