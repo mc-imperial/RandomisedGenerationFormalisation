@@ -8,7 +8,7 @@ import RandomisedGeneration.GenerationByTM0Simulation
 namespace RandomisedGeneration
 
 theorem TM0_recognisable_subset_generable {Γ : Type u}
-[Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ] :
+[Inhabited Γ] [FinEnum Γ] :
 languagesRecognisedByTM0s (Γ := Γ) ⊆ generableLanguages := by
   intro L hL
   rcases hL with ⟨Λ, hΛinh, hΛfin, M, rfl⟩
