@@ -9,7 +9,7 @@ structure Encoding (Γ : Type u) where
   complete : ∀ g : Γ, ∃ i, enum i = some g
 
 /-- Standard encoding using FinEnum, which provides a computable enumeration. -/
-def StandardEncoding (Γ : Type u) [Inhabited Γ] [FinEnum Γ] [DecidableEq Γ] : Encoding Γ where
+def StandardEncoding (Γ : Type u) [Inhabited Γ] [FinEnum Γ] : Encoding Γ where
   W := Nat.size (FinEnum.card Γ)
   W_pos := by
     -- Γ is inhabited, so card ≥ 1
@@ -34,7 +34,7 @@ def StandardEncoding (Γ : Type u) [Inhabited Γ] [FinEnum Γ] [DecidableEq Γ] 
     ⟩
     simp [idx]
 
-abbrev WIDTH (Γ : Type u) [Inhabited Γ] [FinEnum Γ] [DecidableEq Γ] :=
+abbrev WIDTH (Γ : Type u) [Inhabited Γ] [FinEnum Γ] :=
   (StandardEncoding Γ).W
 
 -- Helper function to get the i-th bit of a natural number in MSB-first order
@@ -57,7 +57,7 @@ def getEncodingBit {Γ : Type u} [FinEnum Γ] (enc : Encoding Γ) (g : Γ) (k : 
 def getEOFBit {Γ : Type u} [Fintype Γ] (enc : Encoding Γ) (k : ℕ) : Bool :=
   getNthBitMSB (Fintype.card Γ) enc.W k
 
-def bitstreamFromInput {Γ : Type u} [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
+def bitstreamFromInput {Γ : Type u} [Inhabited Γ] [Fintype Γ] [FinEnum Γ]
  (input : List Γ) : ℕ → Bool :=
   let enc := StandardEncoding Γ
   fun i : ℕ => if h : i < input.length * enc.W then
@@ -308,7 +308,7 @@ lemma sum_reindex_msb_lsb {W : ℕ} (f : ℕ → ℕ) :
         omega
 
 lemma readBlockOfBits_decodes_to_EOF {Γ : Type u}
-  [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
+  [Inhabited Γ] [Fintype Γ] [FinEnum Γ]
   (input : List Γ) :
   readBlockOfBitsNat
     (bitstreamFromInput input)
@@ -445,7 +445,7 @@ lemma readBlockOfBits_decodes_to_EOF {Γ : Type u}
   exact sum_testBit_eq h_bound
 
 lemma bitstreamFromInput_in_range {Γ : Type u}
-  [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
+  [Inhabited Γ] [Fintype Γ] [FinEnum Γ]
   (input : List Γ) (i : ℕ) (hi : i < input.length * (WIDTH Γ)) :
   bitstreamFromInput input i =
   getEncodingBit (StandardEncoding Γ)
@@ -455,7 +455,7 @@ lemma bitstreamFromInput_in_range {Γ : Type u}
   simp [hi]
 
 lemma readBlockOfBits_extracts_symbol {Γ : Type u}
-  [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
+  [Inhabited Γ] [Fintype Γ] [FinEnum Γ]
   (input : List Γ) {k : ℕ} (hk : k < input.length) :
   (Finset.range (WIDTH Γ)).sum (fun i =>
     (if bitstreamFromInput input ((WIDTH Γ) * k + i) then 1 else 0) *
@@ -532,7 +532,7 @@ lemma readBlockOfBits_extracts_symbol {Γ : Type u}
   exact sum_testBit_eq h_bound
 
 lemma readBlockOfBits_decodes_to_input {Γ : Type u}
-  [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
+  [Inhabited Γ] [Fintype Γ] [FinEnum Γ]
   (input : List Γ) {k : ℕ} (hk : k < input.length) :
   (StandardEncoding Γ).enum (
     readBlockOfBitsW
@@ -567,7 +567,7 @@ lemma readBlockOfBits_decodes_to_input {Γ : Type u}
     exact Equiv.symm_apply_apply (FinEnum.equiv) g
 
 lemma EOF_enum_is_none {Γ : Type u}
-  [Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
+  [Inhabited Γ] [Fintype Γ] [FinEnum Γ]
   (input : List Γ) :
   (StandardEncoding Γ).enum
     (readBlockOfBitsW
