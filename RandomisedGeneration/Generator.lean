@@ -28,7 +28,6 @@ instance : Coe InputTapeDirection ℕ :=
 structure Generator (Γw Γo Q : Type u)
 [Fintype Γw]
 [Inhabited Γo] [FinEnum Γo]
-[Fintype Q]
 where
   init : Q -- Initial state
   blank : Γw -- Blank symbol for the working tape
@@ -49,11 +48,23 @@ where
     δ q b w = some (q', w', o, itd, wtd) →
     ∀ γ, o = some γ → γ ≠ default
 
+def GeneratorSupports {Γw Γo Q : Type u}
+  [Fintype Γw] [Inhabited Γo] [FinEnum Γo]
+  (gen : Generator Γw Γo Q) (S : Finset Q) : Prop :=
+  gen.init ∈ S ∧
+  ∀ q ∈ S, ∀ b w q' w' o itd wtd,
+    gen.δ q b w = some (q', w', o, itd, wtd) → q' ∈ S
+
+lemma generator_supports_univ {Γw Γo Q : Type u}
+  [Fintype Γw] [Inhabited Γo] [FinEnum Γo] [Fintype Q]
+  (gen : Generator Γw Γo Q) :
+  GeneratorSupports gen Finset.univ :=
+  ⟨Finset.mem_univ _, fun _ _ _ _ _ _ _ _ _ _ => Finset.mem_univ _⟩
+
 @[ext]
 structure GenConfig (Γw Γo Q : Type u)
 [Fintype Γw]
 [Inhabited Γo] [FinEnum Γo]
-[Fintype Q]
 where
   (state : Q)
   (input : ℕ → Bool)
@@ -65,7 +76,6 @@ where
 def step {Γw Γo Q : Type u}
 [Fintype Γw]
 [Inhabited Γo] [FinEnum Γo]
-[Fintype Q]
 (gen : Generator Γw Γo Q) (cfg : GenConfig Γw Γo Q) :
   Option (GenConfig Γw Γo Q) :=
 match gen.δ cfg.state (cfg.input cfg.inputIndex) (cfg.work cfg.workIndex) with
@@ -86,7 +96,6 @@ match gen.δ cfg.state (cfg.input cfg.inputIndex) (cfg.work cfg.workIndex) with
 lemma step_preserves_no_default {Γw Γo Q : Type u}
 [Fintype Γw]
 [Inhabited Γo] [FinEnum Γo]
-[Fintype Q]
   (gen : Generator Γw Γo Q) (cfg cfg' : GenConfig Γw Γo Q) :
   step gen cfg = some cfg' →
   default ∉ cfg.output →
@@ -114,7 +123,6 @@ lemma step_preserves_no_default {Γw Γo Q : Type u}
 def initConfig {Γw Γo Q : Type u}
 [Fintype Γw]
 [Inhabited Γo] [FinEnum Γo]
-[Fintype Q]
 (gen : Generator Γw Γo Q) (input : ℕ → Bool) :
   GenConfig Γw Γo Q :=
 { state := gen.init
@@ -128,7 +136,6 @@ def initConfig {Γw Γo Q : Type u}
 def haltingConfig {Γw Γo Q}
 [Fintype Γw]
 [Inhabited Γo] [FinEnum Γo]
-[Fintype Q]
   (gen : Generator Γw Γo Q)
   (cfg : GenConfig Γw Γo Q) : Prop :=
 step gen cfg = none
@@ -136,7 +143,6 @@ step gen cfg = none
 inductive Steps {Γw Γo Q}
 [Fintype Γw]
 [Inhabited Γo] [FinEnum Γo]
-[Fintype Q]
 (gen : Generator Γw Γo Q) :
   GenConfig Γw Γo Q →
   GenConfig Γw Γo Q →
@@ -153,7 +159,6 @@ namespace Steps
 lemma trans {Γw Γo Q}
 [Fintype Γw]
 [Inhabited Γo] [FinEnum Γo]
-[Fintype Q]
   {gen : Generator Γw Γo Q} {cfg1 cfg2 cfg3 : GenConfig Γw Γo Q} {n m : ℕ} :
   Steps gen cfg1 cfg2 n → Steps gen cfg2 cfg3 m → Steps gen cfg1 cfg3 (n + m) := by
   intro h1 h2
@@ -172,7 +177,6 @@ end Steps
 inductive Computes {Γw Γo Q : Type u}
 [Fintype Γw]
 [Inhabited Γo] [FinEnum Γo]
-[Fintype Q]
 (gen : Generator Γw Γo Q) : GenConfig Γw Γo Q → List Γo → Prop
   | halt (cfg : GenConfig Γw Γo Q) :
       step gen cfg = none → Computes gen cfg cfg.output
@@ -182,7 +186,6 @@ inductive Computes {Γw Γo Q : Type u}
 def StepsTo {Γw Γo Q}
 [Fintype Γw]
 [Inhabited Γo] [FinEnum Γo]
-[Fintype Q]
 (gen : Generator Γw Γo Q)
 (cfg : GenConfig Γw Γo Q)
 (cfg' : GenConfig Γw Γo Q) : Prop :=
@@ -193,7 +196,6 @@ namespace StepsTo
 lemma refl {Γw Γo Q}
 [Fintype Γw]
 [Inhabited Γo] [FinEnum Γo]
-[Fintype Q]
   (gen : Generator Γw Γo Q)
   {cfg : GenConfig Γw Γo Q} :
   StepsTo gen cfg cfg :=
@@ -205,7 +207,6 @@ by
 lemma trans {Γw Γo Q}
 [Fintype Γw]
 [Inhabited Γo] [FinEnum Γo]
-[Fintype Q]
   (gen : Generator Γw Γo Q)
   {cfg1 cfg2 cfg3 : GenConfig Γw Γo Q} :
   StepsTo gen cfg1 cfg2 → StepsTo gen cfg2 cfg3 → StepsTo gen cfg1 cfg3 :=
@@ -216,7 +217,6 @@ by
 lemma computes {Γw Γo Q : Type u}
 [Fintype Γw]
 [Inhabited Γo] [FinEnum Γo]
-[Fintype Q]
   {gen : Generator Γw Γo Q} {cfg haltCfg : GenConfig Γw Γo Q} :
   StepsTo gen cfg haltCfg → step gen haltCfg = none →
   Computes gen cfg haltCfg.output := by
@@ -235,7 +235,6 @@ namespace Computes
 lemma no_default {Γw Γo Q : Type u}
 [Fintype Γw]
 [Inhabited Γo] [FinEnum Γo]
-[Fintype Q]
   (gen : Generator Γw Γo Q) (cfg : GenConfig Γw Γo Q) (out : List Γo) :
   Computes gen cfg out →
   default ∉ cfg.output →
@@ -251,7 +250,6 @@ lemma no_default {Γw Γo Q : Type u}
 lemma of_StepsTo {Γw Γo Q : Type u}
 [Fintype Γw]
 [Inhabited Γo] [FinEnum Γo]
-[Fintype Q]
   {gen : Generator Γw Γo Q} {cfg cfg' : GenConfig Γw Γo Q} {out : List Γo} :
   Computes gen cfg out → StepsTo gen cfg cfg' → Computes gen cfg' out := by
   intro h_comp ⟨n, h_steps⟩
@@ -278,7 +276,6 @@ end Computes
 def input_progressing {Γw Γo Q : Type u}
 [Fintype Γw]
 [Inhabited Γo] [FinEnum Γo]
-[Fintype Q]
 (gen : Generator Γw Γo Q) : Prop :=
 ∀ cfg, ∃ cfg' n,
   Steps gen cfg cfg' n ∧ (haltingConfig gen cfg' ∨ cfg'.inputIndex > cfg.inputIndex)
