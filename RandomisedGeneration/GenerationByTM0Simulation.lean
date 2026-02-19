@@ -26,7 +26,7 @@ inductive GenState (Λ Γ : Type u)
 def generatorFromTM0 {Γ Γ' Λ : Type u}
     [Inhabited Λ]
     [Inhabited Γ] [FinEnum Γ]
-    [Inhabited Γ'] [FinEnum Γ']
+    [Inhabited Γ'] [Fintype Γ'] [DecidableEq Γ']
     {enc_Γ : Encoding Γ}
     (change_of_alphabet : Γ → Γ')
     (M : Turing.TM0.Machine (Γ := Γ') (Λ := Λ))
@@ -190,7 +190,7 @@ def generatorFromTM0 {Γ Γ' Λ : Type u}
 
 def decode_bit_inv {Γ Γ' Λ : Type u}
   [Inhabited Λ] [Inhabited Γ] [FinEnum Γ]
-  [Inhabited Γ'] [FinEnum Γ']
+  [Inhabited Γ'] [Fintype Γ'] [DecidableEq Γ']
   (change_of_alphabet : Γ → Γ')
   (input : List Γ)
   (cfg : GenConfig Γ' Γ (GenState Λ Γ (StandardEncoding Γ)))
@@ -213,7 +213,7 @@ cfg.state = GenState.load {
 
 def decode_symbol_inv {Γ Γ' Λ : Type u}
   [Inhabited Λ] [Inhabited Γ] [FinEnum Γ]
-  [Inhabited Γ'] [FinEnum Γ']
+  [Inhabited Γ'] [Fintype Γ'] [DecidableEq Γ']
   (change_of_alphabet : Γ → Γ')
   (input : List Γ)
   (cfg : GenConfig Γ' Γ (GenState Λ Γ (StandardEncoding Γ)))
@@ -233,7 +233,7 @@ def decode_symbol_inv {Γ Γ' Λ : Type u}
 lemma decode_bit_within_symbol {Γ Γ' Λ : Type u}
   [Inhabited Λ]
   [Inhabited Γ] [FinEnum Γ]
-  [Inhabited Γ'] [FinEnum Γ']
+  [Inhabited Γ'] [Fintype Γ'] [DecidableEq Γ']
   (change_of_alphabet : Γ → Γ')
   (M : Turing.TM0.Machine (Γ := Γ') (Λ := Λ))
   (input : List Γ)
@@ -347,7 +347,7 @@ lemma input_symbols_not_default {Γ : Type u}
 
 lemma write_decoded_symbol {Γ Γ' Λ : Type u}
   [Inhabited Λ] [Inhabited Γ] [FinEnum Γ]
-  [Inhabited Γ'] [FinEnum Γ']
+  [Inhabited Γ'] [Fintype Γ'] [DecidableEq Γ']
   (change_of_alphabet : Γ → Γ')
   (M : Turing.TM0.Machine (Γ := Γ') (Λ := Λ))
   (input : List Γ)
@@ -450,7 +450,7 @@ lemma write_decoded_symbol {Γ Γ' Λ : Type u}
 
 lemma decode_one_symbol {Γ Γ' Λ : Type u}
   [Inhabited Λ] [Inhabited Γ] [FinEnum Γ]
-  [Inhabited Γ'] [FinEnum Γ']
+  [Inhabited Γ'] [Fintype Γ'] [DecidableEq Γ']
   (change_of_alphabet : Γ → Γ')
   (M : Turing.TM0.Machine (Γ := Γ') (Λ := Λ))
   (input : List Γ)
@@ -571,7 +571,7 @@ lemma decode_one_symbol {Γ Γ' Λ : Type u}
 
 lemma detect_EOF {Γ Γ' Λ : Type u}
   [Inhabited Λ] [Inhabited Γ] [FinEnum Γ]
-  [Inhabited Γ'] [FinEnum Γ']
+  [Inhabited Γ'] [Fintype Γ'] [DecidableEq Γ']
   (change_of_alphabet : Γ → Γ')
   (M : Turing.TM0.Machine (Γ := Γ') (Λ := Λ))
   (cfg : GenConfig Γ' Γ (GenState Λ Γ (StandardEncoding Γ)))
@@ -641,7 +641,7 @@ lemma detect_EOF {Γ Γ' Λ : Type u}
 
 lemma decode_EOF_marker {Γ Γ' Λ : Type u}
   [Inhabited Λ] [Inhabited Γ] [FinEnum Γ]
-  [Inhabited Γ'] [FinEnum Γ']
+  [Inhabited Γ'] [Fintype Γ'] [DecidableEq Γ']
   (change_of_alphabet : Γ → Γ')
   (M : Turing.TM0.Machine (Γ := Γ') (Λ := Λ))
   (input : List Γ)
@@ -767,7 +767,7 @@ StepsTo (generatorFromTM0 (enc_Γ := StandardEncoding Γ) change_of_alphabet M) 
 
 lemma generator_gets_to_rewind_state {Γ Γ' Λ : Type u}
   [Inhabited Λ] [Inhabited Γ] [FinEnum Γ]
-  [Inhabited Γ'] [FinEnum Γ']
+  [Inhabited Γ'] [Fintype Γ'] [DecidableEq Γ']
   (change_of_alphabet : Γ → Γ')
   (M : Turing.TM0.Machine (Γ := Γ') (Λ := Λ))
   (input : List Γ)
@@ -850,7 +850,7 @@ lemma generator_gets_to_rewind_state {Γ Γ' Λ : Type u}
 
 lemma rewinding_goes_back_one {Γ Γ' Λ : Type u}
   [Inhabited Λ] [Inhabited Γ] [FinEnum Γ]
-  [Inhabited Γ'] [FinEnum Γ']
+  [Inhabited Γ'] [Fintype Γ'] [DecidableEq Γ']
   (change_of_alphabet : Γ → Γ')
   (hchange_default : change_of_alphabet default = default)
   (hchange_injective : Function.Injective change_of_alphabet)
@@ -898,7 +898,7 @@ lemma rewinding_goes_back_one {Γ Γ' Λ : Type u}
 
 lemma full_rewinding_gets_back_to_negative_index {Γ Γ' Λ : Type u}
   [Inhabited Λ] [Inhabited Γ] [FinEnum Γ]
-  [Inhabited Γ'] [FinEnum Γ']
+  [Inhabited Γ'] [Fintype Γ'] [DecidableEq Γ']
   (change_of_alphabet : Γ → Γ')
   (hchange_default : change_of_alphabet default = default)
   (hchange_injective : Function.Injective change_of_alphabet)
@@ -990,7 +990,7 @@ termination_by cfg.workIndex.toNat
 
 lemma rewind_at_negative_index_leads_to_simulation {Γ Γ' Λ : Type u}
   [Inhabited Λ] [Inhabited Γ] [FinEnum Γ]
-  [Inhabited Γ'] [FinEnum Γ']
+  [Inhabited Γ'] [Fintype Γ'] [DecidableEq Γ']
   (change_of_alphabet : Γ → Γ')
   (M : Turing.TM0.Machine (Γ := Γ') (Λ := Λ))
   (cfg : GenConfig Γ' Γ (GenState Λ Γ (StandardEncoding Γ)))
@@ -1016,7 +1016,7 @@ lemma rewind_at_negative_index_leads_to_simulation {Γ Γ' Λ : Type u}
 
 lemma rewinding_leads_to_simulation_readiness {Γ Γ' Λ : Type u}
   [Inhabited Λ] [Inhabited Γ] [FinEnum Γ]
-  [Inhabited Γ'] [FinEnum Γ']
+  [Inhabited Γ'] [Fintype Γ'] [DecidableEq Γ']
   (change_of_alphabet : Γ → Γ')
   (hchange_default : change_of_alphabet default = default)
   (hchange_injective : Function.Injective change_of_alphabet)
@@ -1116,7 +1116,7 @@ lemma rewinding_leads_to_simulation_readiness {Γ Γ' Λ : Type u}
 
 lemma generator_gets_to_simulation_state {Γ Γ' Λ : Type u}
   [Inhabited Λ] [Inhabited Γ] [FinEnum Γ]
-  [Inhabited Γ'] [FinEnum Γ']
+  [Inhabited Γ'] [Fintype Γ'] [DecidableEq Γ']
   (change_of_alphabet : Γ → Γ')
   (hchange_default : change_of_alphabet default = default)
   (hchange_injective : Function.Injective change_of_alphabet)
@@ -1162,7 +1162,7 @@ lemma generator_gets_to_simulation_state {Γ Γ' Λ : Type u}
 
 structure ConfigurationsMatch {Γ Γ' Λ : Type u}
   [Inhabited Λ] [Inhabited Γ] [FinEnum Γ]
-  [Inhabited Γ'] [FinEnum Γ']
+  [Inhabited Γ'] [Fintype Γ'] [DecidableEq Γ']
   (genCfg : GenConfig Γ' Γ (GenState Λ Γ (StandardEncoding Γ)))
   (tm0Cfg : Turing.TM0.Cfg Γ' Λ) : Prop where
   states_match : genCfg.state =
@@ -1175,7 +1175,7 @@ structure ConfigurationsMatch {Γ Γ' Λ : Type u}
 
 def maybe_configurations_match {Γ Γ' Λ : Type u}
   [Inhabited Λ] [Inhabited Γ] [FinEnum Γ]
-  [Inhabited Γ'] [FinEnum Γ']
+  [Inhabited Γ'] [Fintype Γ'] [DecidableEq Γ']
   (maybeGenCfg : Option (GenConfig Γ' Γ (GenState Λ Γ (StandardEncoding Γ))))
   (maybeTm0Cfg : Option (Turing.TM0.Cfg Γ' Λ)) : Prop :=
 match maybeGenCfg, maybeTm0Cfg with
@@ -1185,7 +1185,7 @@ match maybeGenCfg, maybeTm0Cfg with
 
 lemma matching_configurations_step_simultaneously {Γ Γ' Λ : Type u}
   [Inhabited Λ] [Inhabited Γ] [FinEnum Γ]
-  [Inhabited Γ'] [FinEnum Γ']
+  [Inhabited Γ'] [Fintype Γ'] [DecidableEq Γ']
   (change_of_alphabet : Γ → Γ')
   (M : Turing.TM0.Machine Γ' Λ)
   (genCfg : GenConfig Γ' Γ (GenState Λ Γ (StandardEncoding Γ)))
@@ -1368,7 +1368,7 @@ lemma matching_configurations_step_simultaneously {Γ Γ' Λ : Type u}
 
 lemma simStaysInSimAndPreservesOutput {Γ Γ' Λ : Type u}
   [Inhabited Λ] [Inhabited Γ] [FinEnum Γ]
-  [Inhabited Γ'] [FinEnum Γ']
+  [Inhabited Γ'] [Fintype Γ'] [DecidableEq Γ']
   (change_of_alphabet : Γ → Γ')
   (M : Turing.TM0.Machine (Γ := Γ') (Λ := Λ))
   (cfg cfg' : GenConfig Γ' Γ (GenState Λ Γ (StandardEncoding Γ)))
@@ -1405,7 +1405,7 @@ lemma simStaysInSimAndPreservesOutput {Γ Γ' Λ : Type u}
 
 lemma simulationWorksOnceWeAreReady {Γ Γ' Λ : Type u}
   [Inhabited Λ] [Inhabited Γ] [FinEnum Γ]
-  [Inhabited Γ'] [FinEnum Γ']
+  [Inhabited Γ'] [Fintype Γ'] [DecidableEq Γ']
   (change_of_alphabet : Γ → Γ')
   (M : Turing.TM0.Machine (Γ := Γ') (Λ := Λ))
   (input : List Γ)
@@ -1571,7 +1571,7 @@ lemma simulationWorksOnceWeAreReady {Γ Γ' Λ : Type u}
 
 lemma generatorFromTM0_supports {Γ Γ' Λ : Type u}
   [Inhabited Λ] [Inhabited Γ] [FinEnum Γ]
-  [Inhabited Γ'] [FinEnum Γ']
+  [Inhabited Γ'] [Fintype Γ'] [DecidableEq Γ']
   (change_of_alphabet : Γ → Γ')
   (M : Turing.TM0.Machine (Γ := Γ') (Λ := Λ))
   (S : Finset Λ)
@@ -1657,7 +1657,7 @@ lemma generatorFromTM0_supports {Γ Γ' Λ : Type u}
 
 theorem anything_a_tm0_recognises_can_be_generated_by_its_generator {Γ Γ' Λ : Type u}
   [Inhabited Λ] [Inhabited Γ] [FinEnum Γ]
-  [Inhabited Γ'] [FinEnum Γ']
+  [Inhabited Γ'] [Fintype Γ'] [DecidableEq Γ']
   (change_of_alphabet : Γ → Γ')
   (hchange_default : change_of_alphabet default = default)
   (hchange_injective : Function.Injective change_of_alphabet)
@@ -1709,7 +1709,7 @@ theorem anything_a_tm0_recognises_can_be_generated_by_its_generator {Γ Γ' Λ :
 
 def loading_inv {Γ Γ' Λ : Type u}
   [Inhabited Λ] [Inhabited Γ] [FinEnum Γ]
-  [Inhabited Γ'] [FinEnum Γ']
+  [Inhabited Γ'] [Fintype Γ'] [DecidableEq Γ']
   (change_of_alphabet : Γ → Γ')
   (cfg : GenConfig Γ' Γ (GenState Λ Γ (StandardEncoding Γ))) : Prop :=
   (∃ ls, cfg.state = GenState.load ls)
@@ -1722,7 +1722,7 @@ def loading_inv {Γ Γ' Λ : Type u}
 
 def rewinding_config {Γ Γ' Λ : Type u}
   [Inhabited Λ] [Inhabited Γ] [FinEnum Γ]
-  [Inhabited Γ'] [FinEnum Γ']
+  [Inhabited Γ'] [Fintype Γ'] [DecidableEq Γ']
   (change_of_alphabet : Γ → Γ')
   (cfg : GenConfig Γ' Γ (GenState Λ Γ (StandardEncoding Γ))) : Prop :=
   cfg.state = GenState.rewind
@@ -1735,7 +1735,7 @@ def rewinding_config {Γ Γ' Λ : Type u}
 
 lemma loading_inv_preserved_or_becomes_rewinding {Γ Γ' Λ : Type u}
   [Inhabited Λ] [Inhabited Γ] [FinEnum Γ]
-  [Inhabited Γ'] [FinEnum Γ']
+  [Inhabited Γ'] [Fintype Γ'] [DecidableEq Γ']
   (change_of_alphabet : Γ → Γ')
   (M : Turing.TM0.Machine (Γ := Γ') (Λ := Λ))
   (cfg cfg' : GenConfig Γ' Γ (GenState Λ Γ (StandardEncoding Γ)))
@@ -1991,7 +1991,7 @@ lemma loading_inv_preserved_or_becomes_rewinding {Γ Γ' Λ : Type u}
 
 lemma generation_must_get_ready_to_rewind {Γ Γ' Λ : Type u}
   [Inhabited Λ] [Inhabited Γ] [FinEnum Γ]
-  [Inhabited Γ'] [FinEnum Γ']
+  [Inhabited Γ'] [Fintype Γ'] [DecidableEq Γ']
   (change_of_alphabet : Γ → Γ')
   (M : Turing.TM0.Machine (Γ := Γ') (Λ := Λ))
   (bitstream : ℕ → Bool)
@@ -2110,7 +2110,7 @@ lemma generation_must_get_ready_to_rewind {Γ Γ' Λ : Type u}
 -- final output
 lemma sim_output_eq_final_output {Γ Γ' Λ : Type u}
   [Inhabited Λ] [Inhabited Γ] [FinEnum Γ]
-  [Inhabited Γ'] [FinEnum Γ']
+  [Inhabited Γ'] [Fintype Γ'] [DecidableEq Γ']
   (change_of_alphabet : Γ → Γ')
   (M : Turing.TM0.Machine (Γ := Γ') (Λ := Λ))
   (cfg : GenConfig Γ' Γ (GenState Λ Γ (StandardEncoding Γ)))
@@ -2130,7 +2130,7 @@ lemma sim_output_eq_final_output {Γ Γ' Λ : Type u}
 
 lemma generation_must_get_ready_to_simulate {Γ Γ' Λ : Type u}
   [Inhabited Λ] [Inhabited Γ] [FinEnum Γ]
-  [Inhabited Γ'] [FinEnum Γ']
+  [Inhabited Γ'] [Fintype Γ'] [DecidableEq Γ']
   (change_of_alphabet : Γ → Γ')
   (hchange_default : change_of_alphabet default = default)
   (hchange_injective : Function.Injective change_of_alphabet)
@@ -2218,7 +2218,7 @@ lemma generation_must_get_ready_to_simulate {Γ Γ' Λ : Type u}
 
 lemma sim_steps_imply_tm0_steps {Γ Γ' Λ : Type u}
   [Inhabited Λ] [Inhabited Γ] [FinEnum Γ]
-  [Inhabited Γ'] [FinEnum Γ']
+  [Inhabited Γ'] [Fintype Γ'] [DecidableEq Γ']
   (change_of_alphabet : Γ → Γ')
   (M : Turing.TM0.Machine (Γ := Γ') (Λ := Λ))
   (genCfg : GenConfig Γ' Γ (GenState Λ Γ (StandardEncoding Γ)))
@@ -2278,7 +2278,7 @@ lemma sim_steps_imply_tm0_steps {Γ Γ' Λ : Type u}
 
 theorem anything_a_generator_generates_is_recognised_by_its_tm0 {Γ Γ' Λ : Type u}
   [Inhabited Λ] [Inhabited Γ] [FinEnum Γ]
-  [Inhabited Γ'] [FinEnum Γ']
+  [Inhabited Γ'] [Fintype Γ'] [DecidableEq Γ']
   (change_of_alphabet : Γ → Γ')
   (hchange_default : change_of_alphabet default = default)
   (hchange_injective : Function.Injective change_of_alphabet)
@@ -2385,7 +2385,7 @@ theorem anything_a_generator_generates_is_recognised_by_its_tm0 {Γ Γ' Λ : Typ
 lemma language_recognised_by_tm0_subset_language_of_generator_from_tm0 {Γ Γ' Λ : Type u}
   [Inhabited Λ]
   [Inhabited Γ] [FinEnum Γ]
-  [Inhabited Γ'] [FinEnum Γ']
+  [Inhabited Γ'] [Fintype Γ'] [DecidableEq Γ']
   (change_of_alphabet : Γ → Γ')
   (hchange_default : change_of_alphabet default = default)
   (hchange_injective : Function.Injective change_of_alphabet)
@@ -2405,7 +2405,7 @@ lemma language_recognised_by_tm0_subset_language_of_generator_from_tm0 {Γ Γ' �
 lemma language_of_generator_from_tm0_subset_language_recognised_by_tm0 {Γ Γ' Λ : Type u}
   [Inhabited Λ]
   [Inhabited Γ] [FinEnum Γ]
-  [Inhabited Γ'] [FinEnum Γ']
+  [Inhabited Γ'] [Fintype Γ'] [DecidableEq Γ']
   (change_of_alphabet : Γ → Γ')
   (hchange_default : change_of_alphabet default = default)
   (hchange_injective : Function.Injective change_of_alphabet)
@@ -2431,7 +2431,7 @@ lemma language_of_generator_from_tm0_subset_language_recognised_by_tm0 {Γ Γ' �
 lemma language_of_tm0_eq_language_of_generator_from_tm0 {Γ Γ' Λ : Type u}
   [Inhabited Λ]
   [Inhabited Γ] [FinEnum Γ]
-  [Inhabited Γ'] [FinEnum Γ']
+  [Inhabited Γ'] [Fintype Γ'] [DecidableEq Γ']
   (change_of_alphabet : Γ → Γ')
   (hchange_default : change_of_alphabet default = default)
   (hchange_injective : Function.Injective change_of_alphabet)

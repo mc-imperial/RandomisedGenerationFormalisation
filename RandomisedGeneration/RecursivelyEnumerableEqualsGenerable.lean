@@ -12,7 +12,8 @@ theorem TM0_recognisable_subset_generable {Γ : Type u}
   [Inhabited Γ] [FinEnum Γ] :
   languagesRecognisedByTM0s (Γ := Γ) ⊆ generableLanguages := by
     intro L hL
-    rcases hL with ⟨Γ', hΓ'inh, hΓ'fin, enc, henc_inj, henc_default, Λ, hΛinh, M, S, hS, hLeq⟩
+    rcases hL with ⟨Γ', hΓ'inh, hΓ'fin, hΓ'deceq, enc, henc_inj, henc_default, Λ, hΛinh,
+      M, S, hS, hLeq⟩
     refine ⟨Γ', GenerationByTM0Simulation.GenState Λ Γ (StandardEncoding Γ), inferInstance,
            GenerationByTM0Simulation.generatorFromTM0 enc M,
            (GenerationByTM0Simulation.generatorFromTM0_supports enc M S hS).choose,

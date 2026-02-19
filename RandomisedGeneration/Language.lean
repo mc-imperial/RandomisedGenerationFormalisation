@@ -33,7 +33,8 @@ def languagesRecognisedByTM0s {Γ : Type u}
     [Inhabited Γ] [FinEnum Γ] : Set (Language Γ) :=
   { L | ∃ (Γ' : Type u)
           (_ : Inhabited Γ')
-          (_ : FinEnum Γ')
+          (_ : Fintype Γ')
+          (_ : DecidableEq Γ')
           (enc : Γ → Γ')
           (_ : Function.Injective enc)
           (_ : enc default = default)
@@ -47,7 +48,8 @@ def languagesRecognisedByTM0s {Γ : Type u}
 def languagesRecognisedByTM1s {Γ : Type u} [Inhabited Γ] [FinEnum Γ] : Set (Language Γ) :=
   { L | ∃ (Γ' : Type u)
           (_ : Inhabited Γ')
-          (_ : FinEnum Γ')
+          (_ : Fintype Γ')
+          (_ : DecidableEq Γ')
           (enc : Γ → Γ')
           (_ : Function.Injective enc)
           (_ : enc default = default)
@@ -66,9 +68,9 @@ lemma every_tm1_recognisable_language_is_tm0_recognisable {Γ : Type u}
     (L : Language Γ)
     (hL : L ∈ languagesRecognisedByTM1s) :
     L ∈ languagesRecognisedByTM0s := by
-  obtain ⟨Γ', hΓ'inh, hΓ'fin, enc, henc_inj, henc_def, Λ,
+  obtain ⟨Γ', hΓ'inh, hΓ'fin, hΓ'dec, enc, henc_inj, henc_def, Λ,
     hΛinh, σ, hσinh, hσfin, M, S, hS, hL_eq⟩ := hL
-  refine ⟨Γ', hΓ'inh, hΓ'fin, enc, henc_inj, henc_def,
+  refine ⟨Γ', hΓ'inh, hΓ'fin, hΓ'dec, enc, henc_inj, henc_def,
           Turing.TM1to0.Λ' M, inferInstance,
           Turing.TM1to0.tr M,
           Turing.TM1to0.trStmts M S,
