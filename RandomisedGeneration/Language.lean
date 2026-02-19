@@ -28,7 +28,6 @@ def generableLanguages {Γ : Type u}
           (hS : GeneratorSupports gen S),
     generatedLanguage gen S hS = L }
 
--- Does not require Fintype Λ so that the Generator → TM0 direction can use it
 def languageRecognisedByTM0 {Γ Λ : Type u}
 [Inhabited Λ] [Inhabited Γ] [FinEnum Γ]
   (M : Turing.TM0.Machine (Γ := Γ) (Λ := Λ))
@@ -37,7 +36,6 @@ def languageRecognisedByTM0 {Γ Λ : Type u}
   ⟨{ input | default ∉ input ∧ (Turing.TM0.eval M input).Dom },
    fun _ hInput => hInput.1⟩
 
--- Requires Fintype Λ so that TM0 → Generator direction can use generatorFromTM0
 def languagesRecognisedByTM0s {Γ : Type u}
 [Inhabited Γ] [FinEnum Γ]
 : Set (Language Γ) :=
@@ -47,25 +45,5 @@ def languagesRecognisedByTM0s {Γ : Type u}
           (S : Finset Λ)
           (hS : Turing.TM0.Supports M S),
     L = languageRecognisedByTM0 M S hS }
-
--- The weak version without Fintype Λ, needed for the generable → TM0 direction
-def languagesRecognisedByTM0s_weak {Γ : Type u}
-[Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ]
-: Set (Language Γ) :=
-  { L | ∃ (Λ : Type u) (_ : Inhabited Λ) (M : Turing.TM0.Machine (Γ := Γ) (Λ := Λ)),
-    L = languageRecognisedByTM0 M }
-
--- The two sets are equal: Fintype on the state space doesn't affect recognisability
--- This is the key mathematical fact that lets us connect the two directions
-theorem languagesRecognisedByTM0s_eq_weak {Γ : Type u}
-[Inhabited Γ] [Fintype Γ] [FinEnum Γ] [DecidableEq Γ] :
-languagesRecognisedByTM0s (Γ := Γ) = languagesRecognisedByTM0s_weak (Γ := Γ) := by
-  apply Set.Subset.antisymm
-  · -- Strong → Weak: trivial, just drop Fintype
-    intro L ⟨Λ, hΛinh, _, M, hM⟩
-    exact ⟨Λ, hΛinh, M, hM⟩
-  · -- Weak → Strong: hard, need to show any TM0 with infinite states
-    -- can be simulated by one with finite states via Supports
-    sorry
 
 end RandomisedGeneration
