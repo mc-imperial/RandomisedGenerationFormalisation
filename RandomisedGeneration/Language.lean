@@ -1,6 +1,7 @@
 import Mathlib
 import Mathlib.Computability.Halting
 import Mathlib.Computability.PostTuringMachine
+import Mathlib.Computability.TuringMachine
 import RandomisedGeneration.Generator
 
 namespace RandomisedGeneration
@@ -28,22 +29,58 @@ def generableLanguages {Γ : Type u}
           (hS : GeneratorSupports gen S),
     generatedLanguage gen S hS = L }
 
-def languageRecognisedByTM0 {Γ Λ : Type u}
-[Inhabited Λ] [Inhabited Γ] [FinEnum Γ]
-  (M : Turing.TM0.Machine (Γ := Γ) (Λ := Λ))
-  (S : Finset Λ)
-  (_ : Turing.TM0.Supports M ↑S) : Language Γ :=
-  ⟨{ input | default ∉ input ∧ (Turing.TM0.eval M input).Dom },
-   fun _ hInput => hInput.1⟩
-
 def languagesRecognisedByTM0s {Γ : Type u}
-[Inhabited Γ] [FinEnum Γ]
-: Set (Language Γ) :=
-  { L | ∃ (Λ : Type u)
+    [Inhabited Γ] [FinEnum Γ] : Set (Language Γ) :=
+  { L | ∃ (Γ' : Type u)
+          (_ : Inhabited Γ')
+          (_ : FinEnum Γ')
+          (enc : Γ → Γ')
+          (_ : Function.Injective enc)
+          (_ : enc default = default)
+          (Λ : Type u)
           (_ : Inhabited Λ)
-          (M : Turing.TM0.Machine (Γ := Γ) (Λ := Λ))
+          (M : Turing.TM0.Machine (Γ := Γ') (Λ := Λ))
           (S : Finset Λ)
-          (hS : Turing.TM0.Supports M S),
-    L = languageRecognisedByTM0 M S hS }
+          (_ : Turing.TM0.Supports M S),
+    L.val = { input | default ∉ input ∧ (Turing.TM0.eval M (input.map enc)).Dom } }
+
+def languagesRecognisedByTM1s {Γ : Type u} [Inhabited Γ] [FinEnum Γ] : Set (Language Γ) :=
+  { L | ∃ (Γ' : Type u)
+          (_ : Inhabited Γ')
+          (_ : FinEnum Γ')
+          (enc : Γ → Γ')
+          (_ : Function.Injective enc)
+          (_ : enc default = default)
+          (Λ : Type u)
+          (_ : Inhabited Λ)
+          (σ : Type u)
+          (_ : Inhabited σ)
+          (_ : Fintype σ)
+          (M : Λ → Turing.TM1.Stmt Γ' Λ σ)
+          (S : Finset Λ)
+          (_ : Turing.TM1.Supports M S),
+        L.val = { input | default ∉ input ∧ (Turing.TM1.eval M (input.map enc)).Dom } }
+
+lemma every_tm1_recognisable_language_is_tm0_recognisable {Γ : Type u}
+    [Inhabited Γ] [FinEnum Γ]
+    (L : Language Γ)
+    (hL : L ∈ languagesRecognisedByTM1s) :
+    L ∈ languagesRecognisedByTM0s := by
+  obtain ⟨Γ', hΓ'inh, hΓ'fin, enc, henc_inj, henc_def, Λ,
+    hΛinh, σ, hσinh, hσfin, M, S, hS, hL_eq⟩ := hL
+  refine ⟨Γ', hΓ'inh, hΓ'fin, enc, henc_inj, henc_def,
+          Turing.TM1to0.Λ' M, inferInstance,
+          Turing.TM1to0.tr M,
+          Turing.TM1to0.trStmts M S,
+          Turing.TM1to0.tr_supports M hS,
+          ?_⟩
+  rw [hL_eq]
+  ext input
+  simp only [Set.mem_setOf_eq]
+  constructor
+  · rintro ⟨hnodef, hdom⟩
+    exact ⟨hnodef, (Turing.TM1to0.tr_eval M (input.map enc)) ▸ hdom⟩
+  · rintro ⟨hnodef, hdom⟩
+    exact ⟨hnodef, (Turing.TM1to0.tr_eval M (input.map enc)) ▸ hdom⟩
 
 end RandomisedGeneration
