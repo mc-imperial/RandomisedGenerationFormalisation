@@ -22,7 +22,6 @@ inductive GenState (Λ Γ : Type u)
   | rewind
   | sim  (q  : Λ)
 
-
 def generatorFromTM0 {Γ Γ' Λ : Type u}
     [Inhabited Λ]
     [Inhabited Γ] [FinEnum Γ]
@@ -51,26 +50,16 @@ def generatorFromTM0 {Γ Γ' Λ : Type u}
               WorkTapeDirection.L
             )
           | some (g : Γ) =>
-            if g = default then
-              -- Default symbol decoded; switch to rewind mode
-              some (
-                GenState.rewind,
-                w,
-                none,
-                InputTapeDirection.N,
-                WorkTapeDirection.L
-              )
-            else
-              -- A non-default symbol has been fully decoded. Write it to the work tape
-              -- and produce it as an output. Reset the load state to start
-              -- on the next symbol.
-              some (
-                GenState.load { bitsRead := 0, acc := 0, accBound := by simp},
-                change_of_alphabet g,
-                g,
-                InputTapeDirection.N,
-                WorkTapeDirection.R
-              )
+            -- A symbol has been fully decoded. Write it to the work tape
+            -- and produce it as an output. Reset the load state to start
+            -- on the next symbol.
+            some (
+              GenState.load { bitsRead := 0, acc := 0, accBound := by simp},
+              change_of_alphabet g,
+              g,
+              InputTapeDirection.N,
+              WorkTapeDirection.R
+            )
         else
           let newBits : Fin (enc_Γ.W + 1) := ⟨ls.bitsRead.val + 1, by omega⟩
           --
@@ -131,61 +120,7 @@ def generatorFromTM0 {Γ Γ' Λ : Type u}
           | Turing.TM0.Stmt.move Turing.Dir.left =>
             some (GenState.sim q', w, none, InputTapeDirection.N, WorkTapeDirection.L)
           | Turing.TM0.Stmt.move Turing.Dir.right =>
-            some (GenState.sim q', w, none, InputTapeDirection.N, WorkTapeDirection.R),
-    no_default_output := by
-      intros q b w q' w' o itd wtd h_δ γ h_o
-      cases q with
-      | load ls =>
-        simp only at h_δ
-        split at h_δ
-        · -- bitsRead.val = enc_Γ.W
-          split at h_δ
-          · -- enc_Γ.enum ls.acc = none
-            simp only [Option.some.injEq] at h_δ
-            obtain ⟨_, _, h_o_eq, _, _⟩ := h_δ
-            simp at h_o
-          · -- enc_Γ.enum ls.acc = some g
-            rename_i g
-            split at h_δ
-            · -- g = default
-              simp only [Option.some.injEq] at h_δ
-              obtain ⟨_, _, h_o_eq, _, _⟩ := h_δ
-              simp at h_o
-            · -- g ≠ default
-              rename_i h_ne
-              simp only [Option.some.injEq] at h_δ
-              obtain ⟨_, _, h_o_eq, _, _⟩ := h_δ
-              simp only [Option.some.injEq] at h_o
-              rw [← h_o]
-              exact h_ne
-        · -- bitsRead.val ≠ enc_Γ.W
-          simp only [Option.some.injEq] at h_δ
-          obtain ⟨_, _, h_o_eq, _, _⟩ := h_δ
-          simp at h_o
-      | rewind =>
-        simp only at h_δ
-        split at h_δ <;> simp_all
-      | sim q_tm =>
-        simp only at h_δ
-        split at h_δ
-        · contradiction
-        · rename_i q'_tm stmt heq_M
-          cases stmt
-          · -- move case
-            rename_i dir
-            cases dir
-            · -- left
-              simp only [Option.some.injEq] at h_δ
-              obtain ⟨_, _, h_o_eq, _, _⟩ := h_δ
-              simp at h_o
-            · -- right
-              simp only [Option.some.injEq] at h_δ
-              obtain ⟨_, _, h_o_eq, _, _⟩ := h_δ
-              simp at h_o
-          · -- write case
-            simp only [Option.some.injEq] at h_δ
-            obtain ⟨_, _, h_o_eq, _, _⟩ := h_δ
-            simp at h_o
+            some (GenState.sim q', w, none, InputTapeDirection.N, WorkTapeDirection.R)
 }
 
 def decode_bit_inv {Γ Γ' Λ : Type u}
@@ -335,23 +270,12 @@ lemma decode_bit_within_symbol {Γ Γ' Λ : Type u}
   · exact h_input
   · exact h_output
 
-lemma input_symbols_not_default {Γ : Type u}
-  [Inhabited Γ]
-  (input : List Γ) (h_no_default : default ∉ input)
-  {k : ℕ} (hk : k < input.length) :
-  input.get ⟨k, hk⟩ ≠ default := by
-  intro h_eq
-  apply h_no_default
-  rw [← h_eq]
-  exact List.get_mem input ⟨k, hk⟩
-
 lemma write_decoded_symbol {Γ Γ' Λ : Type u}
   [Inhabited Λ] [Inhabited Γ] [FinEnum Γ]
   [Inhabited Γ'] [Fintype Γ'] [DecidableEq Γ']
   (change_of_alphabet : Γ → Γ')
   (M : Turing.TM0.Machine (Γ := Γ') (Λ := Λ))
   (input : List Γ)
-  (h_no_default : default ∉ input)
   {k : ℕ} (hk : k < input.length)
   (cfg : GenConfig Γ' Γ (GenState Λ Γ (StandardEncoding Γ)))
   (acc : Fin (2 ^ (StandardEncoding Γ).W))
@@ -376,8 +300,6 @@ lemma write_decoded_symbol {Γ Γ' Λ : Type u}
   rw [h_state, h_inputIndex, h_workIndex]
   -- We're in the case where bitsRead = W, so h_eq holds
   have h_eq : (StandardEncoding Γ).W = (StandardEncoding Γ).W := rfl
-  have h_not_default : input.get ⟨k, hk⟩ ≠ default :=
-    input_symbols_not_default input h_no_default hk
   simp only [↓reduceDIte, Int.reduceNeg]
   -- Now we construct the next configuration
   use {
@@ -394,11 +316,11 @@ lemma write_decoded_symbol {Γ Γ' Λ : Type u}
     output := cfg.output ++ [input.get ⟨k, hk⟩]
   }
   constructor
-  · simp only [List.get_eq_getElem, h_enum, List.get_eq_getElem, Int.reduceNeg,
+  · simp only [List.get_eq_getElem, h_enum, List.get_eq_getElem,
       h_inputIndex, h_workIndex]
     have h_get_eq : input[k] = input.get ⟨k, hk⟩ := by rfl
     rw [h_get_eq]
-    simp only [h_not_default, ↓reduceIte, add_zero]
+    simp only [add_zero]
   -- Prove decode_symbol_inv
   unfold decode_symbol_inv
   simp only [h_inputIndex, h_workIndex]
@@ -454,7 +376,6 @@ lemma decode_one_symbol {Γ Γ' Λ : Type u}
   (change_of_alphabet : Γ → Γ')
   (M : Turing.TM0.Machine (Γ := Γ') (Λ := Λ))
   (input : List Γ)
-  (h_no_default : default ∉ input)
   (cfg : GenConfig Γ' Γ (GenState Λ Γ (StandardEncoding Γ)))
   {k : ℕ} (hk : k < input.length)
 :
@@ -548,7 +469,7 @@ lemma decode_one_symbol {Γ Γ' Λ : Type u}
     rw [h_inputIndexW]
     ring
   obtain ⟨cfg', h_step_write, h_final⟩ :=
-    write_decoded_symbol change_of_alphabet M input h_no_default hk
+    write_decoded_symbol change_of_alphabet M input hk
       cfgW
       _
       h_stateW
@@ -771,7 +692,6 @@ lemma generator_gets_to_rewind_state {Γ Γ' Λ : Type u}
   (change_of_alphabet : Γ → Γ')
   (M : Turing.TM0.Machine (Γ := Γ') (Λ := Λ))
   (input : List Γ)
-  (h_no_default : default ∉ input)
 : ∃ cfg : GenConfig Γ' Γ (GenState Λ Γ (StandardEncoding Γ)),
     let gen := generatorFromTM0 (enc_Γ := StandardEncoding Γ) change_of_alphabet M
     cfg.state = GenState.rewind
@@ -813,7 +733,7 @@ lemma generator_gets_to_rewind_state {Γ Γ' Λ : Type u}
         ih (Nat.le_of_lt h_lt)
       rcases h_prev with ⟨cfg_i, hInv_i, h_steps_to_i⟩
       have h_next :=
-        decode_one_symbol change_of_alphabet M input h_no_default cfg_i h_lt hInv_i
+        decode_one_symbol change_of_alphabet M input cfg_i h_lt hInv_i
       obtain ⟨cfg', h_steps_cfg_i_to_cfg', h_inv_cfg'⟩ := h_next
       have h_steps_to_init_cfg' :
           StepsTo gen initialCfg cfg' := by
@@ -852,16 +772,14 @@ lemma rewinding_goes_back_one {Γ Γ' Λ : Type u}
   [Inhabited Λ] [Inhabited Γ] [FinEnum Γ]
   [Inhabited Γ'] [Fintype Γ'] [DecidableEq Γ']
   (change_of_alphabet : Γ → Γ')
-  (hchange_default : change_of_alphabet default = default)
-  (hchange_injective : Function.Injective change_of_alphabet)
+  (hchange_blank : default ∉ Set.range change_of_alphabet)
   (M : Turing.TM0.Machine (Γ := Γ') (Λ := Λ))
   (input : List Γ)
   (cfg : GenConfig Γ' Γ (GenState Λ Γ (StandardEncoding Γ)))
   (h : cfg.state = GenState.rewind
     ∧ cfg.workIndex < input.length
     ∧ cfg.workIndex ≥ 0
-    ∧ (∀ i (h : i < input.length), cfg.work (i : ℤ) = change_of_alphabet (input.get ⟨i, h⟩))
-    ∧ default ∉ input)
+    ∧ (∀ i (h : i < input.length), cfg.work (i : ℤ) = change_of_alphabet (input.get ⟨i, h⟩)))
 : step (generatorFromTM0 (enc_Γ := StandardEncoding Γ) change_of_alphabet M) cfg = some {
     state := GenState.rewind,
     input := cfg.input,
@@ -870,7 +788,7 @@ lemma rewinding_goes_back_one {Γ Γ' Λ : Type u}
     workIndex := cfg.workIndex - 1,
     output := cfg.output
 } := by
-  obtain ⟨h_state, h_idx_bound, h_idx_nonneg, h_work_input, h_no_blank⟩ := h
+  obtain ⟨h_state, h_idx_bound, h_idx_nonneg, h_work_input⟩ := h
   unfold step generatorFromTM0
   simp only [h_state]
   -- Show that cfg.work (cfg.workIndex) ≠ default
@@ -883,10 +801,7 @@ lemma rewinding_goes_back_one {Γ Γ' Λ : Type u}
       exact h_idx_nonneg
     rw [h_eq]
     intro h_contra
-    apply h_no_blank
-    have := hchange_injective (h_contra.trans hchange_default.symm)
-    rw [← this]
-    exact List.get_mem input ⟨cfg.workIndex.toNat, by omega⟩
+    exact hchange_blank (Set.mem_range.mpr ⟨_, h_contra⟩)
   simp only [if_neg h_not_blank]
   norm_num
   constructor
@@ -900,8 +815,7 @@ lemma full_rewinding_gets_back_to_negative_index {Γ Γ' Λ : Type u}
   [Inhabited Λ] [Inhabited Γ] [FinEnum Γ]
   [Inhabited Γ'] [Fintype Γ'] [DecidableEq Γ']
   (change_of_alphabet : Γ → Γ')
-  (hchange_default : change_of_alphabet default = default)
-  (hchange_injective : Function.Injective change_of_alphabet)
+  (hchange_blank : default ∉ Set.range change_of_alphabet)
   (M : Turing.TM0.Machine (Γ := Γ') (Λ := Λ))
   (input : List Γ)
   (cfg : GenConfig Γ' Γ (GenState Λ Γ (StandardEncoding Γ)))
@@ -911,8 +825,7 @@ lemma full_rewinding_gets_back_to_negative_index {Γ Γ' Λ : Type u}
     ∧ (∀ i (h : i < input.length), cfg.work (i : ℤ) = change_of_alphabet (input.get ⟨i, h⟩))
     ∧ (∀ i : ℕ, i ≥ input.length → cfg.work (i : ℤ) = (default : Γ'))
     ∧ (∀ i : ℤ, i < 0 → cfg.work (i : ℤ) = (default : Γ'))
-    ∧ cfg.output = input
-    ∧ default ∉ input)
+    ∧ cfg.output = input)
 : ∃ cfg',
     let gen := generatorFromTM0 (enc_Γ := StandardEncoding Γ) change_of_alphabet M
     cfg'.state = GenState.rewind
@@ -924,7 +837,7 @@ lemma full_rewinding_gets_back_to_negative_index {Γ Γ' Λ : Type u}
     ∧ StepsTo gen cfg cfg' := by
   let gen := generatorFromTM0 (enc_Γ := StandardEncoding Γ) change_of_alphabet M
   obtain ⟨h_state, h_idx_bound, h_idx_nonneg, h_work_input, h_work_ge,
-          h_work_neg, h_output, h_no_blank⟩ := h
+          h_work_neg, h_output⟩ := h
   match n : cfg.workIndex.toNat with
   | 0 =>
     have h_idx_eq : cfg.workIndex = 0 := by omega
@@ -951,8 +864,8 @@ lemma full_rewinding_gets_back_to_negative_index {Γ Γ' Λ : Type u}
     · exact h_output
     · use 1
       apply Steps.step cfg cfg' cfg' 0
-      · exact rewinding_goes_back_one change_of_alphabet hchange_default hchange_injective
-          M input cfg ⟨h_state, h_idx_bound, h_idx_nonneg, h_work_input, h_no_blank⟩
+      · exact rewinding_goes_back_one change_of_alphabet hchange_blank
+          M input cfg ⟨h_state, h_idx_bound, h_idx_nonneg, h_work_input⟩
       · exact Steps.refl cfg'
   | m + 1 =>
     have h_idx_eq : cfg.workIndex = m + 1 := by omega
@@ -965,21 +878,20 @@ lemma full_rewinding_gets_back_to_negative_index {Γ Γ' Λ : Type u}
       output := cfg.output
     }
     have h_step : step gen cfg = some cfg_next :=
-      rewinding_goes_back_one change_of_alphabet hchange_default hchange_injective
-        M input cfg ⟨h_state, h_idx_bound, h_idx_nonneg, h_work_input, h_no_blank⟩
+      rewinding_goes_back_one change_of_alphabet hchange_blank
+        M input cfg ⟨h_state, h_idx_bound, h_idx_nonneg, h_work_input⟩
     have h_ih_input : cfg_next.state = GenState.rewind
        ∧ cfg_next.workIndex < input.length
        ∧ cfg_next.workIndex ≥ 0
        ∧ (∀ i (h : i < input.length), cfg_next.work (i : ℤ) = change_of_alphabet (input.get ⟨i, h⟩))
        ∧ (∀ i : ℕ, i ≥ input.length → cfg_next.work (i : ℤ) = (default : Γ'))
        ∧ (∀ i : ℤ, i < 0 → cfg_next.work (i : ℤ) = (default : Γ'))
-       ∧ cfg_next.output = input
-       ∧ default ∉ input := by
+       ∧ cfg_next.output = input := by
          simp only [Order.sub_one_lt_iff, Int.sub_nonneg,
            List.get_eq_getElem, ge_iff_le, true_and, cfg_next]
-         refine ⟨by omega, by omega, by omega, by omega, by omega, by omega, by omega⟩
+         refine ⟨by omega, by omega, by omega, by omega, by omega, by omega⟩
     obtain ⟨cfg', h_final⟩ := full_rewinding_gets_back_to_negative_index
-      change_of_alphabet hchange_default hchange_injective M input cfg_next h_ih_input
+      change_of_alphabet hchange_blank M input cfg_next h_ih_input
     use cfg'
     refine ⟨h_final.1, h_final.2.1, h_final.2.2.1, h_final.2.2.2.1,
       h_final.2.2.2.2.1, h_final.2.2.2.2.2.1, ?_⟩
@@ -1018,8 +930,7 @@ lemma rewinding_leads_to_simulation_readiness {Γ Γ' Λ : Type u}
   [Inhabited Λ] [Inhabited Γ] [FinEnum Γ]
   [Inhabited Γ'] [Fintype Γ'] [DecidableEq Γ']
   (change_of_alphabet : Γ → Γ')
-  (hchange_default : change_of_alphabet default = default)
-  (hchange_injective : Function.Injective change_of_alphabet)
+  (hchange_blank : default ∉ Set.range change_of_alphabet)
   (M : Turing.TM0.Machine (Γ := Γ') (Λ := Λ))
   (input : List Γ)
   (cfg : GenConfig Γ' Γ (GenState Λ Γ (StandardEncoding Γ)))
@@ -1028,8 +939,7 @@ lemma rewinding_leads_to_simulation_readiness {Γ Γ' Λ : Type u}
     ∧ (∀ i (h : i < input.length), cfg.work (i : ℤ) = change_of_alphabet (input.get ⟨i, h⟩))
     ∧ (∀ i : ℕ, i ≥ input.length → cfg.work (i : ℤ) = (default : Γ'))
     ∧ (∀ i : ℤ, i < 0 → cfg.work (i : ℤ) = (default : Γ'))
-    ∧ cfg.output = input
-    ∧ default ∉ input)
+    ∧ cfg.output = input)
 : ∃ cfg',
     let gen := generatorFromTM0 (enc_Γ := StandardEncoding Γ) change_of_alphabet M
     cfg'.state = GenState.sim (default : Λ)
@@ -1040,7 +950,7 @@ lemma rewinding_leads_to_simulation_readiness {Γ Γ' Λ : Type u}
     ∧ cfg'.output = input
     ∧ StepsTo gen cfg cfg' := by
   let gen := generatorFromTM0 (enc_Γ := StandardEncoding Γ) change_of_alphabet M
-  obtain ⟨h_state, h_idx, h_work_input, h_work_blank_high, h_work_blank_low, h_output, h_no_default⟩
+  obtain ⟨h_state, h_idx, h_work_input, h_work_blank_high, h_work_blank_low, h_output⟩
     := h
   by_cases h_empty : input.length = 0
   · have h_idx_neg : cfg.workIndex = -1 := by simp [h_idx, h_empty]
@@ -1077,15 +987,14 @@ lemma rewinding_leads_to_simulation_readiness {Γ Γ' Λ : Type u}
       ∧ (∀ i (h : i < input.length), cfg.work (i : ℤ) = change_of_alphabet (input.get ⟨i, h⟩))
       ∧ (∀ i : ℕ, i ≥ input.length → cfg.work (i : ℤ) = (default : Γ'))
       ∧ (∀ i : ℤ, i < 0 → cfg.work (i : ℤ) = (default : Γ'))
-      ∧ cfg.output = input
-      ∧ default ∉ input :=
+      ∧ cfg.output = input :=
         ⟨h_state, h_idx_bound, h_idx_nonneg, h_work_input,
-         h_work_blank_high, h_work_blank_low, h_output, h_no_default⟩
+         h_work_blank_high, h_work_blank_low, h_output⟩
     obtain ⟨rewindCfg, h_rewind_state, h_rewind_idx, h_rewind_work_input,
             h_rewind_work_blank_high, h_rewind_work_blank_low, h_rewind_output,
             h_steps_to_rewind⟩ :=
-      full_rewinding_gets_back_to_negative_index change_of_alphabet hchange_default
-        hchange_injective M input cfg h_many_conditions
+      full_rewinding_gets_back_to_negative_index change_of_alphabet hchange_blank
+        M input cfg h_many_conditions
     have h_rewind_work_neg : rewindCfg.work (-1) = (default : Γ') :=
       h_rewind_work_blank_low (-1) (by omega)
     have h_step := rewind_at_negative_index_leads_to_simulation change_of_alphabet M rewindCfg
@@ -1118,11 +1027,9 @@ lemma generator_gets_to_simulation_state {Γ Γ' Λ : Type u}
   [Inhabited Λ] [Inhabited Γ] [FinEnum Γ]
   [Inhabited Γ'] [Fintype Γ'] [DecidableEq Γ']
   (change_of_alphabet : Γ → Γ')
-  (hchange_default : change_of_alphabet default = default)
-  (hchange_injective : Function.Injective change_of_alphabet)
+  (hchange_blank : default ∉ Set.range change_of_alphabet)
   (M : Turing.TM0.Machine (Γ := Γ') (Λ := Λ))
   (input : List Γ)
-  (h_no_default : default ∉ input)
 : ∃ cfg : GenConfig Γ' Γ (GenState Λ Γ (StandardEncoding Γ)),
     let gen := generatorFromTM0 (enc_Γ := StandardEncoding Γ) change_of_alphabet M
     cfg.state = GenState.sim (default : Λ)
@@ -1138,19 +1045,18 @@ lemma generator_gets_to_simulation_state {Γ Γ' Λ : Type u}
     let gen := generatorFromTM0 (enc_Γ := StandardEncoding Γ) change_of_alphabet M
     obtain ⟨rewindCfg, h_rewind_state, h_rewind_idx, h_rewind_work_input,
             h_rewind_work_blank_high, h_rewind_work_blank_low, h_rewind_output, h_init_to_rewind⟩ :=
-      generator_gets_to_rewind_state change_of_alphabet M input h_no_default
+      generator_gets_to_rewind_state change_of_alphabet M input
     have h_rewind_conditions : rewindCfg.state = GenState.rewind
       ∧ rewindCfg.workIndex = input.length - 1
       ∧ (∀ i (h : i < input.length), rewindCfg.work (i : ℤ) = change_of_alphabet (input.get ⟨i, h⟩))
       ∧ (∀ i : ℕ, i ≥ input.length → rewindCfg.work (i : ℤ) = (default : Γ'))
       ∧ (∀ i : ℤ, i < 0 → rewindCfg.work (i : ℤ) = (default : Γ'))
-      ∧ rewindCfg.output = input
-      ∧ default ∉ input :=
+      ∧ rewindCfg.output = input :=
         ⟨h_rewind_state, h_rewind_idx, h_rewind_work_input,
-         h_rewind_work_blank_high, h_rewind_work_blank_low, h_rewind_output, h_no_default⟩
+         h_rewind_work_blank_high, h_rewind_work_blank_low, h_rewind_output⟩
     obtain ⟨simCfg, h_sim_state, h_sim_idx, h_sim_work_input, h_sim_work_blank_high,
             h_sim_work_blank_low, h_sim_output, h_rewind_to_sim⟩ :=
-      rewinding_leads_to_simulation_readiness change_of_alphabet hchange_default hchange_injective
+      rewinding_leads_to_simulation_readiness change_of_alphabet hchange_blank
         M input rewindCfg h_rewind_conditions
     use simCfg
     refine ⟨h_sim_state, h_sim_idx, h_sim_work_input, h_sim_work_blank_high,
@@ -1418,7 +1324,6 @@ lemma simulationWorksOnceWeAreReady {Γ Γ' Λ : Type u}
     ∧ (∀ i : ℕ, i ≥ input.length → cfg.work (i : ℤ) = (default : Γ'))
     ∧ (∀ i : ℤ, i < 0 → cfg.work (i : ℤ) = (default : Γ'))
     ∧ cfg.output = input
-    ∧ default ∉ input
   ) :
   ∃ haltCfg,
     let gen := generatorFromTM0 (enc_Γ := StandardEncoding Γ) change_of_alphabet M
@@ -1427,7 +1332,7 @@ lemma simulationWorksOnceWeAreReady {Γ Γ' Λ : Type u}
     ∧ haltCfg.output = input := by
   --
   obtain ⟨h_state, h_idx, h_work_input, h_work_blank_high, h_work_blank_low,
-    h_output, h_no_default⟩ := h_cfg
+    h_output⟩ := h_cfg
   --
   -- Step 1: Show `cfg` matches the TM0 initial configuration
   have h_match_init : ConfigurationsMatch cfg (Turing.TM0.init (input.map change_of_alphabet)) := by
@@ -1610,13 +1515,8 @@ lemma generatorFromTM0_supports {Γ Γ' Λ : Type u}
           simp only [Option.some.injEq] at h_δ; obtain ⟨rfl, -⟩ := h_δ
           left; right; rfl
         · rename_i g
-          split at h_δ
-          · -- g = default → rewind
-            simp only [Option.some.injEq] at h_δ; obtain ⟨rfl, -⟩ := h_δ
-            left; right; rfl
-          · -- g ≠ default → load
-            simp only [Option.some.injEq] at h_δ; obtain ⟨rfl, -⟩ := h_δ
-            left; left; exact ⟨_, rfl⟩
+          simp only [Option.some.injEq] at h_δ; obtain ⟨rfl, -⟩ := h_δ
+          left; left; exact ⟨_, rfl⟩
       · -- still reading → load
         simp only [Option.some.injEq] at h_δ; obtain ⟨rfl, -⟩ := h_δ
         left; left; exact ⟨_, rfl⟩
@@ -1659,22 +1559,21 @@ theorem anything_a_tm0_recognises_can_be_generated_by_its_generator {Γ Γ' Λ :
   [Inhabited Λ] [Inhabited Γ] [FinEnum Γ]
   [Inhabited Γ'] [Fintype Γ'] [DecidableEq Γ']
   (change_of_alphabet : Γ → Γ')
-  (hchange_default : change_of_alphabet default = default)
-  (hchange_injective : Function.Injective change_of_alphabet)
+  (hchange_blank : default ∉ Set.range change_of_alphabet)
   (M : Turing.TM0.Machine (Γ := Γ') (Λ := Λ))
   (S : Finset Λ)
-  (hS : Turing.TM0.Supports M ↑S)
+  (hS : Turing.TM0.Supports M S)
   (input : List Γ)
-  (h_no_default : default ∉ input)
   (h_halts : (Turing.TM0.eval M (input.map change_of_alphabet)).Dom) :
   input ∈ (generatedLanguage
     (generatorFromTM0 (enc_Γ := StandardEncoding Γ) change_of_alphabet M)
     (generatorFromTM0_supports change_of_alphabet M S hS).choose
-    (generatorFromTM0_supports change_of_alphabet M S hS).choose_spec).val := by
+    (generatorFromTM0_supports change_of_alphabet M S hS).choose_spec : Set (List Γ)) := by
     let enc_Γ := StandardEncoding Γ
     let gen := generatorFromTM0 (enc_Γ := enc_Γ) change_of_alphabet M
-    rcases generator_gets_to_simulation_state change_of_alphabet hchange_default hchange_injective
-      M input h_no_default
+    rcases generator_gets_to_simulation_state change_of_alphabet
+        hchange_blank
+      M input
       with ⟨
         readyCfg,
         h_readyCfg_initial_state,
@@ -1687,14 +1586,14 @@ theorem anything_a_tm0_recognises_can_be_generated_by_its_generator {Γ Γ' Λ :
       ⟩
     have h_ready : readyCfg.state = GenState.sim (default : Λ)
       ∧ readyCfg.workIndex = 0
-      ∧ (∀ i (h : i < input.length), readyCfg.work (i : ℤ) = change_of_alphabet (input.get ⟨i, h⟩))
+      ∧ (∀ i (h : i < input.length), readyCfg.work (i : ℤ) =
+          change_of_alphabet (input.get ⟨i, h⟩))
       ∧ (∀ i : ℕ, i ≥ input.length → readyCfg.work (i : ℤ) = (default : Γ'))
       ∧ (∀ i : ℤ, i < 0 → readyCfg.work i = (default : Γ'))
-      ∧ readyCfg.output = input
-      ∧ default ∉ input :=
+      ∧ readyCfg.output = input :=
         ⟨h_readyCfg_initial_state, h_readyCfg_work_index_zero,
          h_readyCfg_work_tape_contains_input, h_readyCfg_work_tape_blank_above,
-         h_readyCfg_work_tape_blank_below, h_readyCfg_output_is_input, h_no_default⟩
+         h_readyCfg_work_tape_blank_below, h_readyCfg_output_is_input⟩
     rcases simulationWorksOnceWeAreReady change_of_alphabet M input h_halts readyCfg h_ready
       with ⟨haltCfg, h_steps_to_halt, h_is_halting, h_halt_output⟩
     have h_whole_run : StepsTo gen (initConfig gen (bitstreamFromInput input)) haltCfg := by
@@ -1718,7 +1617,6 @@ def loading_inv {Γ Γ' Λ : Type u}
       cfg.work (i : ℤ) = change_of_alphabet (cfg.output.get ⟨i, h⟩))
   ∧ (∀ i : ℕ, i ≥ cfg.output.length → cfg.work (i : ℤ) = (default : Γ'))
   ∧ (∀ i : ℤ, i < 0 → cfg.work (i : ℤ) = (default : Γ'))
-  ∧ default ∉ cfg.output
 
 def rewinding_config {Γ Γ' Λ : Type u}
   [Inhabited Λ] [Inhabited Γ] [FinEnum Γ]
@@ -1731,7 +1629,6 @@ def rewinding_config {Γ Γ' Λ : Type u}
       cfg.work (i : ℤ) = change_of_alphabet (cfg.output.get ⟨i, h⟩))
   ∧ (∀ i : ℕ, i ≥ cfg.output.length → cfg.work (i : ℤ) = (default : Γ'))
   ∧ (∀ i : ℤ, i < 0 → cfg.work (i : ℤ) = (default : Γ'))
-  ∧ default ∉ cfg.output
 
 lemma loading_inv_preserved_or_becomes_rewinding {Γ Γ' Λ : Type u}
   [Inhabited Λ] [Inhabited Γ] [FinEnum Γ]
@@ -1743,7 +1640,7 @@ lemma loading_inv_preserved_or_becomes_rewinding {Γ Γ' Λ : Type u}
   (h_step : step (generatorFromTM0 (enc_Γ := StandardEncoding Γ) change_of_alphabet M) cfg =
     some cfg')
   : loading_inv change_of_alphabet cfg' ∨ rewinding_config change_of_alphabet cfg' := by
-  obtain ⟨⟨ls, h_state⟩, h_idx, h_work_output, h_work_high, h_work_low, h_no_default⟩ := h_inv
+  obtain ⟨⟨ls, h_state⟩, h_idx, h_work_output, h_work_high, h_work_low⟩ := h_inv
   --
   unfold step generatorFromTM0 at h_step
   simp only [h_state] at h_step
@@ -1788,7 +1685,6 @@ lemma loading_inv_preserved_or_becomes_rewinding {Γ Γ' Λ : Type u}
           omega
         · -- i ≠ cfg.workIndex
           exact h_work_high i hi
-      constructor
       · -- ∀ i : ℤ, i < 0 → cfg'.work i = default
         intro i hi
         split_ifs with heq
@@ -1797,125 +1693,69 @@ lemma loading_inv_preserved_or_becomes_rewinding {Γ Γ' Λ : Type u}
           omega
         · -- i ≠ cfg.workIndex
           exact h_work_low i hi
-      · -- default ∉ cfg'.output
-        exact h_no_default
     | some g =>
       -- Case: enum returns some g
       simp only [h_enum] at h_step
-      -- Now split on whether g = default
-      by_cases h_g_default : g = default
-      · -- Case: g = default (transition to rewind)
-        simp only [h_g_default, ↓reduceIte] at h_step
-        injection h_step with h_cfg'
-        right
-        unfold rewinding_config
-        rw [← h_cfg']
-        simp only [h_idx]
-        constructor
-        · -- cfg'.state = GenState.rewind
-          trivial
-        constructor
-        · -- cfg'.workIndex = cfg'.output.length - 1
-          ring
-        constructor
-        · -- ∀ i (h : i < cfg'.output.length), cfg'.work ↑i = cfg'.output.get ⟨i, h⟩
-          intro i hi
-          split_ifs with heq
-          · -- i = cfg.workIndex
-            simp only at heq
-            omega
-          · -- i ≠ cfg.workIndex
-            exact h_work_output i hi
-        constructor
-        · -- ∀ i : ℕ, i ≥ cfg'.output.length → cfg'.work ↑i = default
-          intro i hi
-          split_ifs with heq
-          · -- i = cfg.workIndex
-            apply h_work_high
-            simp only at heq
-            omega
-          · -- i ≠ cfg.workIndex
-            exact h_work_high i hi
-        constructor
-        · -- ∀ i : ℤ, i < 0 → cfg'.work i = default
-          intro i hi
-          split_ifs with heq
-          · -- i = cfg.workIndex
-            subst heq
-            omega
-          · -- i ≠ cfg.workIndex
-            exact h_work_low i hi
-        · -- default ∉ cfg'.output
-          exact h_no_default
-      · -- Case: g ≠ default (write symbol and continue loading)
-        simp only [h_g_default, ↓reduceIte] at h_step
-        injection h_step with h_cfg'
-        left
-        unfold loading_inv
-        rw [← h_cfg']
-        simp only [h_idx]
-        constructor
-        · -- ∃ ls, cfg'.state = GenState.load ls
-          use { bitsRead := 0, acc := 0, accBound := by simp }
-        constructor
-        · -- cfg'.workIndex = cfg'.output.length
-          simp only [List.length_append, List.length_singleton]
-          omega
-        constructor
-        · -- ∀ i (h : i < cfg'.output.length), cfg'.work ↑i = cfg'.output.get ⟨i, h⟩
-          intro i hi
-          simp only [List.length_append, List.length_singleton] at hi
-          split_ifs with heq
-          · -- i = cfg.workIndex
-            simp only at heq
-            simp only [List.get_eq_getElem]
-            have : i = cfg.output.length := by omega
-            subst this
-            simp
-          · -- i ≠ cfg.workIndex
-            by_cases h : i < cfg.output.length
-            · have hi_append : i < (cfg.output ++ [g]).length := by
-                simp
-                omega
-              have : (cfg.output ++ [g]).get ⟨i, hi_append⟩ = cfg.output.get ⟨i, h⟩ := by
-                simp only [List.get_eq_getElem]
-                rw [List.getElem_append_left h]
-              rw [this]
-              exact h_work_output i h
-            · have : i = cfg.output.length := by
-                linarith
-              subst this
+      injection h_step with h_cfg'
+      left
+      unfold loading_inv
+      rw [← h_cfg']
+      simp only [h_idx]
+      constructor
+      · -- ∃ ls, cfg'.state = GenState.load ls
+        use { bitsRead := 0, acc := 0, accBound := by simp }
+      constructor
+      · -- cfg'.workIndex = cfg'.output.length
+        simp only [List.length_append, List.length_singleton]
+        omega
+      constructor
+      · -- ∀ i (h : i < cfg'.output.length), cfg'.work ↑i = cfg'.output.get ⟨i, h⟩
+        intro i hi
+        simp only [List.length_append, List.length_singleton] at hi
+        split_ifs with heq
+        · -- i = cfg.workIndex
+          simp only at heq
+          simp only [List.get_eq_getElem]
+          have : i = cfg.output.length := by omega
+          subst this
+          simp
+        · -- i ≠ cfg.workIndex
+          by_cases h : i < cfg.output.length
+          · have hi_append : i < (cfg.output ++ [g]).length := by
+              simp
+              omega
+            have : (cfg.output ++ [g]).get ⟨i, hi_append⟩ = cfg.output.get ⟨i, h⟩ := by
               simp only [List.get_eq_getElem]
-              rw [List.getElem_append_right (by omega)]
-              simp only [tsub_self, List.getElem_cons_zero]
-              exfalso
-              apply heq
-              rfl
-        constructor
-        · -- ∀ i : ℕ, i ≥ cfg'.output.length → cfg'.work ↑i = default
-          intro i hi
-          simp only [List.length_append, List.length_singleton] at hi
-          split_ifs with heq
-          · -- i = cfg.workIndex
-            simp only at heq
-            omega
-          · -- i ≠ cfg.workIndex
-            exact h_work_high i (by omega)
-        constructor
-        · -- ∀ i : ℤ, i < 0 → cfg'.work i = default
-          intro i hi
-          split_ifs with heq
-          · -- i = cfg.workIndex
-            subst heq
-            omega
-          · -- i ≠ cfg.workIndex
-            exact h_work_low i hi
-        · -- default ∉ cfg'.output
-          intro h_contra
-          simp only [List.mem_append, List.mem_singleton] at h_contra
-          cases h_contra with
-          | inl h_in_old => trivial
-          | inr h_eq => exact h_g_default h_eq.symm
+              rw [List.getElem_append_left h]
+            rw [this]
+            exact h_work_output i h
+          · have : i = cfg.output.length := by
+              linarith
+            subst this
+            simp only [List.get_eq_getElem]
+            rw [List.getElem_append_right (by omega)]
+            simp only [tsub_self, List.getElem_cons_zero]
+            exfalso
+            apply heq
+            rfl
+      constructor
+      · -- ∀ i : ℕ, i ≥ cfg'.output.length → cfg'.work ↑i = default
+        intro i hi
+        simp only [List.length_append, List.length_singleton] at hi
+        split_ifs with heq
+        · -- i = cfg.workIndex
+          simp only at heq
+          omega
+        · -- i ≠ cfg.workIndex
+          exact h_work_high i (by omega)
+      · -- ∀ i : ℤ, i < 0 → cfg'.work i = default
+        intro i hi
+        split_ifs with heq
+        · -- i = cfg.workIndex
+          subst heq
+          omega
+        · -- i ≠ cfg.workIndex
+          exact h_work_low i hi
   · -- Case: bitsRead.val ≠ W (still reading bits)
     simp only [h_done, ↓reduceDIte] at h_step
     injection h_step with h_cfg'
@@ -1979,15 +1819,12 @@ lemma loading_inv_preserved_or_becomes_rewinding {Γ Γ' Λ : Type u}
         subst this
         exact h_work_high cfg.output.length (by omega)
       · exact h_work_high i hi
-    constructor
     · -- ∀ i : ℤ, i < 0 → cfg'.work i = default
       intro i hi
       split_ifs with heq
       · subst heq
         omega
       · exact h_work_low i hi
-    · -- default ∉ cfg'.output
-      exact h_no_default
 
 lemma generation_must_get_ready_to_rewind {Γ Γ' Λ : Type u}
   [Inhabited Λ] [Inhabited Γ] [FinEnum Γ]
@@ -2006,15 +1843,13 @@ lemma generation_must_get_ready_to_rewind {Γ Γ' Λ : Type u}
   ∃ cfg : GenConfig Γ' Γ (GenState Λ Γ (StandardEncoding Γ)),
     rewinding_config change_of_alphabet cfg
     ∧ StepsTo gen (initConfig gen bitstream) cfg
-    ∧ default ∉ cfg.output
 := by
   let enc_Γ := StandardEncoding Γ
   let gen := generatorFromTM0 (enc_Γ := enc_Γ) change_of_alphabet M
   -- First, show that the initial configuration satisfies loading_inv
   have h_init_loading : loading_inv change_of_alphabet (initConfig gen bitstream) := by
     unfold loading_inv initConfig
-    simp only [List.get_eq_getElem, CharP.cast_eq_zero,
-      List.not_mem_nil, true_and]
+    simp only [List.get_eq_getElem, CharP.cast_eq_zero, true_and]
     constructor
     · use { bitsRead := 0, acc := 0, accBound := by simp }
       rfl
@@ -2024,10 +1859,8 @@ lemma generation_must_get_ready_to_rewind {Γ Γ' Λ : Type u}
     constructor
     · intro i hi
       rfl
-    constructor
     · intro i _
       rfl
-    · simp
   -- Key lemma: a loading state is never a halting configuration
   have load_not_halting : ∀ cfg, loading_inv change_of_alphabet cfg → ¬haltingConfig gen cfg := by
     intro cfg h_load h_halt
@@ -2048,7 +1881,7 @@ lemma generation_must_get_ready_to_rewind {Γ Γ' Λ : Type u}
       split at heq
       · split at heq
         · simp at heq
-        · split at heq <;> simp at heq
+        · simp at heq
       · simp at heq
     · -- bitsRead ≠ W case
       simp at h_halt
@@ -2058,13 +1891,11 @@ lemma generation_must_get_ready_to_rewind {Γ Γ' Λ : Type u}
   -- rewinding_config)
   have eventually_rewinding : ∃ cfg,
       StepsTo gen (initConfig gen bitstream) cfg ∧
-      rewinding_config change_of_alphabet cfg ∧
-      default ∉ cfg.output := by
+      rewinding_config change_of_alphabet cfg := by
     -- Generalize to arbitrary starting configuration
     suffices ∀ start_cfg, loading_inv change_of_alphabet start_cfg →
       Computes gen start_cfg output →
       ∃ cfg, StepsTo gen start_cfg cfg ∧ rewinding_config change_of_alphabet cfg
-        ∧ default ∉ cfg.output
     by exact this (initConfig gen bitstream) h_init_loading h_computes
     intro start_cfg h_loading h_comp
     induction h_comp with
@@ -2098,13 +1929,9 @@ lemma generation_must_get_ready_to_rewind {Γ Γ' Λ : Type u}
         · -- StepsTo gen cfg cfg'
           use 1
           exact Steps.step cfg cfg' cfg' 0 h_step (Steps.refl cfg')
-        constructor
         · exact h_rewinding
-        · -- Extract default ∉ cfg'.output from rewinding_config
-          obtain ⟨_, _, _, _, _, h_no_default⟩ := h_rewinding
-          exact h_no_default
-  obtain ⟨cfg, h_steps, h_rewind, h_no_default⟩ := eventually_rewinding
-  exact ⟨cfg, h_rewind, h_steps, h_no_default⟩
+  obtain ⟨cfg, h_steps, h_rewind⟩ := eventually_rewinding
+  exact ⟨cfg, h_rewind, h_steps⟩
 
 -- Helper lemma: if we're in sim state and compute output, our current output equals the
 -- final output
@@ -2132,8 +1959,7 @@ lemma generation_must_get_ready_to_simulate {Γ Γ' Λ : Type u}
   [Inhabited Λ] [Inhabited Γ] [FinEnum Γ]
   [Inhabited Γ'] [Fintype Γ'] [DecidableEq Γ']
   (change_of_alphabet : Γ → Γ')
-  (hchange_default : change_of_alphabet default = default)
-  (hchange_injective : Function.Injective change_of_alphabet)
+  (hchange_blank : default ∉ Set.range change_of_alphabet)
   (M : Turing.TM0.Machine (Γ := Γ') (Λ := Λ))
   (bitstream : ℕ → Bool)
   (output : List Γ)
@@ -2151,7 +1977,6 @@ lemma generation_must_get_ready_to_simulate {Γ Γ' Λ : Type u}
         cfg.work (i : ℤ) = change_of_alphabet (cfg.output.get ⟨i, h⟩))
     ∧ (∀ i : ℕ, i ≥ cfg.output.length → cfg.work (i : ℤ) = (default : Γ'))
     ∧ (∀ i : ℤ, i < 0 → cfg.work (i : ℤ) = (default : Γ'))
-    ∧ default ∉ cfg.output
     ∧ StepsTo gen (initConfig gen bitstream) cfg
     ∧ Computes (generatorFromTM0 (enc_Γ := StandardEncoding Γ) change_of_alphabet M) cfg output
     ∧ cfg.output = output
@@ -2159,11 +1984,11 @@ lemma generation_must_get_ready_to_simulate {Γ Γ' Λ : Type u}
   let enc_Γ := StandardEncoding Γ
   let gen := generatorFromTM0 (enc_Γ := enc_Γ) change_of_alphabet M
   -- First, get to the rewind state
-  obtain ⟨rewindCfg, h_rewind_inv, h_steps_to_rewind, h_no_default_output⟩ :=
+  obtain ⟨rewindCfg, h_rewind_inv, h_steps_to_rewind⟩ :=
     generation_must_get_ready_to_rewind change_of_alphabet M bitstream output h_computes
   -- Extract the components of rewinding_config
   obtain ⟨h_rewind_state, h_rewind_idx, h_rewind_work_input,
-          h_rewind_work_blank_high, h_rewind_work_blank_low, h_no_default⟩ := h_rewind_inv
+          h_rewind_work_blank_high, h_rewind_work_blank_low⟩ := h_rewind_inv
   -- Build the hypothesis for rewinding_leads_to_simulation_readiness
   have h_rewind_conditions : rewindCfg.state = GenState.rewind
     ∧ rewindCfg.workIndex = rewindCfg.output.length - 1
@@ -2171,14 +1996,13 @@ lemma generation_must_get_ready_to_simulate {Γ Γ' Λ : Type u}
       change_of_alphabet (rewindCfg.output.get ⟨i, h⟩))
     ∧ (∀ i : ℕ, i ≥ rewindCfg.output.length → rewindCfg.work (i : ℤ) = (default : Γ'))
     ∧ (∀ i : ℤ, i < 0 → rewindCfg.work (i : ℤ) = (default : Γ'))
-    ∧ rewindCfg.output = rewindCfg.output
-    ∧ default ∉ rewindCfg.output :=
+    ∧ rewindCfg.output = rewindCfg.output :=
       ⟨h_rewind_state, h_rewind_idx, h_rewind_work_input,
-       h_rewind_work_blank_high, h_rewind_work_blank_low, rfl, h_no_default⟩
+       h_rewind_work_blank_high, h_rewind_work_blank_low, rfl⟩
   -- Apply rewinding_leads_to_simulation_readiness
   obtain ⟨simCfg, h_sim_state, h_sim_idx, h_sim_work_input, h_sim_work_blank_high,
           h_sim_work_blank_low, h_sim_output, h_rewind_to_sim⟩ :=
-    rewinding_leads_to_simulation_readiness change_of_alphabet hchange_default hchange_injective
+    rewinding_leads_to_simulation_readiness change_of_alphabet hchange_blank
       M rewindCfg.output rewindCfg h_rewind_conditions
   -- Combine the steps: initConfig → rewindCfg → simCfg
   have h_steps_to_sim : StepsTo gen (initConfig gen bitstream) simCfg :=
@@ -2195,8 +2019,8 @@ lemma generation_must_get_ready_to_simulate {Γ Γ' Λ : Type u}
     rw [← h_output_eq, h_sim_output]
   -- Return simCfg with all properties
   use simCfg
-  refine ⟨h_sim_state, h_sim_idx, ?_, ?_, h_sim_work_blank_low, ?_, h_steps_to_sim,
-    h_computes_from_sim, h_output_eq⟩
+  refine ⟨h_sim_state, h_sim_idx, ?_, ?_, h_sim_work_blank_low, h_steps_to_sim,
+          h_computes_from_sim, h_output_eq⟩
   · intro i hi
     have hi' : i < rewindCfg.output.length := by
       calc i < simCfg.output.length := hi
@@ -2211,10 +2035,6 @@ lemma generation_must_get_ready_to_simulate {Γ Γ' Λ : Type u}
     rw [h_output_eq] at hi
     rw [← h_rewind_output_eq] at hi
     exact h_sim_work_blank_high i hi
-  · -- default ∉ simCfg.output
-    rw [h_output_eq]
-    rw [← h_rewind_output_eq]
-    exact h_no_default
 
 lemma sim_steps_imply_tm0_steps {Γ Γ' Λ : Type u}
   [Inhabited Λ] [Inhabited Γ] [FinEnum Γ]
@@ -2280,8 +2100,7 @@ theorem anything_a_generator_generates_is_recognised_by_its_tm0 {Γ Γ' Λ : Typ
   [Inhabited Λ] [Inhabited Γ] [FinEnum Γ]
   [Inhabited Γ'] [Fintype Γ'] [DecidableEq Γ']
   (change_of_alphabet : Γ → Γ')
-  (hchange_default : change_of_alphabet default = default)
-  (hchange_injective : Function.Injective change_of_alphabet)
+  (hchange_blank : default ∉ Set.range change_of_alphabet)
   (M : Turing.TM0.Machine (Γ := Γ') (Λ := Λ))
   (S : Finset Λ)
   (hS : Turing.TM0.Supports M ↑S)
@@ -2290,15 +2109,15 @@ theorem anything_a_generator_generates_is_recognised_by_its_tm0 {Γ Γ' Λ : Typ
     (generatedLanguage
       (generatorFromTM0 (enc_Γ := StandardEncoding Γ) change_of_alphabet M)
       (generatorFromTM0_supports change_of_alphabet M S hS).choose
-      (generatorFromTM0_supports change_of_alphabet M S hS).choose_spec).val) :
+      (generatorFromTM0_supports change_of_alphabet M S hS).choose_spec)) :
   (Turing.TM0.eval M (output.map change_of_alphabet)).Dom := by
   let enc_Γ := StandardEncoding Γ
   let gen := generatorFromTM0 (enc_Γ := enc_Γ) change_of_alphabet M
   obtain ⟨bitstream, h_computes⟩ := h_generated
   obtain ⟨cfg, h_sim_state, h_sim_idx, h_sim_work_input, h_sim_work_blank_high,
-          h_sim_work_blank_low, h_no_default_cfg, h_steps_to_sim, h_computes_from_cfg,
+          h_sim_work_blank_low, h_steps_to_sim, h_computes_from_cfg,
           h_output_eq⟩ :=
-    generation_must_get_ready_to_simulate change_of_alphabet hchange_default hchange_injective
+    generation_must_get_ready_to_simulate change_of_alphabet hchange_blank
       M bitstream output h_computes
   have h_match : ConfigurationsMatch cfg (Turing.TM0.init (output.map change_of_alphabet)) := by
     constructor
@@ -2387,69 +2206,61 @@ lemma language_recognised_by_tm0_subset_language_of_generator_from_tm0 {Γ Γ' �
   [Inhabited Γ] [FinEnum Γ]
   [Inhabited Γ'] [Fintype Γ'] [DecidableEq Γ']
   (change_of_alphabet : Γ → Γ')
-  (hchange_default : change_of_alphabet default = default)
-  (hchange_injective : Function.Injective change_of_alphabet)
+  (hchange_blank : default ∉ Set.range change_of_alphabet)
   (M : Turing.TM0.Machine (Γ := Γ') (Λ := Λ))
   (S : Finset Λ)
   (hS : Turing.TM0.Supports M ↑S) :
-  { input : List Γ | default ∉ input ∧ (Turing.TM0.eval M (input.map change_of_alphabet)).Dom }
+  { input : List Γ | (Turing.TM0.eval M (input.map change_of_alphabet)).Dom }
   ⊆
   (generatedLanguage
     (generatorFromTM0 (enc_Γ := StandardEncoding Γ) change_of_alphabet M)
     (generatorFromTM0_supports change_of_alphabet M S hS).choose
-    (generatorFromTM0_supports change_of_alphabet M S hS).choose_spec).val := by
-  intro input ⟨h_no_default, h_halts⟩
+    (generatorFromTM0_supports change_of_alphabet M S hS).choose_spec) := by
+  intro input h_halts
   exact anything_a_tm0_recognises_can_be_generated_by_its_generator
-    change_of_alphabet hchange_default hchange_injective M S hS input h_no_default h_halts
+    change_of_alphabet hchange_blank M S hS input h_halts
 
 lemma language_of_generator_from_tm0_subset_language_recognised_by_tm0 {Γ Γ' Λ : Type u}
   [Inhabited Λ]
   [Inhabited Γ] [FinEnum Γ]
   [Inhabited Γ'] [Fintype Γ'] [DecidableEq Γ']
   (change_of_alphabet : Γ → Γ')
-  (hchange_default : change_of_alphabet default = default)
-  (hchange_injective : Function.Injective change_of_alphabet)
+  (hchange_blank : default ∉ Set.range change_of_alphabet)
   (M : Turing.TM0.Machine (Γ := Γ') (Λ := Λ))
   (S : Finset Λ)
   (hS : Turing.TM0.Supports M ↑S) :
   (generatedLanguage
     (generatorFromTM0 (enc_Γ := StandardEncoding Γ) change_of_alphabet M)
     (generatorFromTM0_supports change_of_alphabet M S hS).choose
-    (generatorFromTM0_supports change_of_alphabet M S hS).choose_spec).val
+    (generatorFromTM0_supports change_of_alphabet M S hS).choose_spec)
   ⊆
-  { input : List Γ | default ∉ input ∧ (Turing.TM0.eval M (input.map change_of_alphabet)).Dom }
+  { input : List Γ | (Turing.TM0.eval M (input.map change_of_alphabet)).Dom }
 := by
   intro input h_generated
-  have h_no_default : default ∉ input :=
-    (generatedLanguage
-      (generatorFromTM0 (enc_Γ := StandardEncoding Γ) change_of_alphabet M)
-      (generatorFromTM0_supports change_of_alphabet M S hS).choose
-      (generatorFromTM0_supports change_of_alphabet M S hS).choose_spec).property input h_generated
-  exact ⟨h_no_default, anything_a_generator_generates_is_recognised_by_its_tm0
-    change_of_alphabet hchange_default hchange_injective M S hS input h_generated⟩
+  exact anything_a_generator_generates_is_recognised_by_its_tm0
+    change_of_alphabet hchange_blank M S hS input h_generated
 
 lemma language_of_tm0_eq_language_of_generator_from_tm0 {Γ Γ' Λ : Type u}
   [Inhabited Λ]
   [Inhabited Γ] [FinEnum Γ]
   [Inhabited Γ'] [Fintype Γ'] [DecidableEq Γ']
   (change_of_alphabet : Γ → Γ')
-  (hchange_default : change_of_alphabet default = default)
-  (hchange_injective : Function.Injective change_of_alphabet)
+  (hchange_blank : default ∉ Set.range change_of_alphabet)
   (M : Turing.TM0.Machine (Γ := Γ') (Λ := Λ))
   (S : Finset Λ)
   (hS : Turing.TM0.Supports M ↑S) :
   (generatedLanguage
     (generatorFromTM0 (enc_Γ := StandardEncoding Γ) change_of_alphabet M)
     (generatorFromTM0_supports change_of_alphabet M S hS).choose
-    (generatorFromTM0_supports change_of_alphabet M S hS).choose_spec).val
+    (generatorFromTM0_supports change_of_alphabet M S hS).choose_spec)
   =
-  { input : List Γ | default ∉ input ∧ (Turing.TM0.eval M (input.map change_of_alphabet)).Dom }
+  { input : List Γ | (Turing.TM0.eval M (input.map change_of_alphabet)).Dom }
 := by
   apply Set.Subset.antisymm
   · exact language_of_generator_from_tm0_subset_language_recognised_by_tm0
-      change_of_alphabet hchange_default hchange_injective M S hS
+      change_of_alphabet hchange_blank M S hS
   · exact language_recognised_by_tm0_subset_language_of_generator_from_tm0
-      change_of_alphabet hchange_default hchange_injective M S hS
+      change_of_alphabet hchange_blank M S hS
 
 end GenerationByTM0Simulation
 

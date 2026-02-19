@@ -43,10 +43,6 @@ where
   -- - A value indicating whether the input tape head should move
   -- - A value indicating the direction in which the working tape head should move
   δ : Q -> Bool -> Γw → Option (Q × Γw × Option Γo × InputTapeDirection × WorkTapeDirection)
-  -- Constraint: outputs never contain the default symbol
-  no_default_output : ∀ q b w q' w' o itd wtd,
-    δ q b w = some (q', w', o, itd, wtd) →
-    ∀ γ, o = some γ → γ ≠ default
 
 def GeneratorSupports {Γw Γo Q : Type u}
   [Fintype Γw] [Inhabited Γo] [FinEnum Γo]
@@ -92,33 +88,6 @@ match gen.δ cfg.state (cfg.input cfg.inputIndex) (cfg.work cfg.workIndex) with
         | none => cfg.output
         | some g => cfg.output ++ [g]
     }
-
-lemma step_preserves_no_default {Γw Γo Q : Type u}
-[Fintype Γw]
-[Inhabited Γo] [FinEnum Γo]
-  (gen : Generator Γw Γo Q) (cfg cfg' : GenConfig Γw Γo Q) :
-  step gen cfg = some cfg' →
-  default ∉ cfg.output →
-  default ∉ cfg'.output := by
-  intro h_step h_no_default
-  unfold step at h_step
-  split at h_step
-  · contradiction
-  · rename_i q' w' out? inDir workDir h_δ
-    injection h_step with h_eq
-    rw [← h_eq]
-    simp only
-    intro h
-    cases out? with
-    | none =>
-      exact h_no_default h
-    | some γ =>
-      simp only [List.mem_append, List.mem_singleton] at h
-      cases h with
-      | inl h_old => exact h_no_default h_old
-      | inr h_new =>
-        have : γ ≠ default := gen.no_default_output _ _ _ _ _ _ _ _ h_δ γ rfl
-        exact this h_new.symm
 
 def initConfig {Γw Γo Q : Type u}
 [Fintype Γw]
@@ -231,21 +200,6 @@ lemma computes {Γw Γo Q : Type u}
 end StepsTo
 
 namespace Computes
-
-lemma no_default {Γw Γo Q : Type u}
-[Fintype Γw]
-[Inhabited Γo] [FinEnum Γo]
-  (gen : Generator Γw Γo Q) (cfg : GenConfig Γw Γo Q) (out : List Γo) :
-  Computes gen cfg out →
-  default ∉ cfg.output →
-  default ∉ out := by
-  intro h_comp h_no_default
-  induction h_comp with
-  | halt cfg h_halt =>
-    exact h_no_default
-  | step cfg cfg' out h_step h_comp' ih =>
-    apply ih
-    exact step_preserves_no_default gen cfg cfg' h_step h_no_default
 
 lemma of_StepsTo {Γw Γo Q : Type u}
 [Fintype Γw]
