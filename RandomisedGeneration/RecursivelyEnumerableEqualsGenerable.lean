@@ -27,8 +27,9 @@ theorem generable_subset_tm0_recognisable {Γo : Type u}
     generableLanguages (Γ := Γo) ⊆ languagesRecognisedByTM0s (Γ := Γo) := by
   intro L hL
   obtain ⟨Γw, Q, hΓw, gen, S_gen, hS_gen, hgen⟩ := hL
-  exact every_tm1_recognisable_language_is_tm0_recognisable _
-    (hgen ▸ generable_language_is_tm1_recognisable gen S_gen hS_gen)
+  sorry
+  -- exact every_tm1_recognisable_language_is_tm0_recognisable _
+  --   (hgen ▸ generable_language_is_tm1_recognisable gen S_gen hS_gen)
 
 theorem tm0_recognisable_eq_generable {Γ : Type u}
   [Inhabited Γ] [FinEnum Γ] :

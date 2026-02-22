@@ -38,7 +38,7 @@ def DovetailRecognises
         (initDovetailState (Γw := Γw) (Γo := Γo) (Q := Q))
     let insts := state.instances
     insts[i]? = some (some cfg) ∧
-    haltingConfig gen cfg ∧
+    IsHalting gen cfg ∧
     cfg.output = w
 
 -- The "already stepped" prefix
@@ -216,7 +216,7 @@ theorem DovetailRecognises_iff_Computes
     have h_eq : stepN gen (some (initConfig gen (Nat.testBit i))) (n - i - 1) = some cfg :=
       Option.some_inj.mp h_stepN.symm
     rw [stepN_eq_Steps] at h_eq
-    exact StepsTo.computes ⟨_, h_eq⟩ h_halt
+    exact Reachable.computes ⟨_, h_eq⟩ h_halt
   · -- Backward: ∃ m, Computes → DovetailRecognises
     intro ⟨f, h_computes⟩
     obtain ⟨m, h_computes'⟩ := h_computes.exists_natTestBit

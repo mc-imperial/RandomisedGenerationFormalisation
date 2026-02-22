@@ -381,7 +381,7 @@ lemma decode_one_symbol {Γ Γ' Λ : Type u}
 :
   decode_symbol_inv change_of_alphabet input cfg (k := k) (by omega) →
   ∃ cfg',
-    StepsTo (generatorFromTM0 (enc_Γ := StandardEncoding Γ) change_of_alphabet M) cfg cfg' ∧
+    Reachable (generatorFromTM0 (enc_Γ := StandardEncoding Γ) change_of_alphabet M) cfg cfg' ∧
     decode_symbol_inv change_of_alphabet input cfg' (k := k + 1) (by omega)
 := by
   intro h_sym
@@ -404,7 +404,7 @@ lemma decode_one_symbol {Γ Γ' Λ : Type u}
   ----------------------------------------------------------------
   have decode_bits :
     ∃ cfgW,
-      StepsTo (generatorFromTM0 (enc_Γ := StandardEncoding Γ) change_of_alphabet M) cfg cfgW ∧
+      Reachable (generatorFromTM0 (enc_Γ := StandardEncoding Γ) change_of_alphabet M) cfg cfgW ∧
       decode_bit_inv change_of_alphabet input cfgW (k := k) (by omega)
         ⟨W, by linarith⟩ :=
   by
@@ -412,7 +412,7 @@ lemma decode_one_symbol {Γ Γ' Λ : Type u}
     have :
       ∀ x : ℕ, (hx : x ≤ W) →
         ∃ cfgx,
-          StepsTo (generatorFromTM0 (enc_Γ := StandardEncoding Γ) change_of_alphabet M) cfg cfgx ∧
+          Reachable (generatorFromTM0 (enc_Γ := StandardEncoding Γ) change_of_alphabet M) cfg cfgx ∧
           decode_bit_inv change_of_alphabet input cfgx (k := k) (by omega)
             ⟨x, by linarith⟩ :=
     by
@@ -420,7 +420,7 @@ lemma decode_one_symbol {Γ Γ' Λ : Type u}
       induction x with
       | zero =>
         intro _
-        exact ⟨cfg, StepsTo.refl _, h_bit0⟩
+        exact ⟨cfg, Reachable.refl _, h_bit0⟩
       | succ x ih =>
         intro hx
         -- hx : x.succ ≤ W
@@ -439,7 +439,7 @@ lemma decode_one_symbol {Γ Γ' Λ : Type u}
             cfgx
             h_inv
         refine ⟨cfg_next, ?_, h_next_inv⟩
-        exact StepsTo.trans _
+        exact Reachable.trans _
           h_steps
           ⟨1,
             Steps.step cfgx cfg_next cfg_next 0 h_step
@@ -484,7 +484,7 @@ lemma decode_one_symbol {Γ Γ' Λ : Type u}
   -- Combine everything
   ----------------------------------------------------------------
   refine ⟨cfg', ?_, h_final⟩
-  exact StepsTo.trans _
+  exact Reachable.trans _
     h_steps_bits
     ⟨1,
       Steps.step cfgW cfg' cfg' 0 h_step_write
@@ -570,7 +570,7 @@ lemma decode_EOF_marker {Γ Γ' Λ : Type u}
   (h_ready_for_last_symbol : decode_symbol_inv change_of_alphabet input cfg
     (k := input.length) (by omega))
 : ∃ cfg',
-StepsTo (generatorFromTM0 (enc_Γ := StandardEncoding Γ) change_of_alphabet M) cfg cfg'
+Reachable (generatorFromTM0 (enc_Γ := StandardEncoding Γ) change_of_alphabet M) cfg cfg'
 ∧ (
   cfg'.state = GenState.rewind
 ∧ cfg'.workIndex = cfg.workIndex - 1
@@ -596,7 +596,7 @@ StepsTo (generatorFromTM0 (enc_Γ := StandardEncoding Γ) change_of_alphabet M) 
   ----------------------------------------------------------------
   have decode_bits :
     ∃ cfgW,
-      StepsTo (generatorFromTM0 (enc_Γ := StandardEncoding Γ) change_of_alphabet M) cfg cfgW ∧
+      Reachable (generatorFromTM0 (enc_Γ := StandardEncoding Γ) change_of_alphabet M) cfg cfgW ∧
       decode_bit_inv change_of_alphabet input cfgW (k := input.length) (by omega)
         ⟨W, by linarith⟩ :=
   by
@@ -604,7 +604,7 @@ StepsTo (generatorFromTM0 (enc_Γ := StandardEncoding Γ) change_of_alphabet M) 
     have :
       ∀ x : ℕ, (hx : x ≤ W) →
         ∃ cfgx,
-          StepsTo (generatorFromTM0 (enc_Γ := StandardEncoding Γ) change_of_alphabet M) cfg cfgx ∧
+          Reachable (generatorFromTM0 (enc_Γ := StandardEncoding Γ) change_of_alphabet M) cfg cfgx ∧
           decode_bit_inv change_of_alphabet input cfgx (k := input.length) (by omega)
             ⟨x, by linarith⟩ :=
     by
@@ -612,7 +612,7 @@ StepsTo (generatorFromTM0 (enc_Γ := StandardEncoding Γ) change_of_alphabet M) 
       induction x with
       | zero =>
         intro _
-        exact ⟨cfg, StepsTo.refl _, h_bit0⟩
+        exact ⟨cfg, Reachable.refl _, h_bit0⟩
       | succ x ih =>
         intro hx
         -- hx : x.succ ≤ W
@@ -628,7 +628,7 @@ StepsTo (generatorFromTM0 (enc_Γ := StandardEncoding Γ) change_of_alphabet M) 
             cfgx
             h_inv
         refine ⟨cfg_next, ?_, h_next_inv⟩
-        exact StepsTo.trans _
+        exact Reachable.trans _
           h_steps
           ⟨1,
             Steps.step cfgx cfg_next cfg_next 0 h_step
@@ -663,8 +663,8 @@ StepsTo (generatorFromTM0 (enc_Γ := StandardEncoding Γ) change_of_alphabet M) 
   -- Combine everything
   ----------------------------------------------------------------
   refine ⟨cfg', ?_, h_state', ?_, ?_, ?_, ?_, ?_⟩
-  · -- Prove StepsTo
-    exact StepsTo.trans _
+  · -- Prove Reachable
+    exact Reachable.trans _
       h_steps_bits
       ⟨1, Steps.step cfgW cfg' cfg' 0 h_step_eof (Steps.refl _)⟩
   · -- Prove workIndex: cfg'.workIndex = cfg.workIndex - 1
@@ -703,7 +703,7 @@ lemma generator_gets_to_rewind_state {Γ Γ' Λ : Type u}
     ∧ (∀ i : ℤ, i < 0 →
         cfg.work (i : ℤ) = (default : Γ'))
     ∧ cfg.output = input
-    ∧ StepsTo gen (initConfig gen (bitstreamFromInput input)) cfg := by
+    ∧ Reachable gen (initConfig gen (bitstreamFromInput input)) cfg := by
   set gen := generatorFromTM0 (enc_Γ := StandardEncoding Γ) change_of_alphabet M
   let initialCfg := (initConfig gen
     (bitstreamFromInput input))
@@ -718,13 +718,13 @@ lemma generator_gets_to_rewind_state {Γ Γ' Λ : Type u}
     ∀ i (hi : i ≤ input.length),
       ∃ cfg' : GenConfig Γ' Γ (GenState Λ Γ (StandardEncoding Γ)),
         decode_symbol_inv change_of_alphabet input cfg' hi
-        ∧ StepsTo gen initialCfg cfg'
+        ∧ Reachable gen initialCfg cfg'
         := by
     intro i
     induction i with
     | zero =>
       intro _
-      exact ⟨initialCfg, h_base_inv, by exact StepsTo.refl gen (cfg := initialCfg)⟩
+      exact ⟨initialCfg, h_base_inv, by exact Reachable.refl gen (cfg := initialCfg)⟩
     | succ i ih =>
       intro h_le
       have h_lt : i < input.length :=
@@ -736,8 +736,8 @@ lemma generator_gets_to_rewind_state {Γ Γ' Λ : Type u}
         decode_one_symbol change_of_alphabet M input cfg_i h_lt hInv_i
       obtain ⟨cfg', h_steps_cfg_i_to_cfg', h_inv_cfg'⟩ := h_next
       have h_steps_to_init_cfg' :
-          StepsTo gen initialCfg cfg' := by
-            exact StepsTo.trans gen (cfg1 := initialCfg) (cfg2 := cfg_i) (cfg3 := cfg')
+          Reachable gen initialCfg cfg' := by
+            exact Reachable.trans gen (cfg1 := initialCfg) (cfg2 := cfg_i) (cfg3 := cfg')
               h_steps_to_i h_steps_cfg_i_to_cfg'
       use cfg'
   have h_all_inputs_decoded :=
@@ -751,8 +751,8 @@ lemma generator_gets_to_rewind_state {Γ Γ' Λ : Type u}
      h_work_ge_cfg_final, h_work_neg_cfg_final, h_output_cfg_final⟩
   use cfg_final
   have h_initial_stepsto_final :
-    StepsTo gen (initConfig gen (bitstreamFromInput input)) cfg_final :=
-      StepsTo.trans gen h_initial_steps_to_cfg_all_decoded h_steps_cfg_final
+    Reachable gen (initConfig gen (bitstreamFromInput input)) cfg_final :=
+      Reachable.trans gen h_initial_steps_to_cfg_all_decoded h_steps_cfg_final
   have h_cfg_final_work_index_eq_input_length_minus_one :
     cfg_final.workIndex = input.length - 1 := by
     have h_work_index_all_decoded := by
@@ -834,7 +834,7 @@ lemma full_rewinding_gets_back_to_negative_index {Γ Γ' Λ : Type u}
     ∧ (∀ i : ℕ, i ≥ input.length → cfg'.work (i : ℤ) = (default : Γ'))
     ∧ (∀ i : ℤ, i < 0 → cfg'.work (i : ℤ) = (default : Γ'))
     ∧ cfg'.output = input
-    ∧ StepsTo gen cfg cfg' := by
+    ∧ Reachable gen cfg cfg' := by
   let gen := generatorFromTM0 (enc_Γ := StandardEncoding Γ) change_of_alphabet M
   obtain ⟨h_state, h_idx_bound, h_idx_nonneg, h_work_input, h_work_ge,
           h_work_neg, h_output⟩ := h
@@ -948,7 +948,7 @@ lemma rewinding_leads_to_simulation_readiness {Γ Γ' Λ : Type u}
     ∧ (∀ i : ℕ, i ≥ input.length → cfg'.work (i : ℤ) = (default : Γ'))
     ∧ (∀ i : ℤ, i < 0 → cfg'.work (i : ℤ) = (default : Γ'))
     ∧ cfg'.output = input
-    ∧ StepsTo gen cfg cfg' := by
+    ∧ Reachable gen cfg cfg' := by
   let gen := generatorFromTM0 (enc_Γ := StandardEncoding Γ) change_of_alphabet M
   obtain ⟨h_state, h_idx, h_work_input, h_work_blank_high, h_work_blank_low, h_output⟩
     := h
@@ -1041,7 +1041,7 @@ lemma generator_gets_to_simulation_state {Γ Γ' Λ : Type u}
     ∧ (∀ i : ℤ, i < 0 →
         cfg.work (i : ℤ) = (default : Γ'))
     ∧ cfg.output = input
-    ∧ StepsTo gen (initConfig gen (bitstreamFromInput input)) cfg := by
+    ∧ Reachable gen (initConfig gen (bitstreamFromInput input)) cfg := by
     let gen := generatorFromTM0 (enc_Γ := StandardEncoding Γ) change_of_alphabet M
     obtain ⟨rewindCfg, h_rewind_state, h_rewind_idx, h_rewind_work_input,
             h_rewind_work_blank_high, h_rewind_work_blank_low, h_rewind_output, h_init_to_rewind⟩ :=
@@ -1327,8 +1327,8 @@ lemma simulationWorksOnceWeAreReady {Γ Γ' Λ : Type u}
   ) :
   ∃ haltCfg,
     let gen := generatorFromTM0 (enc_Γ := StandardEncoding Γ) change_of_alphabet M
-    StepsTo gen cfg haltCfg
-    ∧ haltingConfig gen haltCfg
+    Reachable gen cfg haltCfg
+    ∧ IsHalting gen haltCfg
     ∧ haltCfg.output = input := by
   --
   obtain ⟨h_state, h_idx, h_work_input, h_work_blank_high, h_work_blank_low,
@@ -1413,7 +1413,7 @@ lemma simulationWorksOnceWeAreReady {Γ Γ' Λ : Type u}
       cfg.output = input →
       ∃ genCfg,
         let gen := generatorFromTM0 (enc_Γ := StandardEncoding Γ) change_of_alphabet M
-        StepsTo gen cfg genCfg ∧ ConfigurationsMatch genCfg tmCfg
+        Reachable gen cfg genCfg ∧ ConfigurationsMatch genCfg tmCfg
           ∧ (∃ q, genCfg.state = GenState.sim q) ∧ genCfg.output = input := by
     intro tmCfg cfg h_reaches h_match h_sim_state h_out
     induction h_reaches with
@@ -1458,9 +1458,9 @@ lemma simulationWorksOnceWeAreReady {Γ Γ' Λ : Type u}
   --
   -- Step 5: Return the final configuration
   use haltCfg
-  have h_haltCfg_halts : haltingConfig
+  have h_haltCfg_halts : IsHalting
       (generatorFromTM0 (enc_Γ := StandardEncoding Γ) change_of_alphabet M) haltCfg := by
-    unfold haltingConfig
+    unfold IsHalting
     have h_sim_halt := matching_configurations_step_simultaneously
       change_of_alphabet M haltCfg tmCfg h_match
     unfold maybe_configurations_match at h_sim_halt
@@ -1596,13 +1596,13 @@ theorem anything_a_tm0_recognises_can_be_generated_by_its_generator {Γ Γ' Λ :
          h_readyCfg_work_tape_blank_below, h_readyCfg_output_is_input⟩
     rcases simulationWorksOnceWeAreReady change_of_alphabet M input h_halts readyCfg h_ready
       with ⟨haltCfg, h_steps_to_halt, h_is_halting, h_halt_output⟩
-    have h_whole_run : StepsTo gen (initConfig gen (bitstreamFromInput input)) haltCfg := by
+    have h_whole_run : Reachable gen (initConfig gen (bitstreamFromInput input)) haltCfg := by
       obtain ⟨n1, h1⟩ := h_initial_stepsTo_readyCfg
       obtain ⟨n2, h2⟩ := h_steps_to_halt
       use n1 + n2
       exact Steps.trans h1 h2
     have h_computes : Computes gen (initConfig gen (bitstreamFromInput input)) haltCfg.output :=
-      StepsTo.computes h_whole_run h_is_halting
+      Reachable.computes h_whole_run h_is_halting
     rw [h_halt_output] at h_computes
     use bitstreamFromInput input
 
@@ -1842,7 +1842,7 @@ lemma generation_must_get_ready_to_rewind {Γ Γ' Λ : Type u}
   let gen := generatorFromTM0 (enc_Γ := enc_Γ) change_of_alphabet M
   ∃ cfg : GenConfig Γ' Γ (GenState Λ Γ (StandardEncoding Γ)),
     rewinding_config change_of_alphabet cfg
-    ∧ StepsTo gen (initConfig gen bitstream) cfg
+    ∧ Reachable gen (initConfig gen bitstream) cfg
 := by
   let enc_Γ := StandardEncoding Γ
   let gen := generatorFromTM0 (enc_Γ := enc_Γ) change_of_alphabet M
@@ -1862,9 +1862,9 @@ lemma generation_must_get_ready_to_rewind {Γ Γ' Λ : Type u}
     · intro i _
       rfl
   -- Key lemma: a loading state is never a halting configuration
-  have load_not_halting : ∀ cfg, loading_inv change_of_alphabet cfg → ¬haltingConfig gen cfg := by
+  have load_not_halting : ∀ cfg, loading_inv change_of_alphabet cfg → ¬IsHalting gen cfg := by
     intro cfg h_load h_halt
-    unfold haltingConfig at h_halt
+    unfold IsHalting at h_halt
     unfold step at h_halt
     obtain ⟨⟨ls, h_state⟩, _⟩ := h_load
     simp only [h_state] at h_halt
@@ -1890,12 +1890,12 @@ lemma generation_must_get_ready_to_rewind {Γ Γ' Λ : Type u}
   -- (because we can't halt in loading_inv and loading_inv either persists or becomes
   -- rewinding_config)
   have eventually_rewinding : ∃ cfg,
-      StepsTo gen (initConfig gen bitstream) cfg ∧
+      Reachable gen (initConfig gen bitstream) cfg ∧
       rewinding_config change_of_alphabet cfg := by
     -- Generalize to arbitrary starting configuration
     suffices ∀ start_cfg, loading_inv change_of_alphabet start_cfg →
       Computes gen start_cfg output →
-      ∃ cfg, StepsTo gen start_cfg cfg ∧ rewinding_config change_of_alphabet cfg
+      ∃ cfg, Reachable gen start_cfg cfg ∧ rewinding_config change_of_alphabet cfg
     by exact this (initConfig gen bitstream) h_init_loading h_computes
     intro start_cfg h_loading h_comp
     induction h_comp with
@@ -1915,8 +1915,8 @@ lemma generation_must_get_ready_to_rewind {Γ Γ' Λ : Type u}
         -- Combine the steps: cfg → cfg' → final_cfg
         use final_cfg
         constructor
-        · -- StepsTo gen cfg final_cfg
-          refine StepsTo.trans gen ?_ h_steps_from_cfg'
+        · -- Reachable gen cfg final_cfg
+          refine Reachable.trans gen ?_ h_steps_from_cfg'
           use 1
           exact Steps.step cfg cfg' cfg' 0 h_step (Steps.refl cfg')
         constructor
@@ -1926,7 +1926,7 @@ lemma generation_must_get_ready_to_rewind {Γ Γ' Λ : Type u}
         -- We've reached rewinding_config at cfg', so we're done
         use cfg'
         constructor
-        · -- StepsTo gen cfg cfg'
+        · -- Reachable gen cfg cfg'
           use 1
           exact Steps.step cfg cfg' cfg' 0 h_step (Steps.refl cfg')
         · exact h_rewinding
@@ -1977,7 +1977,7 @@ lemma generation_must_get_ready_to_simulate {Γ Γ' Λ : Type u}
         cfg.work (i : ℤ) = change_of_alphabet (cfg.output.get ⟨i, h⟩))
     ∧ (∀ i : ℕ, i ≥ cfg.output.length → cfg.work (i : ℤ) = (default : Γ'))
     ∧ (∀ i : ℤ, i < 0 → cfg.work (i : ℤ) = (default : Γ'))
-    ∧ StepsTo gen (initConfig gen bitstream) cfg
+    ∧ Reachable gen (initConfig gen bitstream) cfg
     ∧ Computes (generatorFromTM0 (enc_Γ := StandardEncoding Γ) change_of_alphabet M) cfg output
     ∧ cfg.output = output
 := by
@@ -2005,11 +2005,11 @@ lemma generation_must_get_ready_to_simulate {Γ Γ' Λ : Type u}
     rewinding_leads_to_simulation_readiness change_of_alphabet hchange_blank
       M rewindCfg.output rewindCfg h_rewind_conditions
   -- Combine the steps: initConfig → rewindCfg → simCfg
-  have h_steps_to_sim : StepsTo gen (initConfig gen bitstream) simCfg :=
-    StepsTo.trans gen h_steps_to_rewind h_rewind_to_sim
-  -- Use Computes.of_StepsTo to get Computes gen simCfg output
+  have h_steps_to_sim : Reachable gen (initConfig gen bitstream) simCfg :=
+    Reachable.trans gen h_steps_to_rewind h_rewind_to_sim
+  -- Use Computes.of_Reachable to get Computes gen simCfg output
   have h_computes_from_sim : Computes gen simCfg output :=
-    Computes.of_StepsTo h_computes h_steps_to_sim
+    Computes.of_Reachable h_computes h_steps_to_sim
   -- Prove that simCfg.output = output using the helper lemma
   have h_output_eq : simCfg.output = output :=
     sim_output_eq_final_output change_of_alphabet M simCfg output
@@ -2059,7 +2059,7 @@ lemma sim_steps_imply_tm0_steps {Γ Γ' Λ : Type u}
     use tm0Cfg
     constructor
     · exact Relation.ReflTransGen.refl
-    · unfold haltingConfig step at h_halt
+    · unfold IsHalting step at h_halt
       have h_sim := matching_configurations_step_simultaneously
         change_of_alphabet M cfg tm0Cfg h_match
       unfold maybe_configurations_match at h_sim

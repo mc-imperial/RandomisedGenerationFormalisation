@@ -102,7 +102,7 @@ def initConfig {Γw Γo Q : Type u}
   output := []
 }
 
-def haltingConfig {Γw Γo Q}
+def IsHalting {Γw Γo Q}
 [Fintype Γw]
 [Inhabited Γo] [FinEnum Γo]
   (gen : Generator Γw Γo Q)
@@ -148,9 +148,9 @@ lemma stepN_halted {Γw Γo Q : Type u}
   [Fintype Γw] [Inhabited Γo] [FinEnum Γo]
   (gen : Generator Γw Γo Q)
   (cfg : GenConfig Γw Γo Q)
-  (h : haltingConfig gen cfg) (n : ℕ) :
+  (h : IsHalting gen cfg) (n : ℕ) :
   stepN gen (some cfg) (n + 1) = none := by
-  simp only [haltingConfig, stepN, Function.iterate_succ,
+  simp only [IsHalting, stepN, Function.iterate_succ,
     Function.comp_apply, Option.bind_some] at *
   simp only [h]
   exact Function.iterate_fixed rfl n
@@ -237,8 +237,8 @@ lemma stepN_none_iff_halted {Γw Γo Q : Type u}
 [Inhabited Γo] [FinEnum Γo]
   (gen : Generator Γw Γo Q)
   (cfg cfg' : GenConfig Γw Γo Q) (n : ℕ) :
-  stepN gen (some cfg) n = some cfg' ∧ haltingConfig gen cfg' ↔
-  Steps gen cfg cfg' n ∧ haltingConfig gen cfg' := by
+  stepN gen (some cfg) n = some cfg' ∧ IsHalting gen cfg' ↔
+  Steps gen cfg cfg' n ∧ IsHalting gen cfg' := by
   simp [stepN_eq_Steps]
 
 lemma step_preserves_input {Γw Γo Q : Type u}
@@ -298,6 +298,32 @@ lemma prefix_extends {Γw Γo Q : Type u}
   rw [← stepN_eq_Steps] at h1 h2 ⊢
   exact stepN_prefix h1 h2 hmn
 
+lemma step_inputIndex_mono {Γw Γo Q : Type u}
+[Fintype Γw] [Inhabited Γo] [FinEnum Γo]
+{gen : Generator Γw Γo Q} {cfg cfg' : GenConfig Γw Γo Q} :
+  RandomisedGeneration.step gen cfg = some cfg' →
+  cfg.inputIndex ≤ cfg'.inputIndex := by
+  simp only [RandomisedGeneration.step]
+  intro h
+  split at h
+  · simp at h
+  · simp only [Option.some.injEq] at h
+    rw [← h]
+    simp only
+    omega
+
+lemma inputIndex_mono {Γw Γo Q : Type u}
+[Fintype Γw] [Inhabited Γo] [FinEnum Γo]
+{gen : Generator Γw Γo Q} {cfg cfg' : GenConfig Γw Γo Q} {n : ℕ} :
+  Steps gen cfg cfg' n →
+  cfg.inputIndex ≤ cfg'.inputIndex := by
+  intro h
+  induction h with
+  | refl =>
+    exact le_refl _
+  | step cfg cfg' cfg'' n h_step _ ih =>
+    exact le_trans (step_inputIndex_mono h_step) ih
+
 end Steps
 
 inductive Computes {Γw Γo Q : Type u}
@@ -309,7 +335,7 @@ inductive Computes {Γw Γo Q : Type u}
   | step (cfg cfg' : GenConfig Γw Γo Q) (out : List Γo) :
       step gen cfg = some cfg' → Computes gen cfg' out → Computes gen cfg out
 
-def StepsTo {Γw Γo Q}
+def Reachable {Γw Γo Q}
 [Fintype Γw]
 [Inhabited Γo] [FinEnum Γo]
 (gen : Generator Γw Γo Q)
@@ -317,16 +343,16 @@ def StepsTo {Γw Γo Q}
 (cfg' : GenConfig Γw Γo Q) : Prop :=
   ∃ n, Steps gen cfg cfg' n
 
-namespace StepsTo
+namespace Reachable
 
 lemma refl {Γw Γo Q}
 [Fintype Γw]
 [Inhabited Γo] [FinEnum Γo]
   (gen : Generator Γw Γo Q)
   {cfg : GenConfig Γw Γo Q} :
-  StepsTo gen cfg cfg :=
+  Reachable gen cfg cfg :=
 by
-  unfold StepsTo
+  unfold Reachable
   refine ⟨0, ?_⟩
   exact Steps.refl cfg
 
@@ -335,7 +361,7 @@ lemma trans {Γw Γo Q}
 [Inhabited Γo] [FinEnum Γo]
   (gen : Generator Γw Γo Q)
   {cfg1 cfg2 cfg3 : GenConfig Γw Γo Q} :
-  StepsTo gen cfg1 cfg2 → StepsTo gen cfg2 cfg3 → StepsTo gen cfg1 cfg3 :=
+  Reachable gen cfg1 cfg2 → Reachable gen cfg2 cfg3 → Reachable gen cfg1 cfg3 :=
 by
   rintro ⟨n, h1⟩ ⟨m, h2⟩
   exact ⟨n + m, Steps.trans h1 h2⟩
@@ -344,7 +370,7 @@ lemma computes {Γw Γo Q : Type u}
 [Fintype Γw]
 [Inhabited Γo] [FinEnum Γo]
   {gen : Generator Γw Γo Q} {cfg haltCfg : GenConfig Γw Γo Q} :
-  StepsTo gen cfg haltCfg → step gen haltCfg = none →
+  Reachable gen cfg haltCfg → step gen haltCfg = none →
   Computes gen cfg haltCfg.output := by
   intro ⟨n, h_steps⟩ h_halt
   induction h_steps with
@@ -354,12 +380,12 @@ lemma computes {Γw Γo Q : Type u}
     apply Computes.step cfg cfg' cfg''.output h_step
     exact ih h_halt
 
-end StepsTo
+end Reachable
 
 lemma reachable_input_eq {Γw Γo Q : Type u}
 [Fintype Γw] [Inhabited Γo] [FinEnum Γo]
 {gen : Generator Γw Γo Q} {f : ℕ → Bool} {cfg : GenConfig Γw Γo Q} :
-  StepsTo gen (initConfig gen f) cfg →
+  Reachable gen (initConfig gen f) cfg →
   cfg.input = f := by
   rintro ⟨n, h_steps⟩
   have : ∀ (n : ℕ) (start cfg : GenConfig Γw Γo Q),
@@ -381,13 +407,52 @@ lemma reachable_input_eq {Γw Γo Q : Type u}
         exact h_input
   exact this n (initConfig gen f) cfg (by simp [initConfig]) h_steps
 
+private lemma sum_if_two_pow_lt (f : ℕ → Bool) : ∀ k,
+    (∑ j ∈ Finset.range k, if f j then 2^j else 0) < 2^k
+  | 0 => by simp
+  | k+1 => by
+      rw [Finset.sum_range_succ]
+      have ih := sum_if_two_pow_lt f k
+      split_ifs with hfk
+      · linarith [pow_succ 2 k]
+      · omega
+
+lemma testBit_sum_pow (f : ℕ → Bool) (k i : ℕ) (hi : i < k) :
+    (∑ j ∈ Finset.range k, if f j then 2^j else 0).testBit i = f i := by
+  induction k with
+  | zero => omega
+  | succ k ih =>
+    rw [Finset.sum_range_succ]
+    by_cases hik : i < k
+    · -- the 2^k term doesn't affect bit i since i < k
+      have h_low := sum_if_two_pow_lt f k
+      cases hfk : f k with
+      | false => simp [ih hik]
+      | true =>
+        simp only [ite_true]
+        rw [add_comm]
+        rw [Nat.testBit_two_pow_add_gt hik]
+        exact ih hik
+    · -- i = k
+      have hik' : i = k := by omega
+      subst hik'
+      have h_low := sum_if_two_pow_lt f i
+      cases hfi : f i with
+      | false =>
+        exact Nat.testBit_lt_two_pow h_low
+      | true =>
+        simp only [ite_true]
+        rw [add_comm]
+        simp only [Nat.testBit_two_pow_add_eq, Bool.not_eq_eq_eq_not, Bool.not_true]
+        exact Nat.testBit_lt_two_pow h_low
+
 namespace Computes
 
-lemma of_StepsTo {Γw Γo Q : Type u}
+lemma of_Reachable {Γw Γo Q : Type u}
 [Fintype Γw]
 [Inhabited Γo] [FinEnum Γo]
   {gen : Generator Γw Γo Q} {cfg cfg' : GenConfig Γw Γo Q} {out : List Γo} :
-  Computes gen cfg out → StepsTo gen cfg cfg' → Computes gen cfg' out := by
+  Computes gen cfg out → Reachable gen cfg cfg' → Computes gen cfg' out := by
   intro h_comp ⟨n, h_steps⟩
   induction h_steps generalizing out with
   | refl =>
@@ -429,16 +494,16 @@ lemma congr_input {Γw Γo Q : Type u}
 {gen : Generator Γw Γo Q} {f g : ℕ → Bool} {w : List Γo} {k : ℕ} :
   Computes gen (initConfig gen f) w →
   (∀ i < k, f i = g i) →
-  (∀ cfg, StepsTo gen (initConfig gen f) cfg →
+  (∀ cfg, Reachable gen (initConfig gen f) cfg →
     cfg.inputIndex < k) →
   Computes gen (initConfig gen g) w := by
   intro h_comp h_agree h_bound
   obtain ⟨n, haltCfg, h_stepN, h_halt, h_out⟩ := h_comp.to_stepN
   suffices ∀ (n : ℕ) (cfg : GenConfig Γw Γo Q),
-    StepsTo gen (initConfig gen f) cfg →
+    Reachable gen (initConfig gen f) cfg →
     stepN gen (some cfg) n = some haltCfg →
     Computes gen { cfg with input := g } w by
-    have := this n (initConfig gen f) (StepsTo.refl gen) h_stepN
+    have := this n (initConfig gen f) (Reachable.refl gen) h_stepN
     convert this using 1
   intro n
   induction n with
@@ -479,37 +544,11 @@ lemma congr_input {Γw Γo Q : Type u}
           simp only [Option.some.injEq] at h_step
           simp only [Option.some.injEq]
           ext <;> simp [← h_step]
-      have h_reach' : StepsTo gen (initConfig gen f) cfg_next :=
-        StepsTo.trans gen h_reach
+      have h_reach' : Reachable gen (initConfig gen f) cfg_next :=
+        Reachable.trans gen h_reach
           ⟨1, Steps.step _ _ _ _ h_step (Steps.refl _)⟩
       apply Computes.step _ _ _ h_step_g
       exact ih cfg_next h_reach' h_stepN'
-
-lemma step_inputIndex_mono {Γw Γo Q : Type u}
-[Fintype Γw] [Inhabited Γo] [FinEnum Γo]
-{gen : Generator Γw Γo Q} {cfg cfg' : GenConfig Γw Γo Q} :
-  RandomisedGeneration.step gen cfg = some cfg' →
-  cfg.inputIndex ≤ cfg'.inputIndex := by
-  simp only [RandomisedGeneration.step]
-  intro h
-  split at h
-  · simp at h
-  · simp only [Option.some.injEq] at h
-    rw [← h]
-    simp only
-    omega
-
-lemma inputIndex_mono {Γw Γo Q : Type u}
-[Fintype Γw] [Inhabited Γo] [FinEnum Γo]
-{gen : Generator Γw Γo Q} {cfg cfg' : GenConfig Γw Γo Q} {n : ℕ} :
-  Steps gen cfg cfg' n →
-  cfg.inputIndex ≤ cfg'.inputIndex := by
-  intro h
-  induction h with
-  | refl =>
-    exact le_refl _
-  | step cfg cfg' cfg'' n h_step _ ih =>
-    exact le_trans (step_inputIndex_mono h_step) ih
 
 lemma finite_input_reads {Γw Γo Q : Type u}
 [Fintype Γw]
@@ -517,7 +556,7 @@ lemma finite_input_reads {Γw Γo Q : Type u}
 {gen : Generator Γw Γo Q} {f : ℕ → Bool} {w : List Γo} :
   Computes gen (initConfig gen f) w →
   ∃ k, ∀ cfg : GenConfig Γw Γo Q,
-    StepsTo gen (initConfig gen f) cfg →
+    Reachable gen (initConfig gen f) cfg →
     cfg.inputIndex < k := by
   intro h_comp
   obtain ⟨n, haltCfg, h_stepN, h_halt, h_out⟩ := h_comp.to_stepN
@@ -528,7 +567,7 @@ lemma finite_input_reads {Γw Γo Q : Type u}
   by_cases hm : m ≤ n
   · -- cfg is on the path to haltCfg
     have h_cfg_to_halt := Steps.prefix_extends h_steps h_steps_to_halt hm
-    have h_mono := inputIndex_mono h_cfg_to_halt
+    have h_mono := Steps.inputIndex_mono h_cfg_to_halt
     omega
   · -- cfg is past haltCfg, impossible
     push_neg at hm
@@ -541,45 +580,6 @@ lemma finite_input_reads {Γw Γo Q : Type u}
       rw [h_mn] at h_halt_to_cfg
       rw [stepN_halted gen haltCfg h_halt k] at h_halt_to_cfg
       simp at h_halt_to_cfg
-
-private lemma sum_if_two_pow_lt (f : ℕ → Bool) : ∀ k,
-    (∑ j ∈ Finset.range k, if f j then 2^j else 0) < 2^k
-  | 0 => by simp
-  | k+1 => by
-      rw [Finset.sum_range_succ]
-      have ih := sum_if_two_pow_lt f k
-      split_ifs with hfk
-      · linarith [pow_succ 2 k]
-      · omega
-
-lemma testBit_sum_pow (f : ℕ → Bool) (k i : ℕ) (hi : i < k) :
-    (∑ j ∈ Finset.range k, if f j then 2^j else 0).testBit i = f i := by
-  induction k with
-  | zero => omega
-  | succ k ih =>
-    rw [Finset.sum_range_succ]
-    by_cases hik : i < k
-    · -- the 2^k term doesn't affect bit i since i < k
-      have h_low := sum_if_two_pow_lt f k
-      cases hfk : f k with
-      | false => simp [ih hik]
-      | true =>
-        simp only [ite_true]
-        rw [add_comm]
-        rw [Nat.testBit_two_pow_add_gt hik]
-        exact ih hik
-    · -- i = k
-      have hik' : i = k := by omega
-      subst hik'
-      have h_low := sum_if_two_pow_lt f i
-      cases hfi : f i with
-      | false =>
-        exact Nat.testBit_lt_two_pow h_low
-      | true =>
-        simp only [ite_true]
-        rw [add_comm]
-        simp only [Nat.testBit_two_pow_add_eq, Bool.not_eq_eq_eq_not, Bool.not_true]
-        exact Nat.testBit_lt_two_pow h_low
 
 lemma exists_natTestBit {Γw Γo Q : Type u}
 [Fintype Γw]
@@ -605,6 +605,6 @@ def input_progressing {Γw Γo Q : Type u}
 [Inhabited Γo] [FinEnum Γo]
 (gen : Generator Γw Γo Q) : Prop :=
 ∀ cfg, ∃ cfg' n,
-  Steps gen cfg cfg' n ∧ (haltingConfig gen cfg' ∨ cfg'.inputIndex > cfg.inputIndex)
+  Steps gen cfg cfg' n ∧ (IsHalting gen cfg' ∨ cfg'.inputIndex > cfg.inputIndex)
 
 end RandomisedGeneration
