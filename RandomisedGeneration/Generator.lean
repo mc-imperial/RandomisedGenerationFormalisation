@@ -650,6 +650,19 @@ lemma initConfig_mapState {Γw Γo Q : Type u}
     initConfig gen input := by
   simp [initConfig, GenConfig.mapState, Generator.restrictToSupport]
 
+lemma restrictToSupport_δ {Γw Γo Q : Type u}
+    [FinEnum Γw] [Inhabited Γo] [FinEnum Γo]
+    (gen : Generator Γw Γo Q)
+    (S : Finset Q) (hS : GeneratorSupports gen S)
+    (q : ↥S) (b : Bool) (w : Γw) :
+    (gen.restrictToSupport S hS).δ q b w =
+    match h : gen.δ q.val b w with
+    | none => none
+    | some (q', w', o, id, wd) =>
+      some (⟨q', hS.2 q.val q.prop b w q' w' o id wd h⟩, w', o, id, wd) := by
+  unfold Generator.restrictToSupport
+  simp only
+
 lemma step_restrictToSupport {Γw Γo Q : Type u}
     [FinEnum Γw] [Inhabited Γo] [FinEnum Γo]
     (gen : Generator Γw Γo Q)
@@ -657,29 +670,20 @@ lemma step_restrictToSupport {Γw Γo Q : Type u}
     (cfg : GenConfig Γw Γo ↥S) :
     (step (gen.restrictToSupport S hS) cfg).map (·.mapState Subtype.val) =
     step gen (cfg.mapState Subtype.val) := by
-  -- We match on the transition of the original generator
-  unfold step Generator.restrictToSupport
-  cases h : gen.δ ↑cfg.state (cfg.input cfg.inputIndex) (cfg.work cfg.workIndex)
-  · -- Both sides reduce to 'none'
-    simp only [Int.reduceNeg, GenConfig.mapState_state, GenConfig.mapState_input,
-      GenConfig.mapState_output]
-    simp only [GenConfig.mapState, Int.reduceNeg, h, Option.map_eq_none_iff]
-    split <;> simp only [Int.reduceNeg, reduceCtorEq]
-    rename_i h_match
-    rename_i h_match
-    split at h_match
-    · contradiction -- This handles the case where the match thought it was 'none'
-    · rename_i h_some
-      cases h.symm.trans h_some
-  · -- Both sides reduce to 'some' with the same data
-    rename_i res
-    obtain ⟨q', w', out?, inDir, workDir⟩ := res
-    simp only [GenConfig.mapState, Int.reduceNeg, h, Option.map_eq_some_iff, GenConfig.mk.injEq]
-    split
-    · rename_i h_match
-      exfalso
-      sorry
-    · sorry
+  simp only [step, GenConfig.mapState, restrictToSupport_δ]
+  split
+  · split
+    · rfl
+    · rename_i heq1 _ q' w' out inDir workDir heq2
+      split at heq1 <;> simp_all
+  · rename_i heq1
+    split at heq1
+    · simp at heq1
+    · rename_i q'' w'' out'' inDir'' workDir'' heq2
+      simp only [Option.some.injEq] at heq1
+      simp [heq2]
+      obtain ⟨rfl, rfl, rfl, rfl, rfl⟩ := heq1
+      simp
 
 lemma restrictToSupport_step_of_step {Γw Γo Q : Type u}
     [FinEnum Γw] [Inhabited Γo] [FinEnum Γo]
@@ -693,7 +697,10 @@ lemma restrictToSupport_step_of_step {Γw Γo Q : Type u}
       cfg''.mapState Subtype.val = cfg' := by
   have key := step_restrictToSupport gen S hS cfg
   rw [h] at key
-  sorry
+  cases hstep : step (gen.restrictToSupport S hS) cfg with
+  | none => simp [hstep] at key
+  | some cfg'' =>
+    exact ⟨cfg'', rfl, by simpa [hstep] using key⟩
 
 lemma restrictToSupport_Computes_lift {Γw Γo Q : Type u}
     [FinEnum Γw] [Inhabited Γo] [FinEnum Γo]
@@ -703,11 +710,10 @@ lemma restrictToSupport_Computes_lift {Γw Γo Q : Type u}
     Computes (gen.restrictToSupport S hS)
       (initConfig (gen.restrictToSupport S hS) input) w →
     Computes gen (initConfig gen input) w := by
-  intro h
-  -- Generalise to arbitrary cfg, not just initConfig
   suffices ∀ (cfg : GenConfig Γw Γo ↥S) (w : List Γo),
       Computes (gen.restrictToSupport S hS) cfg w →
       Computes gen (cfg.mapState Subtype.val) w by
+    intro h
     have := this _ _ h
     rwa [initConfig_mapState] at this
   intro cfg w hc
@@ -716,12 +722,12 @@ lemma restrictToSupport_Computes_lift {Γw Γo Q : Type u}
     apply Computes.halt
     have key := step_restrictToSupport gen S hS cfg
     simp [h_halt] at key
-    simpa using key.symm
+    exact key.symm
   | step cfg cfg' w h_step _ ih =>
-    apply Computes.step _ _ _ _ ih
     have key := step_restrictToSupport gen S hS cfg
-    simp [h_step] at key
-    sorry
+    rw [h_step] at key
+    simp at key
+    exact Computes.step _ _ _ key.symm ih
 
 lemma restrictToSupport_Computes {Γw Γo Q : Type u}
     [FinEnum Γw] [Inhabited Γo] [FinEnum Γo]
@@ -731,27 +737,30 @@ lemma restrictToSupport_Computes {Γw Γo Q : Type u}
     Computes gen (initConfig gen input) w →
     Computes (gen.restrictToSupport S hS)
       (initConfig (gen.restrictToSupport S hS) input) w := by
-  intro h
-  -- Generalise: any cfg reachable from initConfig has state in S
   suffices ∀ (cfg : GenConfig Γw Γo Q) (w : List Γo),
       Computes gen cfg w →
       ∀ (cfgS : GenConfig Γw Γo ↥S),
         cfgS.mapState Subtype.val = cfg →
         Computes (gen.restrictToSupport S hS) cfgS w by
-    have := this _ _ h (initConfig (gen.restrictToSupport S hS) input)
-      (initConfig_mapState gen S hS input)
-    exact this
+    intro h
+    exact this _ _ h _ (initConfig_mapState gen S hS input)
   intro cfg w hc
   induction hc with
   | halt cfg h_halt =>
     intro cfgS h_eq
-    sorry
+    have h_out : cfgS.output = cfg.output := by
+      have := congr_arg GenConfig.output h_eq
+      simpa [GenConfig.mapState] using this
+    rw [← h_out]
+    apply Computes.halt
+    have key := step_restrictToSupport gen S hS cfgS
+    rw [h_eq, h_halt] at key
+    simp only [Option.map_eq_none_iff] at key
+    exact key
   | step cfg cfg' w h_step _ ih =>
     intro cfgS h_eq
-    obtain ⟨cfgS', h_stepS, h_eq'⟩ :=
-      restrictToSupport_step_of_step gen S hS cfgS cfg'
-        (by rw [h_eq]; exact h_step)
-    apply Computes.step _ _ _ h_stepS
-    exact ih cfgS' h_eq'
+    have ⟨cfgS', h_stepS, h_eq'⟩ :=
+      restrictToSupport_step_of_step gen S hS cfgS cfg' (by rw [h_eq]; exact h_step)
+    exact Computes.step _ _ _ h_stepS (ih cfgS' h_eq')
 
 end RandomisedGeneration
