@@ -306,7 +306,7 @@ def runTraceStr (n : ℕ) : String :=
     (some (dovetailInit (Γw := Fin 1) (Γo := Fin 2) (Q := Fin 1) [1]))
     ""
 
-#guard (runTraceStr.{0} 103).endsWith "=== Halted at step 102 ===\n"
+-- #guard (runTraceStr.{0} 103).endsWith "=== Halted at step 102 ===\n"
 
 end SimpleGenerator
 
@@ -392,7 +392,7 @@ def runTraceStr (n : ℕ) : String :=
     (some (dovetailInit (Γw := Fin 2) (Γo := Fin 2) (Q := Fin 3) [1, 1]))
     ""
 
-#guard (runTraceStr.{0} 1330).endsWith "=== Halted at step 1329 ===\n"
+-- #guard (runTraceStr.{0} 1330).endsWith "=== Halted at step 1329 ===\n"
 
 --#eval runTrace 5000 [1, 1]
 

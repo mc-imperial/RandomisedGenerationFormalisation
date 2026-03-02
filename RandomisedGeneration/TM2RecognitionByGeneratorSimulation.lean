@@ -7,6 +7,8 @@ import RandomisedGeneration.Language
 
 namespace RandomisedGeneration
 
+universe u
+
 section Dovetailing
 
 variable {Γw Γo Q : Type u}
@@ -229,7 +231,7 @@ theorem DovetailRecognises_iff_Computes
 
 variable [Inhabited Γw] [FinEnum Q]
 
-inductive DovetailStack
+inductive DovetailStack : Type u
   | target        -- String in Γo to be recognised. Only one copy (not one per generator instance)
   | counter       -- Booleans representing the counter that should be used for the next generator
                   --   instance. Initially empty (which corresponds to a bitstream of all zeros).
@@ -260,9 +262,9 @@ def stackAlphabet (Γw Γo Q : Type u)
   -- target holds Γo elements (no separator needed, it's a single word)
   | DovetailStack.target    => Γo
   -- counter holds Bool (the binary representation of the next input number)
-  | DovetailStack.counter   => ULift Bool
+  | DovetailStack.counter   => ULift.{u} Bool
   -- input holds Option Bool: some b for a bit, none as separator between instances
-  | DovetailStack.input     => Option (ULift Bool)
+  | DovetailStack.input     => Option (ULift.{u} Bool)
   -- state holds Q, one per instance
   | DovetailStack.state     => Q
   -- workL and workR hold Option Γw: some x for a tape symbol, none as separator
@@ -272,15 +274,15 @@ def stackAlphabet (Γw Γo Q : Type u)
   | DovetailStack.output    => Option Γo
   -- save stacks mirror their corresponding main stacks
   | DovetailStack.saveTarget  => Γo
-  | DovetailStack.saveCounter => ULift Bool
-  | DovetailStack.saveInput   => Option (ULift Bool)
+  | DovetailStack.saveCounter => ULift.{u} Bool
+  | DovetailStack.saveInput   => Option (ULift.{u} Bool)
   | DovetailStack.saveState   => Q
   | DovetailStack.saveWorkL   => Option Γw
   | DovetailStack.saveWorkR   => Option Γw
   | DovetailStack.saveOutput  => Option Γo
 
 -- Labels correspond to the subroutines and their internal loops
-inductive DovetailLabel
+inductive DovetailLabel : Type u
   | pushNewConfig_copy_counter
   | pushNewConfig_restore_counter
   | stepAll
@@ -305,6 +307,7 @@ inductive DovetailLabel
   | incrementCounter
   | incrementCounter_loop
   | incrementCounter_restore
+deriving DecidableEq, Fintype
 
 set_option linter.style.whitespace false
 set_option linter.style.longLine false
@@ -322,20 +325,20 @@ structure DovetailSigma (Γw Γo Q : Type u)
 
   -- ── Current input bit ─────────────────────────────────────────────────
   -- Populated by stepOne
-  inputBit  : ULift Bool            -- the actual bit value (false if none)
+  inputBit  : ULift.{u} Bool            -- the actual bit value (false if none)
 
   -- ── Scratch space for peek/pop decisions ──────────────────────────────
   -- Each field is dedicated to one subroutine to avoid aliasing
   peekQ     : Option Q                       -- stepAll, restoreAll_state
-  peekBit   : Option (ULift Bool)            -- pushNewConfig_copy/restore, incrementCounter
-  peekInput : Option (Option (ULift Bool))   -- stepOne, saveSegment_input, restoreAll_input
+  peekBit   : Option (ULift.{u} Bool)            -- pushNewConfig_copy/restore, incrementCounter
+  peekInput : Option (Option (ULift.{u} Bool))   -- stepOne, saveSegment_input, restoreAll_input
   peekWorkL : Option (Option Γw)             -- applyWorkDir (L), saveSegment_workL, restoreAll_workL
   peekWorkR : Option (Option Γw)             -- stepOne_workR, applyWorkDir (R), saveSegment_workR, restoreAll_workR
   peekOut   : Option (Option Γo)             -- saveSegment_output, restoreAll_output, restoreOutput
   peekTarget : Option Γo                     -- checkOutput, restoreTarget
 
   -- ── Binary counter ────────────────────────────────────────────────────
-  carry     : Option (ULift Bool)   -- incrementCounter carry bit
+  carry     : Option (ULift.{u} Bool)   -- incrementCounter carry bit
 set_option linter.style.whitespace true
 set_option linter.style.longLine true
 
@@ -860,5 +863,40 @@ theorem dovetailMachine_recognises {Γw Γo Q : Type u}
     (Turing.TM2.eval (dovetailMachine gen) DovetailStack.target target.reverse).Dom ↔
     target ∈ generatedLanguage gen Finset.univ (generator_supports_univ gen) := by
   sorry
+
+-- lemma every_generable_language_is_tm2_recognisable
+--     {Γ : Type u}
+--     [Inhabited Γ] [FinEnum Γ]
+--     (L : Language Γ)
+--     (hL : L ∈ generableLanguages) :
+--     L ∈ languagesRecognisedByTM2s := by
+--   obtain ⟨Γw, Q, hΓwfin, hQdec, gen, S_gen, hS_gen, hgen⟩ := hL
+--   haveI : DecidableEq Q := hQdec
+--   let gen' := @Generator.restrictToSupport Γw Γ Q hΓwfin _ _ gen S_gen hS_gen
+--   haveI : Fintype ↥S_gen := inferInstance
+--   haveI : DecidableEq ↥S_gen := inferInstance
+--   haveI : FinEnum ↥S_gen := FinEnum.ofList (Finset.univ.val.toList) (by simp)
+--   refine ⟨DovetailStack, inferInstance, inferInstance, inferInstance,
+--     stackAlphabet Γw Γ ↥S_gen,
+--     fun k => inferInstance,
+--     fun k => inferInstance,
+--     fun k => inferInstance,
+--     rfl,
+--     DovetailLabel, inferInstance,
+--     DovetailSigma Γw Γ ↥S_gen, inferInstance, inferInstance,
+--     dovetailMachine gen',
+--     Finset.univ,
+--     ⟨Finset.mem_univ _, fun _ _ => Finset.mem_univ _⟩,
+--     ?_⟩
+--   subst hgen
+--   ext input
+--   simp only [Set.mem_setOf_eq]
+--   rw [← dovetailMachine_recognises gen' input]
+--   simp only [generatedLanguage, Set.mem_setOf_eq]
+--   constructor
+--   · rintro ⟨i, h⟩
+--     exact ⟨i, restrictToSupport_Computes_backward gen S_gen hS_gen h⟩
+--   · rintro ⟨i, h⟩
+--     exact ⟨i, restrictToSupport_Computes_forward gen S_gen hS_gen h⟩
 
 end RandomisedGeneration

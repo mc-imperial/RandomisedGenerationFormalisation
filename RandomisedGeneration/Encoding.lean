@@ -7,6 +7,7 @@ structure Encoding (Γ : Type u) where
   W_pos : W > 0
   enum : Fin (2^W) → Option Γ
   complete : ∀ g : Γ, ∃ i, enum i = some g
+deriving DecidableEq
 
 /-- Standard encoding using FinEnum, which provides a computable enumeration. -/
 def StandardEncoding (Γ : Type u) [Inhabited Γ] [FinEnum Γ] : Encoding Γ where

@@ -20,10 +20,26 @@ def generatedLanguage {Γw Γo Q : Type u}
   (_ : GeneratorSupports gen S) : Language Γo :=
   { out | ∃ input, Computes gen (initConfig gen input) out }
 
+lemma Generator.restrictToSupport_generatedLanguage {Γw Γo Q : Type u}
+    [Fintype Γw] [Inhabited Γo] [FinEnum Γo]
+    (gen : Generator Γw Γo Q)
+    (S : Finset Q) (hS : GeneratorSupports gen S) :
+    generatedLanguage (gen.restrictToSupport S hS) Finset.univ
+      (generator_supports_univ _) =
+    generatedLanguage gen S hS := by
+  ext w
+  simp only [generatedLanguage, Set.mem_setOf_eq]
+  constructor
+  · rintro ⟨input, h_comp⟩
+    exact ⟨input, restrictToSupport_Computes_forward gen S hS h_comp⟩
+  · rintro ⟨input, h_comp⟩
+    exact ⟨input, restrictToSupport_Computes_backward gen S hS h_comp⟩
+
 def generableLanguages {Γ : Type u}
   [Inhabited Γ] [FinEnum Γ] : Set (Language Γ) :=
   { L | ∃ (Γw Q : Type u)
           (_ : Fintype Γw)
+          (hQdec : DecidableEq Q)
           (gen : Generator Γw Γ Q)
           (S : Finset Q)
           (hS : GeneratorSupports gen S),
@@ -72,9 +88,7 @@ def languagesRecognisedByTM2s {Γ : Type u} [Inhabited Γ] [FinEnum Γ] : Set (L
           (_ : ∀ k, Inhabited (Γ' k))
           (_ : ∀ k, Fintype (Γ' k))
           (_ : ∀ k, DecidableEq (Γ' k))
-          (enc : Γ → Γ' default)
-          (_ : Function.Injective enc)
-          (_ : (default : Γ' default) ∉ Set.range enc)
+          (h : Γ' default = Γ)
           (Λ : Type u)
           (_ : Inhabited Λ)
           (σ : Type u)
@@ -83,7 +97,7 @@ def languagesRecognisedByTM2s {Γ : Type u} [Inhabited Γ] [FinEnum Γ] : Set (L
           (M : Λ → Turing.TM2.Stmt Γ' Λ σ)
           (S : Finset Λ)
           (_ : Turing.TM2.Supports M S),
-        L = { input | (Turing.TM2.eval M default (input.reverse.map enc)).Dom } }
+        L = { input | (Turing.TM2.eval M default (h ▸ input.reverse)).Dom } }
 
 lemma every_tm1_recognisable_language_is_tm0_recognisable {Γ : Type u}
     [Inhabited Γ] [FinEnum Γ]
@@ -408,54 +422,57 @@ lemma every_tm2_recognisable_language_is_tm1_recognisable {Γ : Type u}
     (L : Language Γ)
     (hL : L ∈ languagesRecognisedByTM2s) :
     L ∈ languagesRecognisedByTM1s := by
-  obtain ⟨K, _, _, _, Γ', _, hΓ'fin, hΓ'dec, enc, henc, hdefault, Λ, _, σ, _,
+  obtain ⟨K, _, hKfin, hKdec, Γ', hΓ'inh, hΓ'fin, hΓ'dec, h, Λ, hΛinh, σ, hσinh,
     hσfin, M, S, hS, hLeq⟩ := hL
   haveI : ∀ k, DecidableEq (Γ' k) := hΓ'dec
-  haveI : DecidableEq (Turing.TM2to1.Γ' K Γ') := by
-    unfold Turing.TM2to1.Γ'
-    haveI : ∀ k, DecidableEq (Γ' k) := hΓ'dec
-    exact instDecidableEqProd
+  haveI : DecidableEq (Turing.TM2to1.Γ' K Γ') := instDecidableEqProd
+  -- The TM1 encoding: inject Γ into Turing.TM2to1.Γ' K Γ' via the default stack
+  let enc : Γ → Turing.TM2to1.Γ' K Γ' :=
+    fun a => (false, Function.update (fun _ ↦ none) default (some (h ▸ a)))
   refine ⟨Turing.TM2to1.Γ' K Γ',
     Turing.TM2to1.Γ'.inhabited,
     Turing.TM2to1.Γ'.fintype,
     inferInstance,
-    fun a => (false, Function.update (fun _ ↦ none) default (some (enc a))),
+    enc,
     ?_, ?_,
     FixThenSimLabel (Turing.TM2to1.Λ' K Γ' Λ σ),
     inferInstance,
-    σ, ‹Inhabited σ›, hσfin,
-    fixThenSim (Turing.TM2to1.tr M), ?_, ?_, ?_⟩
-  · intro a b h
-    simp only at h
-    have h2 : Function.update (fun _ ↦ none) default (some (enc a)) =
-              Function.update (fun _ ↦ none) default (some (enc b)) := by
-      exact (Prod.mk.inj h).2
-    have h3 : some (enc a) = some (enc b) := by
+    σ, hσinh, hσfin,
+    fixThenSim (Turing.TM2to1.tr M),
+    (fixThenSim_supports M (Turing.TM2to1.trSupp M S)
+      (Turing.TM2to1.tr_supports M hS)).choose,
+    (fixThenSim_supports M (Turing.TM2to1.trSupp M S)
+      (Turing.TM2to1.tr_supports M hS)).choose_spec,
+    ?_⟩
+  · -- enc is injective
+    intro a b hab
+    simp only [enc] at hab
+    have h2 : Function.update (fun _ ↦ none) default (some (h ▸ a)) =
+              Function.update (fun _ ↦ none) default (some (h ▸ b)) :=
+      (Prod.mk.inj hab).2
+    have h3 : (h ▸ a : Γ' default) = (h ▸ b : Γ' default) := by
       have := congr_fun h2 default
       simp only [Function.update_self, Option.some.injEq] at this
-      exact congr_arg some this
-    exact henc (Option.some.inj h3)
-  · intro ⟨a, ha⟩
-    simp only at ha
-    have h2 : Function.update (fun _ ↦ none) default (some (enc a)) =
-              (fun _ ↦ none) := by
-      have := (Prod.mk.inj ha).1
-      simp at this
-      have htemp := (Prod.mk.inj ha).2
-      simp at htemp
-    have h3 : some (enc a) = none := by
-      have := congr_fun h2 default
-      simp at this
-    exact absurd h3 (Option.some_ne_none _)
-  · exact (fixThenSim_supports M (Turing.TM2to1.trSupp M S)
-      (Turing.TM2to1.tr_supports M hS)).choose
-  · exact (fixThenSim_supports M (Turing.TM2to1.trSupp M S)
-      (Turing.TM2to1.tr_supports M hS)).choose_spec
-  · subst hLeq
+      exact this
+    cases h; exact h3
+  · -- default ∉ range enc
+    intro ⟨a, ha⟩
+    simp only [enc] at ha
+    have h1 : (false, Function.update (fun _ ↦ none) default (some (h ▸ a))) =
+              (default : Turing.TM2to1.Γ' K Γ') := ha
+    have h2 := (Prod.mk.inj h1).1
+    simp at h2
+    have h3 := (Prod.mk.inj ha).2
+    simp at h3
+  · -- L equals the recognised language
+    subst hLeq
     ext input
-    simp only [Set.mem_setOf_eq]
-    rw [← fixThenSim_eval_dom M default (input.reverse.map enc)]
-    simp [trInitAllFalse, List.map_map, List.map_reverse]
-    rfl
+    simp only [Set.mem_setOf_eq, enc]
+    cases h
+    rw [show List.map (fun a => (false, Function.update (fun _ ↦ none) default (some a))) input =
+          trInitAllFalse default input.reverse from by
+      simp [trInitAllFalse]]
+    simp only
+    exact (fixThenSim_eval_dom M default input.reverse).symm
 
 end RandomisedGeneration
