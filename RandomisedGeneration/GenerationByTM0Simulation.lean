@@ -13,7 +13,7 @@ structure LoadState (Γ : Type u) (enc_Γ : Encoding Γ) where
   bitsRead : Fin (enc_Γ.W + 1)      -- 0 .. W
   acc      : Fin (2 ^ enc_Γ.W)      -- fixed width accumulator
   accBound : acc.val ≤ 2 ^ bitsRead.val - 1 -- invariant
-deriving Fintype
+deriving Fintype, DecidableEq
 
 inductive GenState (Λ Γ : Type u)
 [Inhabited Γ] [FinEnum Γ]
@@ -21,6 +21,11 @@ inductive GenState (Λ Γ : Type u)
   | load (ls : LoadState Γ enc_Γ)
   | rewind
   | sim  (q  : Λ)
+
+instance [DecidableEq Λ] [Inhabited Γ] [FinEnum Γ] (enc_Γ : Encoding Γ) :
+    DecidableEq (GenState Λ Γ enc_Γ) :=
+  fun a b => by cases a <;> cases b <;>
+  simp only [GenState.load.injEq, GenState.sim.injEq, reduceCtorEq] <;> infer_instance
 
 def generatorFromTM0 {Γ Γ' Λ : Type u}
     [Inhabited Λ]
