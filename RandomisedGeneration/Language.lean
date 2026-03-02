@@ -49,13 +49,13 @@ def languagesRecognisedByTM0s {Γ : Type u}
     [Inhabited Γ] [FinEnum Γ] : Set (Language Γ) :=
   { L | ∃ (Γ' : Type u)
           (_ : Inhabited Γ')
-          (_ : Fintype Γ')
-          (_ : DecidableEq Γ')
+          (_ : FinEnum Γ')
           (enc : Γ → Γ')
           (_ : Function.Injective enc)
           (_ : default ∉ Set.range enc)
           (Λ : Type u)
           (_ : Inhabited Λ)
+          (hΛdec : DecidableEq Λ)
           (M : Turing.TM0.Machine (Γ := Γ') (Λ := Λ))
           (S : Finset Λ)
           (_ : Turing.TM0.Supports M S),
@@ -64,16 +64,17 @@ def languagesRecognisedByTM0s {Γ : Type u}
 def languagesRecognisedByTM1s {Γ : Type u} [Inhabited Γ] [FinEnum Γ] : Set (Language Γ) :=
   { L | ∃ (Γ' : Type u)
           (_ : Inhabited Γ')
-          (_ : Fintype Γ')
-          (_ : DecidableEq Γ')
+          (_ : FinEnum Γ')
           (enc : Γ → Γ')
           (_ : Function.Injective enc)
           (_ : default ∉ Set.range enc)
           (Λ : Type u)
           (_ : Inhabited Λ)
+          (hΛdec : DecidableEq Λ)
           (σ : Type u)
           (_ : Inhabited σ)
           (_ : Fintype σ)
+          (_ : DecidableEq σ)
           (M : Λ → Turing.TM1.Stmt Γ' Λ σ)
           (S : Finset Λ)
           (_ : Turing.TM1.Supports M S),
@@ -91,6 +92,7 @@ def languagesRecognisedByTM2s {Γ : Type u} [Inhabited Γ] [FinEnum Γ] : Set (L
           (h : Γ' default = Γ)
           (Λ : Type u)
           (_ : Inhabited Λ)
+          (_ : DecidableEq Λ)
           (σ : Type u)
           (_ : Inhabited σ)
           (_ : Fintype σ)
@@ -104,10 +106,11 @@ lemma every_tm1_recognisable_language_is_tm0_recognisable {Γ : Type u}
     (L : Language Γ)
     (hL : L ∈ languagesRecognisedByTM1s) :
     L ∈ languagesRecognisedByTM0s := by
-  obtain ⟨Γ', hΓ'inh, hΓ'fin, hΓ'dec, enc, henc_inj, henc_blank, Λ,
-    hΛinh, σ, hσinh, hσfin, M, S, hS, hL_eq⟩ := hL
-  refine ⟨Γ', hΓ'inh, hΓ'fin, hΓ'dec, enc, henc_inj, henc_blank,
-          Turing.TM1to0.Λ' M, inferInstance,
+  obtain ⟨Γ', hΓ'inh, hΓ'finenum, enc, henc_inj, henc_blank, Λ,
+    hΛinh, hΛdec, σ, hσinh, hσfin, hσdec, M, S, hS, hL_eq⟩ := hL
+  haveI : DecidableEq (Turing.TM1to0.Λ' M) := Classical.decEq _
+  refine ⟨Γ', hΓ'inh, hΓ'finenum, enc, henc_inj, henc_blank,
+          Turing.TM1to0.Λ' M, inferInstance, inferInstance,
           Turing.TM1to0.tr M,
           Turing.TM1to0.trStmts M S,
           Turing.TM1to0.tr_supports M hS,
@@ -422,22 +425,23 @@ lemma every_tm2_recognisable_language_is_tm1_recognisable {Γ : Type u}
     (L : Language Γ)
     (hL : L ∈ languagesRecognisedByTM2s) :
     L ∈ languagesRecognisedByTM1s := by
-  obtain ⟨K, _, hKfin, hKdec, Γ', hΓ'inh, hΓ'fin, hΓ'dec, h, Λ, hΛinh, σ, hσinh,
+  obtain ⟨K, hKinh, hKfin, hKdec, Γ', hΓ'inh, hΓ'fin, hΓ'dec, hΓ'eq, Λ, hΛinh, hΛdec, σ, hσinh,
     hσfin, M, S, hS, hLeq⟩ := hL
-  haveI : ∀ k, DecidableEq (Γ' k) := hΓ'dec
+  haveI : ∀ k, DecidableEq (Γ' k) := fun k => inferInstance
   haveI : DecidableEq (Turing.TM2to1.Γ' K Γ') := instDecidableEqProd
-  -- The TM1 encoding: inject Γ into Turing.TM2to1.Γ' K Γ' via the default stack
+  haveI : DecidableEq (Turing.TM2to1.Λ' K Γ' Λ σ) := Classical.decEq _
+  haveI : DecidableEq σ := Classical.decEq _
   let enc : Γ → Turing.TM2to1.Γ' K Γ' :=
-    fun a => (false, Function.update (fun _ ↦ none) default (some (h ▸ a)))
+    fun a => (false, Function.update (fun _ ↦ none) default (some (hΓ'eq ▸ a)))
   refine ⟨Turing.TM2to1.Γ' K Γ',
     Turing.TM2to1.Γ'.inhabited,
-    Turing.TM2to1.Γ'.fintype,
-    inferInstance,
+    FinEnum.ofList (Finset.univ.val.toList) (by simp),
     enc,
     ?_, ?_,
     FixThenSimLabel (Turing.TM2to1.Λ' K Γ' Λ σ),
     inferInstance,
-    σ, hσinh, hσfin,
+    inferInstance,
+    σ, hσinh, hσfin, inferInstance,
     fixThenSim (Turing.TM2to1.tr M),
     (fixThenSim_supports M (Turing.TM2to1.trSupp M S)
       (Turing.TM2to1.tr_supports M hS)).choose,
@@ -447,18 +451,18 @@ lemma every_tm2_recognisable_language_is_tm1_recognisable {Γ : Type u}
   · -- enc is injective
     intro a b hab
     simp only [enc] at hab
-    have h2 : Function.update (fun _ ↦ none) default (some (h ▸ a)) =
-              Function.update (fun _ ↦ none) default (some (h ▸ b)) :=
+    have h2 : Function.update (fun _ ↦ none) default (some (hΓ'eq ▸ a)) =
+              Function.update (fun _ ↦ none) default (some (hΓ'eq ▸ b)) :=
       (Prod.mk.inj hab).2
-    have h3 : (h ▸ a : Γ' default) = (h ▸ b : Γ' default) := by
+    have h3 : (hΓ'eq ▸ a : Γ' default) = (hΓ'eq ▸ b : Γ' default) := by
       have := congr_fun h2 default
       simp only [Function.update_self, Option.some.injEq] at this
       exact this
-    cases h; exact h3
+    cases hΓ'eq; exact h3
   · -- default ∉ range enc
     intro ⟨a, ha⟩
     simp only [enc] at ha
-    have h1 : (false, Function.update (fun _ ↦ none) default (some (h ▸ a))) =
+    have h1 : (false, Function.update (fun _ ↦ none) default (some (hΓ'eq ▸ a))) =
               (default : Turing.TM2to1.Γ' K Γ') := ha
     have h2 := (Prod.mk.inj h1).1
     simp at h2
@@ -468,7 +472,7 @@ lemma every_tm2_recognisable_language_is_tm1_recognisable {Γ : Type u}
     subst hLeq
     ext input
     simp only [Set.mem_setOf_eq, enc]
-    cases h
+    cases hΓ'eq
     rw [show List.map (fun a => (false, Function.update (fun _ ↦ none) default (some a))) input =
           trInitAllFalse default input.reverse from by
       simp [trInitAllFalse]]

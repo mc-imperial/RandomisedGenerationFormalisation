@@ -923,6 +923,7 @@ lemma every_generable_language_is_tm2_recognisable
     rfl,
     DovetailLabel,
     inferInstance,
+    inferInstance,
     DovetailSigma Γw Γ ↥S_gen,
     inferInstance,
     inferInstance,

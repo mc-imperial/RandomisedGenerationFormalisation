@@ -294,11 +294,7 @@ def runTraceStr (n : ℕ) : String :=
           acc
           ++ s!"=== Step {step} ===\n"
           ++ reprCfg c ++ "\n"
-        let cfg' : Option (Turing.TM2.Cfg
-            (stackAlphabet (Fin 1) (Fin 2) (Fin 1))
-            DovetailLabel
-            (DovetailSigma (Fin 1) (Fin 2) (Fin 1))) :=
-          cfg.bind
+        let cfg' := cfg.bind
             (Turing.TM2.step
               (dovetailMachine GeneratorExamples.simpleGenerator))
         loop fuel (step + 1) cfg' acc
@@ -306,7 +302,7 @@ def runTraceStr (n : ℕ) : String :=
     (some (dovetailInit (Γw := Fin 1) (Γo := Fin 2) (Q := Fin 1) [1]))
     ""
 
--- #guard (runTraceStr.{0} 103).endsWith "=== Halted at step 102 ===\n"
+#guard (runTraceStr.{0, 0} 103).endsWith "=== Halted at step 102 ===\n"
 
 end SimpleGenerator
 
@@ -392,9 +388,7 @@ def runTraceStr (n : ℕ) : String :=
     (some (dovetailInit (Γw := Fin 2) (Γo := Fin 2) (Q := Fin 3) [1, 1]))
     ""
 
--- #guard (runTraceStr.{0} 1330).endsWith "=== Halted at step 1329 ===\n"
-
---#eval runTrace 5000 [1, 1]
+#guard (runTraceStr.{0, 0} 1330).endsWith "=== Halted at step 1329 ===\n"
 
 end TallyGenerator
 
