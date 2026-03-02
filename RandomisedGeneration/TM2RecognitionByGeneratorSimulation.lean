@@ -876,11 +876,18 @@ theorem dovetailMachine_recognises {Γw Γo Q : Type u}
 --   haveI : Fintype ↥S_gen := inferInstance
 --   haveI : DecidableEq ↥S_gen := inferInstance
 --   haveI : FinEnum ↥S_gen := FinEnum.ofList (Finset.univ.val.toList) (by simp)
+--   haveI : Inhabited ↥S_gen := ⟨gen'.init⟩
+--   haveI : ∀ k, Inhabited (stackAlphabet Γw Γ ↥S_gen k) :=
+--     fun k => by cases k <;> simp only [stackAlphabet] <;> infer_instance
+--   haveI : ∀ k, Fintype (stackAlphabet Γw Γ ↥S_gen k) :=
+--     fun k => by cases k <;> simp only [stackAlphabet] <;> infer_instance
+--   haveI : ∀ k, DecidableEq (stackAlphabet Γw Γ ↥S_gen k) :=
+--     fun k => by cases k <;> simp only [stackAlphabet] <;> infer_instance
 --   refine ⟨DovetailStack, inferInstance, inferInstance, inferInstance,
 --     stackAlphabet Γw Γ ↥S_gen,
---     fun k => inferInstance,
---     fun k => inferInstance,
---     fun k => inferInstance,
+--     _,
+--     _,
+--     _,
 --     rfl,
 --     DovetailLabel, inferInstance,
 --     DovetailSigma Γw Γ ↥S_gen, inferInstance, inferInstance,
