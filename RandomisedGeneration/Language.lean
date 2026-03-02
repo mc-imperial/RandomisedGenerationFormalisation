@@ -39,7 +39,7 @@ def generableLanguages {Γ : Type u}
   [Inhabited Γ] [FinEnum Γ] : Set (Language Γ) :=
   { L | ∃ (Γw Q : Type u)
           (_ : FinEnum Γw)
-          (hQdec : DecidableEq Q)
+          (_ : DecidableEq Q)
           (gen : Generator Γw Γ Q)
           (S : Finset Q)
           (hS : GeneratorSupports gen S),
@@ -55,7 +55,7 @@ def languagesRecognisedByTM0s {Γ : Type u}
           (_ : default ∉ Set.range enc)
           (Λ : Type u)
           (_ : Inhabited Λ)
-          (hΛdec : DecidableEq Λ)
+          (_ : DecidableEq Λ)
           (M : Turing.TM0.Machine (Γ := Γ') (Λ := Λ))
           (S : Finset Λ)
           (_ : Turing.TM0.Supports M S),
@@ -70,7 +70,7 @@ def languagesRecognisedByTM1s {Γ : Type u} [Inhabited Γ] [FinEnum Γ] : Set (L
           (_ : default ∉ Set.range enc)
           (Λ : Type u)
           (_ : Inhabited Λ)
-          (hΛdec : DecidableEq Λ)
+          (_ : DecidableEq Λ)
           (σ : Type u)
           (_ : Inhabited σ)
           (_ : Fintype σ)
