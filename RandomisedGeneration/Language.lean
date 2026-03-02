@@ -39,6 +39,7 @@ def generableLanguages {Γ : Type u}
   [Inhabited Γ] [FinEnum Γ] : Set (Language Γ) :=
   { L | ∃ (Γw Q : Type u)
           (_ : Fintype Γw)
+          (_ : DecidableEq Γw)
           (hQdec : DecidableEq Q)
           (gen : Generator Γw Γ Q)
           (S : Finset Q)
