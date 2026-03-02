@@ -361,6 +361,33 @@ instance : Inhabited (DovetailSigma Γw Γo Q) :=
      peekTarget  := none
      carry       := none }⟩
 
+instance : Fintype (ULift.{u} Bool) :=
+  Fintype.ofEquiv Bool ⟨ULift.up, ULift.down, fun _ => rfl, fun _ => rfl⟩
+
+instance : DecidableEq (ULift.{u} Bool) :=
+  fun a b => decidable_of_iff (a.down = b.down) (by cases a; cases b; simp [ULift.ext_iff])
+
+instance [Fintype Γw] [Fintype Γo] [Fintype Q] [DecidableEq Γw] [DecidableEq Γo] [DecidableEq Q] :
+    Fintype (DovetailSigma Γw Γo Q) :=
+  Fintype.ofEquiv
+    (Option Q × Option Γw × InputTapeDirection × WorkTapeDirection ×
+     Option (Option Γo) × Bool × ULift.{u} Bool × Option Q ×
+     Option (ULift.{u} Bool) × Option (Option (ULift.{u} Bool)) ×
+     Option (Option Γw) × Option (Option Γw) ×
+     Option (Option Γo) × Option Γo × Option (ULift.{u} Bool))
+    { toFun := fun ⟨a, b, c, d, e, f, g, h, i, j, k, l, m, n, o⟩ =>
+        { transQ := a, transW := b, transIDir := c, transWDir := d,
+          transOut := e, transHalted := f, inputBit := g, peekQ := h,
+          peekBit := i, peekInput := j, peekWorkL := k, peekWorkR := l,
+          peekOut := m, peekTarget := n, carry := o }
+      invFun := fun σ =>
+        (σ.transQ, σ.transW, σ.transIDir, σ.transWDir,
+         σ.transOut, σ.transHalted, σ.inputBit, σ.peekQ,
+         σ.peekBit, σ.peekInput, σ.peekWorkL, σ.peekWorkR,
+         σ.peekOut, σ.peekTarget, σ.carry)
+      left_inv := fun _ => rfl
+      right_inv := fun _ => rfl }
+
 def dovetailInit {Γw Γo Q : Type u}
     [FinEnum Γw] [Inhabited Γo] [FinEnum Γo] [FinEnum Q]
     (target : List Γo) :
@@ -864,46 +891,68 @@ theorem dovetailMachine_recognises {Γw Γo Q : Type u}
     target ∈ generatedLanguage gen Finset.univ (generator_supports_univ gen) := by
   sorry
 
--- lemma every_generable_language_is_tm2_recognisable
---     {Γ : Type u}
---     [Inhabited Γ] [FinEnum Γ]
---     (L : Language Γ)
---     (hL : L ∈ generableLanguages) :
---     L ∈ languagesRecognisedByTM2s := by
---   obtain ⟨Γw, Q, hΓwfinenum, hQdec, gen, S_gen, hS_gen, hgen⟩ := hL
---   haveI : DecidableEq Q := hQdec
---   let gen' := @Generator.restrictToSupport Γw Γ Q hΓwfinenum _ _ gen S_gen hS_gen
---   haveI : Fintype ↥S_gen := inferInstance
---   haveI : DecidableEq ↥S_gen := inferInstance
---   haveI : FinEnum ↥S_gen := FinEnum.ofList (Finset.univ.val.toList) (by simp)
---   haveI : Inhabited ↥S_gen := ⟨gen'.init⟩
---   haveI : ∀ k, Inhabited (stackAlphabet Γw Γ ↥S_gen k) :=
---     fun k => by cases k <;> simp only [stackAlphabet] <;> infer_instance
---   haveI : ∀ k, Fintype (stackAlphabet Γw Γ ↥S_gen k) :=
---     fun k => by cases k <;> simp only [stackAlphabet] <;> infer_instance
---   haveI : ∀ k, DecidableEq (stackAlphabet Γw Γ ↥S_gen k) :=
---     fun k => by cases k <;> simp only [stackAlphabet] <;> infer_instance
---   refine ⟨DovetailStack, inferInstance, inferInstance, inferInstance,
---     stackAlphabet Γw Γ ↥S_gen,
---     _,
---     _,
---     _,
---     rfl,
---     DovetailLabel, inferInstance,
---     DovetailSigma Γw Γ ↥S_gen, inferInstance, inferInstance,
---     dovetailMachine gen',
---     Finset.univ,
---     ⟨Finset.mem_univ _, fun _ _ => Finset.mem_univ _⟩,
---     ?_⟩
---   subst hgen
---   ext input
---   simp only [Set.mem_setOf_eq]
---   rw [← dovetailMachine_recognises gen' input]
---   simp only [generatedLanguage, Set.mem_setOf_eq]
---   constructor
---   · rintro ⟨i, h⟩
---     exact ⟨i, restrictToSupport_Computes_backward gen S_gen hS_gen h⟩
---   · rintro ⟨i, h⟩
---     exact ⟨i, restrictToSupport_Computes_forward gen S_gen hS_gen h⟩
+lemma every_generable_language_is_tm2_recognisable
+    {Γ : Type u}
+    [Inhabited Γ] [FinEnum Γ]
+    (L : Language Γ)
+    (hL : L ∈ generableLanguages) :
+    L ∈ languagesRecognisedByTM2s := by
+  obtain ⟨Γw, Q, hΓwfinenum, hQdec, gen, S_gen, hS_gen, hgen⟩ := hL
+  haveI : DecidableEq Q := hQdec
+  let gen' := @Generator.restrictToSupport Γw Γ Q hΓwfinenum _ _ gen S_gen hS_gen
+  haveI : Fintype ↥S_gen := inferInstance
+  haveI : DecidableEq ↥S_gen := inferInstance
+  haveI : FinEnum ↥S_gen := FinEnum.ofList (Finset.univ.val.toList) (by simp)
+  haveI : Inhabited ↥S_gen := ⟨gen'.init⟩
+  haveI : ∀ k, Inhabited (stackAlphabet Γw Γ ↥S_gen k) :=
+    fun k => by cases k <;> simp only [stackAlphabet] <;> infer_instance
+  haveI : ∀ k, Fintype (stackAlphabet Γw Γ ↥S_gen k) :=
+    fun k => by cases k <;> simp only [stackAlphabet] <;> infer_instance
+  haveI : ∀ k, DecidableEq (stackAlphabet Γw Γ ↥S_gen k) :=
+    fun k => by cases k <;> simp only [stackAlphabet] <;> infer_instance
+  haveI : Inhabited Γw := ⟨gen.blank⟩
+  refine ⟨
+    DovetailStack,
+    inferInstance,
+    inferInstance,
+    inferInstance,
+    stackAlphabet Γw Γ ↥S_gen,
+    inferInstance,
+    inferInstance,
+    inferInstance,
+    rfl,
+    DovetailLabel,
+    inferInstance,
+    DovetailSigma Γw Γ ↥S_gen,
+    inferInstance,
+    inferInstance,
+    dovetailMachine gen',
+    Finset.univ,
+    ⟨Finset.mem_univ _, fun q _ => by
+      cases q <;> simp only [dovetailMachine,
+        pushNewConfig_copy_counter, pushNewConfig_restore_counter,
+        stepAll, stepOne, stepOne_workR, applyTransition, applyInputDir,
+        applyWorkDir, checkOutput, restoreTarget, restoreOutput,
+        saveSegment, saveSegment_input, saveSegment_workL, saveSegment_workR,
+        saveSegment_output, restoreAll_state, restoreAll_input,
+        restoreAll_workL, restoreAll_workR, restoreAll_output,
+        incrementCounter, incrementCounter_loop, incrementCounter_restore,
+        Turing.TM2.SupportsStmt] <;>
+      simp (config := { decide := true })⟩,
+    ?_⟩
+  subst hgen
+  ext input
+  simp only [Set.mem_setOf_eq]
+  have lang_eq : generatedLanguage gen S_gen hS_gen =
+      generatedLanguage gen' Finset.univ (generator_supports_univ gen') := by
+    ext w
+    simp only [generatedLanguage, Set.mem_setOf_eq]
+    constructor
+    · rintro ⟨input, h⟩
+      exact ⟨input, restrictToSupport_Computes gen S_gen hS_gen h⟩
+    · rintro ⟨input, h⟩
+      exact ⟨input, restrictToSupport_Computes_lift gen S_gen hS_gen h⟩
+  rw [lang_eq]
+  exact (dovetailMachine_recognises gen' input).symm
 
 end RandomisedGeneration

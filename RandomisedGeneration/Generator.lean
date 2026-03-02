@@ -6,6 +6,7 @@ inductive WorkTapeDirection
   | L     -- move left
   | R     -- move right
   | N     -- stay / no move
+deriving Fintype, DecidableEq
 
 instance : Coe WorkTapeDirection ℤ :=
 ⟨fun
@@ -16,6 +17,7 @@ instance : Coe WorkTapeDirection ℤ :=
 inductive InputTapeDirection
   | R     -- move right
   | N     -- stay / no move
+deriving Fintype, DecidableEq
 
 instance : Coe InputTapeDirection ℕ :=
 ⟨fun
@@ -648,16 +650,6 @@ lemma initConfig_mapState {Γw Γo Q : Type u}
     initConfig gen input := by
   simp [initConfig, GenConfig.mapState, Generator.restrictToSupport]
 
--- lemma step_restrictToSupport {Γw Γo Q : Type u}
---     [FinEnum Γw] [Inhabited Γo] [FinEnum Γo]
---     (gen : Generator Γw Γo Q)
---     (S : Finset Q) (hS : GeneratorSupports gen S)
---     (cfg : GenConfig Γw Γo ↥S) :
---     (step (gen.restrictToSupport S hS) cfg).map (·.mapState Subtype.val) =
---     step gen (cfg.mapState Subtype.val) := by
---   simp [step, Generator.restrictToSupport, GenConfig.mapState, Option.map]
---   sorry
-
 lemma step_restrictToSupport {Γw Γo Q : Type u}
     [FinEnum Γw] [Inhabited Γo] [FinEnum Γo]
     (gen : Generator Γw Γo Q)
@@ -689,7 +681,7 @@ lemma step_restrictToSupport {Γw Γo Q : Type u}
       sorry
     · sorry
 
-lemma step_restrictToSupport_backward {Γw Γo Q : Type u}
+lemma restrictToSupport_step_of_step {Γw Γo Q : Type u}
     [FinEnum Γw] [Inhabited Γo] [FinEnum Γo]
     (gen : Generator Γw Γo Q)
     (S : Finset Q) (hS : GeneratorSupports gen S)
@@ -703,7 +695,7 @@ lemma step_restrictToSupport_backward {Γw Γo Q : Type u}
   rw [h] at key
   sorry
 
-lemma restrictToSupport_Computes_forward {Γw Γo Q : Type u}
+lemma restrictToSupport_Computes_lift {Γw Γo Q : Type u}
     [FinEnum Γw] [Inhabited Γo] [FinEnum Γo]
     (gen : Generator Γw Γo Q)
     (S : Finset Q) (hS : GeneratorSupports gen S)
@@ -731,7 +723,7 @@ lemma restrictToSupport_Computes_forward {Γw Γo Q : Type u}
     simp [h_step] at key
     sorry
 
-lemma restrictToSupport_Computes_backward {Γw Γo Q : Type u}
+lemma restrictToSupport_Computes {Γw Γo Q : Type u}
     [FinEnum Γw] [Inhabited Γo] [FinEnum Γo]
     (gen : Generator Γw Γo Q)
     (S : Finset Q) (hS : GeneratorSupports gen S)
@@ -757,7 +749,7 @@ lemma restrictToSupport_Computes_backward {Γw Γo Q : Type u}
   | step cfg cfg' w h_step _ ih =>
     intro cfgS h_eq
     obtain ⟨cfgS', h_stepS, h_eq'⟩ :=
-      step_restrictToSupport_backward gen S hS cfgS cfg'
+      restrictToSupport_step_of_step gen S hS cfgS cfg'
         (by rw [h_eq]; exact h_step)
     apply Computes.step _ _ _ h_stepS
     exact ih cfgS' h_eq'

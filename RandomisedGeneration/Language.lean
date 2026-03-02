@@ -31,9 +31,9 @@ lemma Generator.restrictToSupport_generatedLanguage {Γw Γo Q : Type u}
   simp only [generatedLanguage, Set.mem_setOf_eq]
   constructor
   · rintro ⟨input, h_comp⟩
-    exact ⟨input, restrictToSupport_Computes_forward gen S hS h_comp⟩
+    exact ⟨input, restrictToSupport_Computes_lift gen S hS h_comp⟩
   · rintro ⟨input, h_comp⟩
-    exact ⟨input, restrictToSupport_Computes_backward gen S hS h_comp⟩
+    exact ⟨input, restrictToSupport_Computes gen S hS h_comp⟩
 
 def generableLanguages {Γ : Type u}
   [Inhabited Γ] [FinEnum Γ] : Set (Language Γ) :=
