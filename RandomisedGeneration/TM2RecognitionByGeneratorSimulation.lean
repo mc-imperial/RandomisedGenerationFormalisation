@@ -852,4 +852,13 @@ def dovetailMachine {Γw Γo Q : Type u}
 
 end Dovetailing
 
+-- The dovetail TM2 halts on input `target` iff `target` is in the generated language.
+theorem dovetailMachine_recognises {Γw Γo Q : Type u}
+    [FinEnum Γw] [Inhabited Γw] [Inhabited Γo] [FinEnum Γo] [FinEnum Q]
+    (gen : Generator Γw Γo Q)
+    (target : List Γo) :
+    (Turing.TM2.eval (dovetailMachine gen) DovetailStack.target target.reverse).Dom ↔
+    target ∈ generatedLanguage gen Finset.univ (generator_supports_univ gen) := by
+  sorry
+
 end RandomisedGeneration
