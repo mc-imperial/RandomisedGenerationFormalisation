@@ -26,7 +26,7 @@ instance : Coe InputTapeDirection ℕ :=
 -- Γ is the output tape alphabet.
 -- Q is the set of states.
 structure Generator (Γw Γo Q : Type u)
-[Fintype Γw]
+[FinEnum Γw]
 [Inhabited Γo] [FinEnum Γo]
 where
   init : Q -- Initial state
@@ -45,20 +45,20 @@ where
   δ : Q -> Bool -> Γw → Option (Q × Γw × Option Γo × InputTapeDirection × WorkTapeDirection)
 
 def GeneratorSupports {Γw Γo Q : Type u}
-  [Fintype Γw] [Inhabited Γo] [FinEnum Γo]
+  [FinEnum Γw] [Inhabited Γo] [FinEnum Γo]
   (gen : Generator Γw Γo Q) (S : Finset Q) : Prop :=
   gen.init ∈ S ∧
   ∀ q ∈ S, ∀ b w q' w' o itd wtd,
     gen.δ q b w = some (q', w', o, itd, wtd) → q' ∈ S
 
 lemma generator_supports_univ {Γw Γo Q : Type u}
-  [Fintype Γw] [Inhabited Γo] [FinEnum Γo] [Fintype Q]
+  [FinEnum Γw] [Inhabited Γo] [FinEnum Γo] [Fintype Q]
   (gen : Generator Γw Γo Q) :
   GeneratorSupports gen Finset.univ :=
   ⟨Finset.mem_univ _, fun _ _ _ _ _ _ _ _ _ _ => Finset.mem_univ _⟩
 
 def Generator.restrictToSupport {Γw Γo Q : Type u}
-    [Fintype Γw] [Inhabited Γo] [FinEnum Γo]
+    [FinEnum Γw] [Inhabited Γo] [FinEnum Γo]
     (gen : Generator Γw Γo Q)
     (S : Finset Q) (hS : GeneratorSupports gen S) : Generator Γw Γo ↥S where
   init := ⟨gen.init, hS.1⟩
@@ -71,7 +71,7 @@ def Generator.restrictToSupport {Γw Γo Q : Type u}
 
 @[ext]
 structure GenConfig (Γw Γo Q : Type u)
-[Fintype Γw]
+[FinEnum Γw]
 [Inhabited Γo] [FinEnum Γo]
 where
   (state : Q)
@@ -82,7 +82,7 @@ where
   (output : List Γo)
 
 def step {Γw Γo Q : Type u}
-[Fintype Γw]
+[FinEnum Γw]
 [Inhabited Γo] [FinEnum Γo]
 (gen : Generator Γw Γo Q) (cfg : GenConfig Γw Γo Q) :
   Option (GenConfig Γw Γo Q) :=
@@ -102,7 +102,7 @@ match gen.δ cfg.state (cfg.input cfg.inputIndex) (cfg.work cfg.workIndex) with
     }
 
 def initConfig {Γw Γo Q : Type u}
-[Fintype Γw]
+[FinEnum Γw]
 [Inhabited Γo] [FinEnum Γo]
 (gen : Generator Γw Γo Q) (input : ℕ → Bool) :
   GenConfig Γw Γo Q :=
@@ -115,27 +115,27 @@ def initConfig {Γw Γo Q : Type u}
 }
 
 def IsHalting {Γw Γo Q}
-[Fintype Γw]
+[FinEnum Γw]
 [Inhabited Γo] [FinEnum Γo]
   (gen : Generator Γw Γo Q)
   (cfg : GenConfig Γw Γo Q) : Prop :=
 step gen cfg = none
 
 def stepN {Γw Γo Q : Type u}
-  [Fintype Γw] [Inhabited Γo] [FinEnum Γo]
+  [FinEnum Γw] [Inhabited Γo] [FinEnum Γo]
   (gen : Generator Γw Γo Q)
   (cfg : Option (GenConfig Γw Γo Q))
   (n : ℕ) : Option (GenConfig Γw Γo Q) :=
   (fun c => c.bind (step gen))^[n] cfg
 
 lemma stepN_zero {Γw Γo Q : Type u}
-  [Fintype Γw] [Inhabited Γo] [FinEnum Γo]
+  [FinEnum Γw] [Inhabited Γo] [FinEnum Γo]
   (gen : Generator Γw Γo Q)
   (cfg : Option (GenConfig Γw Γo Q)) :
   stepN gen cfg 0 = cfg := rfl
 
 lemma stepN_succ {Γw Γo Q : Type u}
-  [Fintype Γw] [Inhabited Γo] [FinEnum Γo]
+  [FinEnum Γw] [Inhabited Γo] [FinEnum Γo]
   (gen : Generator Γw Γo Q)
   (cfg : Option (GenConfig Γw Γo Q)) (n : ℕ) :
   stepN gen cfg (n + 1) = (stepN gen cfg n).bind (step gen) := by
@@ -143,21 +143,21 @@ lemma stepN_succ {Γw Γo Q : Type u}
   exact Function.iterate_succ_apply' (fun c => c.bind (step gen)) n cfg
 
 lemma stepN_succ_front {Γw Γo Q : Type u}
-  [Fintype Γw] [Inhabited Γo] [FinEnum Γo]
+  [FinEnum Γw] [Inhabited Γo] [FinEnum Γo]
   (gen : Generator Γw Γo Q)
   (cfg : Option (GenConfig Γw Γo Q)) (n : ℕ) :
   stepN gen cfg (n + 1) = stepN gen (cfg.bind (step gen)) n := by
   simp only [stepN, Function.iterate_succ_apply]
 
 lemma stepN_none {Γw Γo Q : Type u}
-  [Fintype Γw] [Inhabited Γo] [FinEnum Γo]
+  [FinEnum Γw] [Inhabited Γo] [FinEnum Γo]
   (gen : Generator Γw Γo Q) (n : ℕ) :
   stepN gen none n = none := by
   simp only [stepN]
   exact Function.iterate_fixed (by rfl) n
 
 lemma stepN_halted {Γw Γo Q : Type u}
-  [Fintype Γw] [Inhabited Γo] [FinEnum Γo]
+  [FinEnum Γw] [Inhabited Γo] [FinEnum Γo]
   (gen : Generator Γw Γo Q)
   (cfg : GenConfig Γw Γo Q)
   (h : IsHalting gen cfg) (n : ℕ) :
@@ -168,7 +168,7 @@ lemma stepN_halted {Γw Γo Q : Type u}
   exact Function.iterate_fixed rfl n
 
 lemma stepN_add {Γw Γo Q : Type u}
-[Fintype Γw] [Inhabited Γo] [FinEnum Γo]
+[FinEnum Γw] [Inhabited Γo] [FinEnum Γo]
 {gen : Generator Γw Γo Q} (a b : ℕ) (cfg : Option (GenConfig Γw Γo Q)) :
   stepN gen cfg (a + b) = stepN gen (stepN gen cfg a) b := by
   induction a generalizing cfg with
@@ -178,7 +178,7 @@ lemma stepN_add {Γw Γo Q : Type u}
     exact ih (cfg.bind (step gen))
 
 lemma stepN_prefix {Γw Γo Q : Type u}
-[Fintype Γw] [Inhabited Γo] [FinEnum Γo]
+[FinEnum Γw] [Inhabited Γo] [FinEnum Γo]
 {gen : Generator Γw Γo Q} {cfg cfg1 cfg2 : GenConfig Γw Γo Q} {m n : ℕ} :
   stepN gen (some cfg) m = some cfg1 →
   stepN gen (some cfg) n = some cfg2 →
@@ -190,7 +190,7 @@ lemma stepN_prefix {Γw Γo Q : Type u}
   rwa [stepN_add, h1] at key
 
 lemma step_deterministic {Γw Γo Q : Type u}
-[Fintype Γw] [Inhabited Γo] [FinEnum Γo]
+[FinEnum Γw] [Inhabited Γo] [FinEnum Γo]
 {gen : Generator Γw Γo Q} {cfg cfg1 cfg2 : GenConfig Γw Γo Q} :
   step gen cfg = some cfg1 →
   step gen cfg = some cfg2 →
@@ -200,7 +200,7 @@ lemma step_deterministic {Γw Γo Q : Type u}
   exact Option.some.inj h2
 
 inductive Steps {Γw Γo Q}
-[Fintype Γw]
+[FinEnum Γw]
 [Inhabited Γo] [FinEnum Γo]
 (gen : Generator Γw Γo Q) :
   GenConfig Γw Γo Q →
@@ -214,7 +214,7 @@ inductive Steps {Γw Γo Q}
     Steps gen cfg cfg'' (n + 1)
 
 lemma stepN_eq_Steps {Γw Γo Q : Type u}
-[Fintype Γw]
+[FinEnum Γw]
 [Inhabited Γo] [FinEnum Γo]
   (gen : Generator Γw Γo Q)
   (cfg cfg' : GenConfig Γw Γo Q) (n : ℕ) :
@@ -245,7 +245,7 @@ lemma stepN_eq_Steps {Γw Γo Q : Type u}
           exact h_steps
 
 lemma stepN_none_iff_halted {Γw Γo Q : Type u}
-[Fintype Γw]
+[FinEnum Γw]
 [Inhabited Γo] [FinEnum Γo]
   (gen : Generator Γw Γo Q)
   (cfg cfg' : GenConfig Γw Γo Q) (n : ℕ) :
@@ -254,7 +254,7 @@ lemma stepN_none_iff_halted {Γw Γo Q : Type u}
   simp [stepN_eq_Steps]
 
 lemma step_preserves_input {Γw Γo Q : Type u}
-[Fintype Γw] [Inhabited Γo] [FinEnum Γo]
+[FinEnum Γw] [Inhabited Γo] [FinEnum Γo]
 {gen : Generator Γw Γo Q} {cfg cfg' : GenConfig Γw Γo Q} :
   RandomisedGeneration.step gen cfg = some cfg' →
   cfg'.input = cfg.input := by
@@ -268,7 +268,7 @@ lemma step_preserves_input {Γw Γo Q : Type u}
 namespace Steps
 
 lemma trans {Γw Γo Q}
-[Fintype Γw]
+[FinEnum Γw]
 [Inhabited Γo] [FinEnum Γo]
   {gen : Generator Γw Γo Q} {cfg1 cfg2 cfg3 : GenConfig Γw Γo Q} {n m : ℕ} :
   Steps gen cfg1 cfg2 n → Steps gen cfg2 cfg3 m → Steps gen cfg1 cfg3 (n + m) := by
@@ -284,7 +284,7 @@ lemma trans {Γw Γo Q}
     exact ih h2
 
 lemma unique {Γw Γo Q : Type u}
-[Fintype Γw] [Inhabited Γo] [FinEnum Γo]
+[FinEnum Γw] [Inhabited Γo] [FinEnum Γo]
 {gen : Generator Γw Γo Q} {cfg cfg1 cfg2 : GenConfig Γw Γo Q} {n : ℕ} :
   Steps gen cfg cfg1 n →
   Steps gen cfg cfg2 n →
@@ -300,7 +300,7 @@ lemma unique {Γw Γo Q : Type u}
       exact ih h_steps'
 
 lemma prefix_extends {Γw Γo Q : Type u}
-[Fintype Γw] [Inhabited Γo] [FinEnum Γo]
+[FinEnum Γw] [Inhabited Γo] [FinEnum Γo]
 {gen : Generator Γw Γo Q} {cfg cfg1 cfg2 : GenConfig Γw Γo Q} {m n : ℕ} :
   Steps gen cfg cfg1 m →
   Steps gen cfg cfg2 n →
@@ -311,7 +311,7 @@ lemma prefix_extends {Γw Γo Q : Type u}
   exact stepN_prefix h1 h2 hmn
 
 lemma step_inputIndex_mono {Γw Γo Q : Type u}
-[Fintype Γw] [Inhabited Γo] [FinEnum Γo]
+[FinEnum Γw] [Inhabited Γo] [FinEnum Γo]
 {gen : Generator Γw Γo Q} {cfg cfg' : GenConfig Γw Γo Q} :
   RandomisedGeneration.step gen cfg = some cfg' →
   cfg.inputIndex ≤ cfg'.inputIndex := by
@@ -325,7 +325,7 @@ lemma step_inputIndex_mono {Γw Γo Q : Type u}
     omega
 
 lemma inputIndex_mono {Γw Γo Q : Type u}
-[Fintype Γw] [Inhabited Γo] [FinEnum Γo]
+[FinEnum Γw] [Inhabited Γo] [FinEnum Γo]
 {gen : Generator Γw Γo Q} {cfg cfg' : GenConfig Γw Γo Q} {n : ℕ} :
   Steps gen cfg cfg' n →
   cfg.inputIndex ≤ cfg'.inputIndex := by
@@ -339,7 +339,7 @@ lemma inputIndex_mono {Γw Γo Q : Type u}
 end Steps
 
 inductive Computes {Γw Γo Q : Type u}
-[Fintype Γw]
+[FinEnum Γw]
 [Inhabited Γo] [FinEnum Γo]
 (gen : Generator Γw Γo Q) : GenConfig Γw Γo Q → List Γo → Prop
   | halt (cfg : GenConfig Γw Γo Q) :
@@ -348,7 +348,7 @@ inductive Computes {Γw Γo Q : Type u}
       step gen cfg = some cfg' → Computes gen cfg' out → Computes gen cfg out
 
 def Reachable {Γw Γo Q}
-[Fintype Γw]
+[FinEnum Γw]
 [Inhabited Γo] [FinEnum Γo]
 (gen : Generator Γw Γo Q)
 (cfg : GenConfig Γw Γo Q)
@@ -358,7 +358,7 @@ def Reachable {Γw Γo Q}
 namespace Reachable
 
 lemma refl {Γw Γo Q}
-[Fintype Γw]
+[FinEnum Γw]
 [Inhabited Γo] [FinEnum Γo]
   (gen : Generator Γw Γo Q)
   {cfg : GenConfig Γw Γo Q} :
@@ -369,7 +369,7 @@ by
   exact Steps.refl cfg
 
 lemma trans {Γw Γo Q}
-[Fintype Γw]
+[FinEnum Γw]
 [Inhabited Γo] [FinEnum Γo]
   (gen : Generator Γw Γo Q)
   {cfg1 cfg2 cfg3 : GenConfig Γw Γo Q} :
@@ -379,7 +379,7 @@ by
   exact ⟨n + m, Steps.trans h1 h2⟩
 
 lemma computes {Γw Γo Q : Type u}
-[Fintype Γw]
+[FinEnum Γw]
 [Inhabited Γo] [FinEnum Γo]
   {gen : Generator Γw Γo Q} {cfg haltCfg : GenConfig Γw Γo Q} :
   Reachable gen cfg haltCfg → step gen haltCfg = none →
@@ -395,7 +395,7 @@ lemma computes {Γw Γo Q : Type u}
 end Reachable
 
 lemma reachable_input_eq {Γw Γo Q : Type u}
-[Fintype Γw] [Inhabited Γo] [FinEnum Γo]
+[FinEnum Γw] [Inhabited Γo] [FinEnum Γo]
 {gen : Generator Γw Γo Q} {f : ℕ → Bool} {cfg : GenConfig Γw Γo Q} :
   Reachable gen (initConfig gen f) cfg →
   cfg.input = f := by
@@ -461,7 +461,7 @@ lemma testBit_sum_pow (f : ℕ → Bool) (k i : ℕ) (hi : i < k) :
 namespace Computes
 
 lemma of_Reachable {Γw Γo Q : Type u}
-[Fintype Γw]
+[FinEnum Γw]
 [Inhabited Γo] [FinEnum Γo]
   {gen : Generator Γw Γo Q} {cfg cfg' : GenConfig Γw Γo Q} {out : List Γo} :
   Computes gen cfg out → Reachable gen cfg cfg' → Computes gen cfg' out := by
@@ -482,7 +482,7 @@ lemma of_Reachable {Γw Γo Q : Type u}
       exact ih h_comp'
 
 lemma to_stepN {Γw Γo Q : Type u}
-[Fintype Γw]
+[FinEnum Γw]
 [Inhabited Γo] [FinEnum Γo]
 {gen : Generator Γw Γo Q} {cfg : GenConfig Γw Γo Q} {w : List Γo} :
   Computes gen cfg w →
@@ -501,7 +501,7 @@ lemma to_stepN {Γw Γo Q : Type u}
     simp [h_step, h_stepN]
 
 lemma congr_input {Γw Γo Q : Type u}
-[Fintype Γw]
+[FinEnum Γw]
 [Inhabited Γo] [FinEnum Γo]
 {gen : Generator Γw Γo Q} {f g : ℕ → Bool} {w : List Γo} {k : ℕ} :
   Computes gen (initConfig gen f) w →
@@ -563,7 +563,7 @@ lemma congr_input {Γw Γo Q : Type u}
       exact ih cfg_next h_reach' h_stepN'
 
 lemma finite_input_reads {Γw Γo Q : Type u}
-[Fintype Γw]
+[FinEnum Γw]
 [Inhabited Γo] [FinEnum Γo]
 {gen : Generator Γw Γo Q} {f : ℕ → Bool} {w : List Γo} :
   Computes gen (initConfig gen f) w →
@@ -594,7 +594,7 @@ lemma finite_input_reads {Γw Γo Q : Type u}
       simp at h_halt_to_cfg
 
 lemma exists_natTestBit {Γw Γo Q : Type u}
-[Fintype Γw]
+[FinEnum Γw]
 [Inhabited Γo] [FinEnum Γo]
 {gen : Generator Γw Γo Q} {f : ℕ → Bool} {w : List Γo} :
   Computes gen (initConfig gen f) w →
@@ -610,37 +610,37 @@ lemma exists_natTestBit {Γw Γo Q : Type u}
 end Computes
 
 def GenConfig.mapState {Γw Γo Q Q' : Type u}
-    [Fintype Γw] [Inhabited Γo] [FinEnum Γo]
+    [FinEnum Γw] [Inhabited Γo] [FinEnum Γo]
     (f : Q → Q') (cfg : GenConfig Γw Γo Q) : GenConfig Γw Γo Q' :=
   { cfg with state := f cfg.state }
 
 @[simp]
 lemma GenConfig.mapState_state {Γw Γo Q Q' : Type u}
-    [Fintype Γw] [Inhabited Γo] [FinEnum Γo]
+    [FinEnum Γw] [Inhabited Γo] [FinEnum Γo]
     (f : Q → Q') (cfg : GenConfig Γw Γo Q) :
     (cfg.mapState f).state = f cfg.state := rfl
 
 @[simp]
 lemma GenConfig.mapState_input {Γw Γo Q Q' : Type u}
-    [Fintype Γw] [Inhabited Γo] [FinEnum Γo]
+    [FinEnum Γw] [Inhabited Γo] [FinEnum Γo]
     (f : Q → Q') (cfg : GenConfig Γw Γo Q) :
     (cfg.mapState f).input = cfg.input := rfl
 
 @[simp]
 lemma GenConfig.mapState_output {Γw Γo Q Q' : Type u}
-    [Fintype Γw] [Inhabited Γo] [FinEnum Γo]
+    [FinEnum Γw] [Inhabited Γo] [FinEnum Γo]
     (f : Q → Q') (cfg : GenConfig Γw Γo Q) :
     (cfg.mapState f).output = cfg.output := rfl
 
 @[simp]
 lemma GenConfig.mapState_id {Γw Γo Q : Type u}
-    [Fintype Γw] [Inhabited Γo] [FinEnum Γo]
+    [FinEnum Γw] [Inhabited Γo] [FinEnum Γo]
     (cfg : GenConfig Γw Γo Q) :
     cfg.mapState id = cfg := by
   simp [GenConfig.mapState]
 
 lemma initConfig_mapState {Γw Γo Q : Type u}
-    [Fintype Γw] [Inhabited Γo] [FinEnum Γo]
+    [FinEnum Γw] [Inhabited Γo] [FinEnum Γo]
     (gen : Generator Γw Γo Q)
     (S : Finset Q) (hS : GeneratorSupports gen S)
     (input : ℕ → Bool) :
@@ -649,7 +649,7 @@ lemma initConfig_mapState {Γw Γo Q : Type u}
   simp [initConfig, GenConfig.mapState, Generator.restrictToSupport]
 
 -- lemma step_restrictToSupport {Γw Γo Q : Type u}
---     [Fintype Γw] [Inhabited Γo] [FinEnum Γo]
+--     [FinEnum Γw] [Inhabited Γo] [FinEnum Γo]
 --     (gen : Generator Γw Γo Q)
 --     (S : Finset Q) (hS : GeneratorSupports gen S)
 --     (cfg : GenConfig Γw Γo ↥S) :
@@ -659,7 +659,7 @@ lemma initConfig_mapState {Γw Γo Q : Type u}
 --   sorry
 
 lemma step_restrictToSupport {Γw Γo Q : Type u}
-    [Fintype Γw] [Inhabited Γo] [FinEnum Γo]
+    [FinEnum Γw] [Inhabited Γo] [FinEnum Γo]
     (gen : Generator Γw Γo Q)
     (S : Finset Q) (hS : GeneratorSupports gen S)
     (cfg : GenConfig Γw Γo ↥S) :
@@ -690,7 +690,7 @@ lemma step_restrictToSupport {Γw Γo Q : Type u}
     · sorry
 
 lemma step_restrictToSupport_backward {Γw Γo Q : Type u}
-    [Fintype Γw] [Inhabited Γo] [FinEnum Γo]
+    [FinEnum Γw] [Inhabited Γo] [FinEnum Γo]
     (gen : Generator Γw Γo Q)
     (S : Finset Q) (hS : GeneratorSupports gen S)
     (cfg : GenConfig Γw Γo ↥S)
@@ -704,7 +704,7 @@ lemma step_restrictToSupport_backward {Γw Γo Q : Type u}
   sorry
 
 lemma restrictToSupport_Computes_forward {Γw Γo Q : Type u}
-    [Fintype Γw] [Inhabited Γo] [FinEnum Γo]
+    [FinEnum Γw] [Inhabited Γo] [FinEnum Γo]
     (gen : Generator Γw Γo Q)
     (S : Finset Q) (hS : GeneratorSupports gen S)
     {input : ℕ → Bool} {w : List Γo} :
@@ -732,7 +732,7 @@ lemma restrictToSupport_Computes_forward {Γw Γo Q : Type u}
     sorry
 
 lemma restrictToSupport_Computes_backward {Γw Γo Q : Type u}
-    [Fintype Γw] [Inhabited Γo] [FinEnum Γo]
+    [FinEnum Γw] [Inhabited Γo] [FinEnum Γo]
     (gen : Generator Γw Γo Q)
     (S : Finset Q) (hS : GeneratorSupports gen S)
     {input : ℕ → Bool} {w : List Γo} :

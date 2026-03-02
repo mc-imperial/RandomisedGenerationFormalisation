@@ -14,14 +14,14 @@ def Language (Γ : Type u)
  : Type u := Set (List Γ)
 
 def generatedLanguage {Γw Γo Q : Type u}
-  [Fintype Γw] [Inhabited Γo] [FinEnum Γo]
+  [FinEnum Γw] [Inhabited Γo] [FinEnum Γo]
   (gen : Generator Γw Γo Q)
   (S : Finset Q)
   (_ : GeneratorSupports gen S) : Language Γo :=
   { out | ∃ input, Computes gen (initConfig gen input) out }
 
 lemma Generator.restrictToSupport_generatedLanguage {Γw Γo Q : Type u}
-    [Fintype Γw] [Inhabited Γo] [FinEnum Γo]
+    [FinEnum Γw] [Inhabited Γo] [FinEnum Γo]
     (gen : Generator Γw Γo Q)
     (S : Finset Q) (hS : GeneratorSupports gen S) :
     generatedLanguage (gen.restrictToSupport S hS) Finset.univ
@@ -38,8 +38,7 @@ lemma Generator.restrictToSupport_generatedLanguage {Γw Γo Q : Type u}
 def generableLanguages {Γ : Type u}
   [Inhabited Γ] [FinEnum Γ] : Set (Language Γ) :=
   { L | ∃ (Γw Q : Type u)
-          (_ : Fintype Γw)
-          (_ : DecidableEq Γw)
+          (_ : FinEnum Γw)
           (hQdec : DecidableEq Q)
           (gen : Generator Γw Γ Q)
           (S : Finset Q)

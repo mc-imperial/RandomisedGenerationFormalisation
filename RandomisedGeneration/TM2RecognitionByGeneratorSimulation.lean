@@ -870,9 +870,9 @@ theorem dovetailMachine_recognises {Γw Γo Q : Type u}
 --     (L : Language Γ)
 --     (hL : L ∈ generableLanguages) :
 --     L ∈ languagesRecognisedByTM2s := by
---   obtain ⟨Γw, Q, hΓwfin, hQdec, gen, S_gen, hS_gen, hgen⟩ := hL
+--   obtain ⟨Γw, Q, hΓwfinenum, hQdec, gen, S_gen, hS_gen, hgen⟩ := hL
 --   haveI : DecidableEq Q := hQdec
---   let gen' := @Generator.restrictToSupport Γw Γ Q hΓwfin _ _ gen S_gen hS_gen
+--   let gen' := @Generator.restrictToSupport Γw Γ Q hΓwfinenum _ _ gen S_gen hS_gen
 --   haveI : Fintype ↥S_gen := inferInstance
 --   haveI : DecidableEq ↥S_gen := inferInstance
 --   haveI : FinEnum ↥S_gen := FinEnum.ofList (Finset.univ.val.toList) (by simp)
