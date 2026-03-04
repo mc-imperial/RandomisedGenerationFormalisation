@@ -201,6 +201,7 @@ def testCfg6 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailLa
              carry       := none }
     stk := fun k => match k with
              | DovetailStack.state => [(0 : Fin 1)]
+             | DovetailStack.workR => [some (0 : Fin 1)]
              | _ => [] }
 
 example : Turing.TM2.step (dovetailMachine GeneratorExamples.simpleGenerator) testCfg5 = some testCfg6 := by
@@ -230,6 +231,7 @@ def testCfg7 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailLa
              carry       := none }
     stk := fun k => match k with
              | DovetailStack.state => [(0 : Fin 1)]
+             | DovetailStack.workR => [some (0 : Fin 1)]
              | _ => [] }
 
 example : Turing.TM2.step (dovetailMachine GeneratorExamples.simpleGenerator) testCfg6 = some testCfg7 := by
@@ -302,7 +304,7 @@ def runTraceStr (n : ℕ) : String :=
     (some (dovetailInit (Γw := Fin 1) (Γo := Fin 2) (Q := Fin 1) [1]))
     ""
 
-#guard (runTraceStr.{0, 0} 103).endsWith "=== Halted at step 102 ===\n"
+#guard (runTraceStr.{0, 0} 108).endsWith "=== Halted at step 107 ===\n"
 
 end SimpleGenerator
 
@@ -388,7 +390,7 @@ def runTraceStr (n : ℕ) : String :=
     (some (dovetailInit (Γw := Fin 2) (Γo := Fin 2) (Q := Fin 3) [1, 1]))
     ""
 
-#guard (runTraceStr.{0, 0} 1330).endsWith "=== Halted at step 1329 ===\n"
+#guard (runTraceStr.{0, 0} 1371).endsWith "=== Halted at step 1370 ===\n"
 
 end TallyGenerator
 
