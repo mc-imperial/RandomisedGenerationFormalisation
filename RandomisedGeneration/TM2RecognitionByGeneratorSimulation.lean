@@ -15,23 +15,21 @@ variable {Γw Γo Q : Type u}
 variable [Inhabited Γo] [FinEnum Γo] [FinEnum Γw]
 
 structure DovetailState where
-  instances : List (Option (GenConfig Γw Γo Q))
+  instances : List (GenConfig Γw Γo Q)
   nextInput : ℕ
 
 def stepOrHalt
   (gen : Generator Γw Γo Q)
-  (cfg : Option (GenConfig Γw Γo Q)) : Option (GenConfig Γw Γo Q) :=
-  match cfg with
-  | none => none
-  | some c => match step gen c with
-    | none => some c
-    | some c' => some c'
+  (cfg : GenConfig Γw Γo Q) : GenConfig Γw Γo Q :=
+  match step gen cfg with
+  | none => cfg
+  | some c' => c'
 
 def dovetailStep
   (gen : Generator Γw Γo Q)
   (ds : DovetailState (Γw := Γw) (Γo := Γo) (Q := Q)) :
   DovetailState (Γw := Γw) (Γo := Γo) (Q := Q) :=
-  { instances := (ds.instances ++ [some (initConfig gen (Nat.testBit ds.nextInput))]).map
+  { instances := (ds.instances ++ [initConfig gen (Nat.testBit ds.nextInput)]).map
                    (stepOrHalt gen)
     nextInput := ds.nextInput + 1 }
 
@@ -47,7 +45,7 @@ def DovetailRecognises
       (dovetailStep gen)^[n]
         (initDovetailState (Γw := Γw) (Γo := Γo) (Q := Q))
     let insts := state.instances
-    insts[i]? = some (some cfg) ∧
+    insts[i]? = some cfg ∧
     IsHalting gen cfg ∧
     cfg.output = w
 
@@ -55,13 +53,13 @@ def DovetailRecognises
 def steppedPrefix
   (gen : Generator Γw Γo Q)
   (ds : DovetailState (Γw := Γw) (Γo := Γo) (Q := Q))
-  (k : ℕ) : List (Option (GenConfig Γw Γo Q)) :=
+  (k : ℕ) : List (GenConfig Γw Γo Q) :=
   (ds.instances.take k).map (stepOrHalt gen)
 
 -- The "not yet stepped" suffix
 def pendingSuffix
   (ds : DovetailState (Γw := Γw) (Γo := Γo) (Q := Q))
-  (k : ℕ) : List (Option (GenConfig Γw Γo Q)) :=
+  (k : ℕ) : List (GenConfig Γw Γo Q) :=
   ds.instances.drop k
 
 -- The mid-round state at frontier k
@@ -110,7 +108,7 @@ lemma dovetailStep_eq_midRound_of_spawn
   (ds : DovetailState (Γw := Γw) (Γo := Γo) (Q := Q)) :
   dovetailStep gen ds =
     let spawned : DovetailState (Γw := Γw) (Γo := Γo) (Q := Q) :=
-      { instances := ds.instances ++ [some (initConfig gen (Nat.testBit ds.nextInput))]
+      { instances := ds.instances ++ [initConfig gen (Nat.testBit ds.nextInput)]
         nextInput := ds.nextInput + 1 }
     midRoundState gen spawned spawned.instances.length := by
   simp [dovetailStep, midRoundState, steppedPrefix, pendingSuffix]
@@ -198,10 +196,9 @@ lemma stepNHalt_succ (gen : Generator Γw Γo Q) (cfg : GenConfig Γw Γo Q) (n 
     | none => stepNHalt gen cfg n
     | some c' => c' := rfl
 
-lemma stepOrHalt_some_stepNHalt (gen : Generator Γw Γo Q) (cfg : GenConfig Γw Γo Q) (n : ℕ) :
-    stepOrHalt gen (some (stepNHalt gen cfg n)) = some (stepNHalt gen cfg (n + 1)) := by
-  simp [stepOrHalt, stepNHalt]
-  cases step gen (stepNHalt gen cfg n) <;> rfl
+lemma stepOrHalt_stepNHalt (gen : Generator Γw Γo Q) (cfg : GenConfig Γw Γo Q) (n : ℕ) :
+    stepOrHalt gen (stepNHalt gen cfg n) = stepNHalt gen cfg (n + 1) := by
+  simp only [stepOrHalt, stepNHalt_succ]
 
 lemma stepNHalt_fixed (gen : Generator Γw Γo Q) (cfg : GenConfig Γw Γo Q) (n : ℕ)
     (h : IsHalting gen (stepNHalt gen cfg n)) :
@@ -232,14 +229,15 @@ lemma instance_config_after_steps
     by_cases hi' : i < n
     · rw [if_pos (by rw [instances_length_after_steps]; exact hi')]
       rw [ih hi']
-      simp [stepOrHalt_some_stepNHalt, show n + 1 - i = (n - i) + 1 by omega]
+      simp only [Option.map_some]
+      rw [stepOrHalt_stepNHalt, show n + 1 - i = (n - i) + 1 by omega]
     · have hi'' : i = n := by omega
       subst hi''
       rw [if_neg (by rw [instances_length_after_steps]; omega)]
       rw [instances_length_after_steps, nextInput_after_steps]
       simp only [Nat.sub_self]
+      simp only [List.getElem?_cons_zero, Option.map_some]
       simp [stepOrHalt]
-      cases step gen (initConfig gen i.testBit) <;> rfl
 
 lemma stepNHalt_step (gen : Generator Γw Γo Q) (cfg cfg' : GenConfig Γw Γo Q) (n : ℕ)
     (hstep : step gen cfg = some cfg') :
@@ -316,8 +314,7 @@ theorem DovetailRecognises_iff_Computes
     rw [stepNHalt_succ] at h_inst
     have h_eq := stepNHalt_eq_of_stepN gen (initConfig gen m.testBit) haltCfg k h_stepN
     rw [h_eq] at h_inst
-    simp only [Function.iterate_succ, Function.comp_apply, h_halt, Option.pure_def,
-      Option.bind_eq_bind, Option.bind_some] at h_inst
+    simp only [Function.iterate_succ, Function.comp_apply, h_halt] at h_inst
     exact h_inst
 
 variable [Inhabited Γw] [FinEnum Q]
