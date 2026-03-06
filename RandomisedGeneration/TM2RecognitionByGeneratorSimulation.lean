@@ -1254,6 +1254,48 @@ lemma quiescentInvariant_init
   save_empty := by
     simp [dovetailInit, Turing.TM2.init]
 
+/-- If the invariant holds at checkAll and some instance is halting with matching output,
+    the TM2 halts. -/
+lemma checkAll_halts_on_match
+    (gen : Generator Γw Γo Q)
+    (target : List Γo)
+    (round : ℕ)
+    (tm2cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) DovetailLabel (DovetailSigma Γw Γo Q))
+    (hInv : QuiescentInvariant gen target round DovetailLabel.checkAll tm2cfg)
+    (hMatch : ∃ i, i < round ∧
+      IsHalting gen (instanceConfig gen i round) ∧
+      (instanceConfig gen i round).output = target) :
+    (Turing.TM2.eval (dovetailMachine gen) DovetailStack.target target).Dom := by
+  sorry
+
+/-- If the invariant holds at checkAll and no instance has matching output,
+    we reach pushNewConfig_copy_counter with the same round. -/
+lemma checkAll_to_pushNewConfig
+    (gen : Generator Γw Γo Q)
+    (target : List Γo)
+    (round : ℕ)
+    (tm2cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) DovetailLabel (DovetailSigma Γw Γo Q))
+    (hInv : QuiescentInvariant gen target round DovetailLabel.checkAll tm2cfg)
+    (hNoMatch : ∀ i, i < round →
+      ¬(IsHalting gen (instanceConfig gen i round) ∧
+        (instanceConfig gen i round).output = target)) :
+    ∃ tm2cfg',
+      QuiescentInvariant gen target round DovetailLabel.pushNewConfig_copy_counter tm2cfg' ∧
+      Turing.Reaches (Turing.TM2.step (dovetailMachine gen)) tm2cfg tm2cfg' := by
+  sorry
+
+/-- From pushNewConfig_copy_counter at round r, we reach checkAll at round r+1. -/
+lemma pushNewConfig_to_next_checkAll
+    (gen : Generator Γw Γo Q)
+    (target : List Γo)
+    (round : ℕ)
+    (tm2cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) DovetailLabel (DovetailSigma Γw Γo Q))
+    (hInv : QuiescentInvariant gen target round DovetailLabel.pushNewConfig_copy_counter tm2cfg) :
+    ∃ tm2cfg',
+      QuiescentInvariant gen target (round + 1) DovetailLabel.checkAll tm2cfg' ∧
+      Turing.Reaches (Turing.TM2.step (dovetailMachine gen)) tm2cfg tm2cfg' := by
+  sorry
+
 end Dovetailing
 
 -- The dovetail TM2 halts on input `target` iff `target` is in the generated language.
@@ -1305,9 +1347,16 @@ lemma every_generable_language_is_tm2_recognisable
     Finset.univ,
     ⟨Finset.mem_univ _, fun q _ => by
       cases q <;> simp only [dovetailMachine,
+        checkAll, checkOne, checkOutput, restoreTarget, restoreOutput,
+        checkPhase_saveSegment, checkPhase_saveSegment_input,
+        checkPhase_saveSegment_workL, checkPhase_saveSegment_workR,
+        checkPhase_saveSegment_output,
+        checkPhase_restoreAll_state, checkPhase_restoreAll_input,
+        checkPhase_restoreAll_workL, checkPhase_restoreAll_workR,
+        checkPhase_restoreAll_output,
         pushNewConfig_copy_counter, pushNewConfig_restore_counter,
         stepAll, stepOne, stepOne_workR, applyTransition, applyInputDir,
-        applyWorkDir, checkOutput, restoreTarget, restoreOutput,
+        applyWorkDir,
         saveSegment, saveSegment_input, saveSegment_workL, saveSegment_workR,
         saveSegment_output, restoreAll_state, restoreAll_input,
         restoreAll_workL, restoreAll_workR, restoreAll_output,
