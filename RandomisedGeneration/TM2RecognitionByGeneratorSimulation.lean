@@ -959,16 +959,119 @@ def dovetailMachine {Γw Γo Q : Type u}
   | DovetailLabel.restoreAll_input => restoreAll_input
   | DovetailLabel.restoreAll_state => restoreAll_state gen
 
--- The simulation relation
--- def DovetailTrCfg (ds : DovetailState) (cfg : TM2.Cfg ...) : Prop := sorry
 
--- The key simulation lemma
--- lemma dovetail_simulates :
---     Respects (dovetailMachineStep) (TM2.step (dovetailMachine gen)) DovetailTrCfg := sorry
+variable [Inhabited Γo] [FinEnum Γo] [FinEnum Γw]
 
--- The chain to TM0 recognisability
--- lemma generable_subset_tm0_recognisable :
---     generableLanguages ⊆ languagesRecognisedByTM0s := sorry
+/-- Split a none-separated stack into segments.
+    The stack has newest data on top (head of list).
+    Returns segments oldest-first (index 0 = oldest instance). -/
+def splitSegments {α : Type u} : List (Option α) → List (List α)
+  | [] => []
+  | l =>
+    let rec go (acc : List α) (rest : List (Option α)) : List (List α) :=
+      match rest with
+      | [] => [acc.reverse]
+      | none :: tl => acc.reverse :: go [] tl
+      | some x :: tl => go (x :: acc) tl
+    let segs := match l with
+      | none :: tl => go [] tl
+      | _ => go [] l
+    segs.reverse
+
+/-- The config of instance i after round rounds. -/
+def instanceConfig
+    (gen : Generator Γw Γo Q)
+    (i : ℕ) (round : ℕ) : GenConfig Γw Γo Q :=
+  stepNHalt gen (initConfig gen i.testBit) (round - i)
+
+def workRMatches
+    (gen : Generator Γw Γo Q)
+    (cfg : GenConfig Γw Γo Q)
+    (seg : List (Option Γw))
+    (bound : ℕ) : Prop :=
+  ∀ j : ℕ, j < bound →
+    if h : j < seg.length then
+      seg[j] = some (cfg.work (cfg.workIndex + 1 + ↑j))
+    else
+      cfg.work (cfg.workIndex + 1 + ↑j) = gen.blank
+
+def workLMatches
+    (gen : Generator Γw Γo Q)
+    (cfg : GenConfig Γw Γo Q)
+    (seg : List (Option Γw))
+    (bound : ℕ) : Prop :=
+  ∀ j : ℕ, j < bound →
+    if h : j < seg.length then
+      seg[j] = some (cfg.work (cfg.workIndex - 1 - ↑j))
+    else
+      cfg.work (cfg.workIndex - 1 - ↑j) = gen.blank
+
+structure QuiescentInvariant
+    (gen : Generator Γw Γo Q)
+    (target : List Γo)
+    (round : ℕ)
+    (tm2cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) DovetailLabel (DovetailSigma Γw Γo Q))
+    : Prop where
+  label : tm2cfg.l = some DovetailLabel.pushNewConfig_copy_counter
+  counter : tm2cfg.stk DovetailStack.counter = (Nat.bits round).map ULift.up
+  input : tm2cfg.stk DovetailStack.input =
+    ((List.range round).map (fun i =>
+      let cfg := instanceConfig gen i round
+      [none] ++ ((Nat.bits i).drop cfg.inputIndex).map (fun b => some (ULift.up b))
+    )).reverse.flatten
+  state : tm2cfg.stk DovetailStack.state =
+    ((List.range round).map (fun i => (instanceConfig gen i round).state)).reverse
+  output : tm2cfg.stk DovetailStack.output =
+    ((List.range round).map (fun i =>
+      [none] ++ (instanceConfig gen i round).output.map some)).reverse.flatten
+  workR_len : (splitSegments (tm2cfg.stk DovetailStack.workR)).length = round
+  workR : ∀ i (hi : i < round),
+    workRMatches gen (instanceConfig gen i round)
+      ((splitSegments (tm2cfg.stk DovetailStack.workR)).get ⟨i, by omega⟩)
+      (round - i)
+  workL_len : (splitSegments (tm2cfg.stk DovetailStack.workL)).length = round
+  workL : ∀ i (hi : i < round),
+    workLMatches gen (instanceConfig gen i round)
+      ((splitSegments (tm2cfg.stk DovetailStack.workL)).get ⟨i, by omega⟩)
+      (round - i)
+  target_preserved : tm2cfg.stk DovetailStack.target = target
+  save_empty :
+    tm2cfg.stk DovetailStack.saveTarget = [] ∧
+    tm2cfg.stk DovetailStack.saveCounter = [] ∧
+    tm2cfg.stk DovetailStack.saveInput = [] ∧
+    tm2cfg.stk DovetailStack.saveState = [] ∧
+    tm2cfg.stk DovetailStack.saveWorkL = [] ∧
+    tm2cfg.stk DovetailStack.saveWorkR = [] ∧
+    tm2cfg.stk DovetailStack.saveOutput = []
+
+set_option linter.unusedSectionVars false in
+lemma quiescentInvariant_init
+    (gen : Generator Γw Γo Q)
+    (target : List Γo) :
+    QuiescentInvariant gen target 0 (dovetailInit target) where
+  label := by
+    rfl
+  counter := by
+    simp [dovetailInit, Turing.TM2.init, Function.update]
+  input := by
+    rfl
+  state := by
+    simp [dovetailInit, Turing.TM2.init, Function.update]
+  output := by
+    rfl
+  workR_len := by
+    simp [splitSegments, dovetailInit, Turing.TM2.init]
+  workR := by
+    intro i hi
+    omega
+  workL_len := by simp [splitSegments, dovetailInit, Turing.TM2.init]
+  workL := by
+    intro i hi
+    omega
+  target_preserved := by
+    rfl
+  save_empty := by
+    simp [dovetailInit, Turing.TM2.init]
 
 end Dovetailing
 
