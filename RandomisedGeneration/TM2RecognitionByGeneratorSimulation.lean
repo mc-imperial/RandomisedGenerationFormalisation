@@ -1299,103 +1299,107 @@ lemma inCorrespondence_step
       Turing.Reaches (Turing.TM2.step (dovetailMachine gen)) tm2cfg tm2cfg' := by
   sorry
 
+/-- Forward: if the TM2 halts, then DovetailRecognises. -/
+lemma dovetailTM2_halts_implies_DovetailRecognises
+    (gen : Generator Γw Γo Q)
+    (w : List Γo) :
+    (Turing.TM2.eval (dovetailMachine gen) DovetailStack.target w).Dom →
+    DovetailRecognises gen w.reverse := by
+  sorry
+
+/-- Backward: if DovetailRecognises, then the TM2 halts. -/
+lemma DovetailRecognises_implies_dovetailTM2_halts
+    (gen : Generator Γw Γo Q)
+    (w : List Γo) :
+    DovetailRecognises gen w.reverse →
+    (Turing.TM2.eval (dovetailMachine gen) DovetailStack.target w).Dom := by
+  intro ⟨n, i, cfg, h_inst, h_halt, h_out⟩
+  suffices ∃ tm2cfg' : Turing.TM2.Cfg (stackAlphabet Γw Γo Q)
+        DovetailLabel (DovetailSigma Γw Γo Q),
+      tm2cfg'.l = none ∧
+      Turing.Reaches (Turing.TM2.step (dovetailMachine gen))
+        (dovetailInit w) tm2cfg' by
+    obtain ⟨tm2cfg', h_halt', h_reaches⟩ := this
+    rw [Turing.TM2.eval, Part.dom_iff_mem]
+    have h_halt_step : Turing.TM2.step (dovetailMachine gen) tm2cfg' = none := by
+      cases tm2cfg'; simp_all [Turing.TM2.step]
+    exact ⟨tm2cfg'.stk DovetailStack.target,
+      Part.mem_map _ (Turing.mem_eval.mpr ⟨h_reaches, h_halt_step⟩)⟩
+  suffices ∀ r,
+      ∃ (tm2cfg_r : Turing.TM2.Cfg (stackAlphabet Γw Γo Q)
+            DovetailLabel (DovetailSigma Γw Γo Q)),
+        (tm2cfg_r.l = none ∨
+         InCorrespondence gen w
+           ((dovetailStep gen)^[r] initDovetailState) tm2cfg_r) ∧
+        Turing.Reaches (Turing.TM2.step (dovetailMachine gen))
+          (dovetailInit w) tm2cfg_r by
+    obtain ⟨tm2cfg_n, hAlt, hReach_n⟩ := this n
+    rcases hAlt with h_halt' | hCorr_n
+    · exact ⟨tm2cfg_n, h_halt', hReach_n⟩
+    · have hi : i < n := by
+        by_contra h; push_neg at h
+        exact absurd h_inst (by
+          rw [List.getElem?_eq_none (by rw [instances_length_after_steps]; omega)]
+          exact Option.some_ne_none _ ∘ Eq.symm)
+      have hMatch : ∃ j,
+          j < ((dovetailStep gen)^[n] initDovetailState).instances.length ∧
+          IsHalting gen (instanceConfig gen j
+            ((dovetailStep gen)^[n] initDovetailState).instances.length) ∧
+          (instanceConfig gen j
+            ((dovetailStep gen)^[n] initDovetailState).instances.length).output.reverse = w := by
+        rw [instances_length_after_steps]
+        refine ⟨i, hi, ?_⟩
+        rw [instance_config_after_steps gen n i hi] at h_inst
+        have h_eq := Option.some.inj h_inst
+        rw [← h_eq] at h_halt h_out
+        exact ⟨h_halt, by simp only [instanceConfig]; rw [h_out, List.reverse_reverse]⟩
+      obtain ⟨tm2cfg', h_halt', h_reaches'⟩ :=
+        inCorrespondence_halt gen w _ tm2cfg_n hCorr_n hMatch
+      exact ⟨tm2cfg', h_halt', Relation.ReflTransGen.trans hReach_n h_reaches'⟩
+  intro r
+  induction r with
+  | zero =>
+    exact ⟨dovetailInit w, Or.inr (inCorrespondence_init gen w),
+      Relation.ReflTransGen.refl⟩
+  | succ r ih =>
+    obtain ⟨tm2cfg_r, hAlt_r, hReach_r⟩ := ih
+    rcases hAlt_r with h_halt_r | hCorr_r
+    · exact ⟨tm2cfg_r, Or.inl h_halt_r, hReach_r⟩
+    · by_cases hMatch_r : ∃ j,
+          j < ((dovetailStep gen)^[r] initDovetailState).instances.length ∧
+          IsHalting gen (instanceConfig gen j
+            ((dovetailStep gen)^[r] initDovetailState).instances.length) ∧
+          (instanceConfig gen j
+            ((dovetailStep gen)^[r] initDovetailState).instances.length).output.reverse = w
+      · obtain ⟨tm2cfg', h_halt', h_reaches'⟩ :=
+          inCorrespondence_halt gen w _ tm2cfg_r hCorr_r hMatch_r
+        exact ⟨tm2cfg', Or.inl h_halt', Relation.ReflTransGen.trans hReach_r h_reaches'⟩
+      · push_neg at hMatch_r
+        have hNoMatch : ∀ j,
+            j < ((dovetailStep gen)^[r] initDovetailState).instances.length →
+            ¬(IsHalting gen (instanceConfig gen j
+                ((dovetailStep gen)^[r] initDovetailState).instances.length) ∧
+              (instanceConfig gen j
+                ((dovetailStep gen)^[r] initDovetailState).instances.length).output.reverse
+                = w) := by
+          intro j hj ⟨hHalt, hOut⟩
+          exact hMatch_r j hj hHalt hOut
+        obtain ⟨tm2cfg_next, hCorr_next, hReach_next⟩ :=
+          inCorrespondence_step gen w _ tm2cfg_r hCorr_r hNoMatch
+        rw [show (dovetailStep gen)^[r + 1] initDovetailState =
+            dovetailStep gen ((dovetailStep gen)^[r] initDovetailState) from
+          by rw [Function.iterate_succ', Function.comp_apply]]
+        exact ⟨tm2cfg_next, Or.inr hCorr_next,
+          Relation.ReflTransGen.trans hReach_r hReach_next⟩
+
 /-- The dovetail TM2 halts on input w iff DovetailRecognises gen w.reverse. -/
 theorem dovetailTM2_halts_iff_DovetailRecognises
     (gen : Generator Γw Γo Q)
     (w : List Γo) :
     (Turing.TM2.eval (dovetailMachine gen) DovetailStack.target w).Dom ↔
-    DovetailRecognises gen w.reverse := by
-  constructor
-  · -- Forward: TM2 halts → DovetailRecognises
-    sorry
-  · -- Backward: DovetailRecognises → TM2 halts
-    intro ⟨n, i, cfg, h_inst, h_halt, h_out⟩
-    suffices ∃ tm2cfg' : Turing.TM2.Cfg (stackAlphabet Γw Γo Q)
-          DovetailLabel (DovetailSigma Γw Γo Q),
-        tm2cfg'.l = none ∧
-        Turing.Reaches (Turing.TM2.step (dovetailMachine gen))
-          (dovetailInit w) tm2cfg' by
-      obtain ⟨tm2cfg', h_halt', h_reaches⟩ := this
-      rw [Turing.TM2.eval, Part.dom_iff_mem]
-      have h_halt_step : Turing.TM2.step (dovetailMachine gen) tm2cfg' = none := by
-        cases tm2cfg'; simp_all [Turing.TM2.step]
-      exact ⟨tm2cfg'.stk DovetailStack.target,
-        Part.mem_map _ (Turing.mem_eval.mpr ⟨h_reaches, h_halt_step⟩)⟩
-    -- We show: for any r, either we halt by round r, or we reach round r in correspondence.
-    -- Since we know a match exists at round n, we must halt by round n.
-    suffices ∀ r,
-        ∃ (tm2cfg_r : Turing.TM2.Cfg (stackAlphabet Γw Γo Q)
-              DovetailLabel (DovetailSigma Γw Γo Q)),
-          (tm2cfg_r.l = none ∨
-           InCorrespondence gen w
-             ((dovetailStep gen)^[r] initDovetailState) tm2cfg_r) ∧
-          Turing.Reaches (Turing.TM2.step (dovetailMachine gen))
-            (dovetailInit w) tm2cfg_r by
-      obtain ⟨tm2cfg_n, hAlt, hReach_n⟩ := this n
-      rcases hAlt with h_halt' | hCorr_n
-      · -- Already halted at or before round n
-        exact ⟨tm2cfg_n, h_halt', hReach_n⟩
-      · -- Reached round n in correspondence; now there's a match
-        have hi : i < n := by
-          by_contra h; push_neg at h
-          exact absurd h_inst (by
-            rw [List.getElem?_eq_none (by rw [instances_length_after_steps]; omega)]
-            exact Option.some_ne_none _ ∘ Eq.symm)
-        have hMatch : ∃ j,
-            j < ((dovetailStep gen)^[n] initDovetailState).instances.length ∧
-            IsHalting gen (instanceConfig gen j
-              ((dovetailStep gen)^[n] initDovetailState).instances.length) ∧
-            (instanceConfig gen j
-              ((dovetailStep gen)^[n] initDovetailState).instances.length).output.reverse = w := by
-          rw [instances_length_after_steps]
-          refine ⟨i, hi, ?_⟩
-          rw [instance_config_after_steps gen n i hi] at h_inst
-          have h_eq := Option.some.inj h_inst
-          rw [← h_eq] at h_halt h_out
-          exact ⟨h_halt, by simp only [instanceConfig]; rw [h_out, List.reverse_reverse]⟩
-        obtain ⟨tm2cfg', h_halt', h_reaches'⟩ :=
-          inCorrespondence_halt gen w _ tm2cfg_n hCorr_n hMatch
-        exact ⟨tm2cfg', h_halt', Relation.ReflTransGen.trans hReach_n h_reaches'⟩
-    -- Prove by induction: at each round, either halted or in correspondence
-    intro r
-    induction r with
-    | zero =>
-      exact ⟨dovetailInit w, Or.inr (inCorrespondence_init gen w),
-        Relation.ReflTransGen.refl⟩
-    | succ r ih =>
-      obtain ⟨tm2cfg_r, hAlt_r, hReach_r⟩ := ih
-      rcases hAlt_r with h_halt_r | hCorr_r
-      · -- Already halted: propagate
-        exact ⟨tm2cfg_r, Or.inl h_halt_r, hReach_r⟩
-      · -- In correspondence at round r: check for match
-        by_cases hMatch_r : ∃ j,
-            j < ((dovetailStep gen)^[r] initDovetailState).instances.length ∧
-            IsHalting gen (instanceConfig gen j
-              ((dovetailStep gen)^[r] initDovetailState).instances.length) ∧
-            (instanceConfig gen j
-              ((dovetailStep gen)^[r] initDovetailState).instances.length).output.reverse = w
-        · -- Match at round r: halt
-          obtain ⟨tm2cfg', h_halt', h_reaches'⟩ :=
-            inCorrespondence_halt gen w _ tm2cfg_r hCorr_r hMatch_r
-          exact ⟨tm2cfg', Or.inl h_halt', Relation.ReflTransGen.trans hReach_r h_reaches'⟩
-        · -- No match at round r: step forward
-          push_neg at hMatch_r
-          have hNoMatch : ∀ j,
-              j < ((dovetailStep gen)^[r] initDovetailState).instances.length →
-              ¬(IsHalting gen (instanceConfig gen j
-                  ((dovetailStep gen)^[r] initDovetailState).instances.length) ∧
-                (instanceConfig gen j
-                  ((dovetailStep gen)^[r] initDovetailState).instances.length).output.reverse
-                  = w) := by
-            intro j hj ⟨hHalt, hOut⟩
-            exact hMatch_r j hj hHalt hOut
-          obtain ⟨tm2cfg_next, hCorr_next, hReach_next⟩ :=
-            inCorrespondence_step gen w _ tm2cfg_r hCorr_r hNoMatch
-          rw [show (dovetailStep gen)^[r + 1] initDovetailState =
-              dovetailStep gen ((dovetailStep gen)^[r] initDovetailState) from
-            by rw [Function.iterate_succ', Function.comp_apply]]
-          exact ⟨tm2cfg_next, Or.inr hCorr_next,
-            Relation.ReflTransGen.trans hReach_r hReach_next⟩
+    DovetailRecognises gen w.reverse :=
+  ⟨dovetailTM2_halts_implies_DovetailRecognises gen w,
+   DovetailRecognises_implies_dovetailTM2_halts gen w⟩
 
 set_option linter.unusedSectionVars true
 end Dovetailing
