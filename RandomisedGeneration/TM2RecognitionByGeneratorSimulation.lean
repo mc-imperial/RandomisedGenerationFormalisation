@@ -709,8 +709,7 @@ def checkPhase_restoreAll_input {Γw Γo Q : Type u}
     Turing.TM2.Stmt (stackAlphabet Γw Γo Q) DovetailLabel (DovetailSigma Γw Γo Q) :=
   Turing.TM2.Stmt.peek DovetailStack.saveInput (fun σ i => { σ with peekInput := i })
   <| Turing.TM2.Stmt.branch (fun σ => σ.peekInput.isNone)
-    ( Turing.TM2.Stmt.push DovetailStack.input (fun _ => none)
-      <| Turing.TM2.Stmt.goto (fun _ => DovetailLabel.checkPhase_restoreAll_workL) )
+    ( Turing.TM2.Stmt.goto (fun _ => DovetailLabel.checkPhase_restoreAll_workL) )
     ( Turing.TM2.Stmt.pop DovetailStack.saveInput (fun σ _ => σ)
       <| Turing.TM2.Stmt.push DovetailStack.input
         (fun σ => σ.peekInput.getD none)
@@ -721,8 +720,7 @@ def checkPhase_restoreAll_workL {Γw Γo Q : Type u}
     Turing.TM2.Stmt (stackAlphabet Γw Γo Q) DovetailLabel (DovetailSigma Γw Γo Q) :=
   Turing.TM2.Stmt.peek DovetailStack.saveWorkL (fun σ w => { σ with peekWorkL := w })
   <| Turing.TM2.Stmt.branch (fun σ => σ.peekWorkL.isNone)
-    ( Turing.TM2.Stmt.push DovetailStack.workL (fun _ => none)
-      <| Turing.TM2.Stmt.goto (fun _ => DovetailLabel.checkPhase_restoreAll_workR) )
+    ( Turing.TM2.Stmt.goto (fun _ => DovetailLabel.checkPhase_restoreAll_workR) )
     ( Turing.TM2.Stmt.pop DovetailStack.saveWorkL (fun σ _ => σ)
       <| Turing.TM2.Stmt.push DovetailStack.workL
         (fun σ => σ.peekWorkL.getD none)
@@ -733,8 +731,7 @@ def checkPhase_restoreAll_workR {Γw Γo Q : Type u}
     Turing.TM2.Stmt (stackAlphabet Γw Γo Q) DovetailLabel (DovetailSigma Γw Γo Q) :=
   Turing.TM2.Stmt.peek DovetailStack.saveWorkR (fun σ w => { σ with peekWorkR := w })
   <| Turing.TM2.Stmt.branch (fun σ => σ.peekWorkR.isNone)
-    ( Turing.TM2.Stmt.push DovetailStack.workR (fun _ => none)
-      <| Turing.TM2.Stmt.goto (fun _ => DovetailLabel.checkPhase_restoreAll_output) )
+    ( Turing.TM2.Stmt.goto (fun _ => DovetailLabel.checkPhase_restoreAll_output) )
     ( Turing.TM2.Stmt.pop DovetailStack.saveWorkR (fun σ _ => σ)
       <| Turing.TM2.Stmt.push DovetailStack.workR
         (fun σ => σ.peekWorkR.getD none)
@@ -745,8 +742,7 @@ def checkPhase_restoreAll_output {Γw Γo Q : Type u}
     Turing.TM2.Stmt (stackAlphabet Γw Γo Q) DovetailLabel (DovetailSigma Γw Γo Q) :=
   Turing.TM2.Stmt.peek DovetailStack.saveOutput (fun σ o => { σ with peekOut := o })
   <| Turing.TM2.Stmt.branch (fun σ => σ.peekOut.isNone)
-    ( Turing.TM2.Stmt.push DovetailStack.output (fun _ => none)
-      <| Turing.TM2.Stmt.goto (fun _ => DovetailLabel.pushNewConfig_copy_counter) )
+    ( Turing.TM2.Stmt.goto (fun _ => DovetailLabel.pushNewConfig_copy_counter) )
     ( Turing.TM2.Stmt.pop DovetailStack.saveOutput (fun σ _ => σ)
       <| Turing.TM2.Stmt.push DovetailStack.output
         (fun σ => σ.peekOut.getD none)
@@ -1225,7 +1221,7 @@ structure QuiescentInvariant
     tm2cfg.stk DovetailStack.saveWorkR = [] ∧
     tm2cfg.stk DovetailStack.saveOutput = []
 
-set_option linter.unusedSectionVars false in
+set_option linter.unusedSectionVars false
 lemma quiescentInvariant_init
     (gen : Generator Γw Γo Q)
     (target : List Γo) :
@@ -1254,58 +1250,167 @@ lemma quiescentInvariant_init
   save_empty := by
     simp [dovetailInit, Turing.TM2.init]
 
-/-- If the invariant holds at checkAll and some instance is halting with matching output,
-    the TM2 halts. -/
-lemma checkAll_halts_on_match
+/-- A DovetailState corresponds to a TM2 config via the invariant. -/
+def InCorrespondence
     (gen : Generator Γw Γo Q)
     (target : List Γo)
-    (round : ℕ)
+    (ds : DovetailState (Γw := Γw) (Γo := Γo) (Q := Q))
     (tm2cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) DovetailLabel (DovetailSigma Γw Γo Q))
-    (hInv : QuiescentInvariant gen target round DovetailLabel.checkAll tm2cfg)
-    (hMatch : ∃ i, i < round ∧
-      IsHalting gen (instanceConfig gen i round) ∧
-      (instanceConfig gen i round).output = target) :
-    (Turing.TM2.eval (dovetailMachine gen) DovetailStack.target target).Dom := by
-  sorry
+    : Prop :=
+  QuiescentInvariant gen target ds.instances.length DovetailLabel.checkAll tm2cfg
 
-/-- If the invariant holds at checkAll and no instance has matching output,
-    we reach pushNewConfig_copy_counter with the same round. -/
-lemma checkAll_to_pushNewConfig
+/-- The initial configs are in correspondence. -/
+lemma inCorrespondence_init
+    (gen : Generator Γw Γo Q)
+    (target : List Γo) :
+    InCorrespondence gen target initDovetailState (dovetailInit target) := by
+  exact quiescentInvariant_init gen target
+
+/-- If in correspondence and some instance halts with matching output,
+    the TM2 reaches a halted config. -/
+lemma inCorrespondence_halt
     (gen : Generator Γw Γo Q)
     (target : List Γo)
-    (round : ℕ)
+    (ds : DovetailState (Γw := Γw) (Γo := Γo) (Q := Q))
     (tm2cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) DovetailLabel (DovetailSigma Γw Γo Q))
-    (hInv : QuiescentInvariant gen target round DovetailLabel.checkAll tm2cfg)
-    (hNoMatch : ∀ i, i < round →
-      ¬(IsHalting gen (instanceConfig gen i round) ∧
-        (instanceConfig gen i round).output = target)) :
+    (hCorr : InCorrespondence gen target ds tm2cfg)
+    (hMatch : ∃ i, i < ds.instances.length ∧
+      IsHalting gen (instanceConfig gen i ds.instances.length) ∧
+      (instanceConfig gen i ds.instances.length).output.reverse = target) :
     ∃ tm2cfg',
-      QuiescentInvariant gen target round DovetailLabel.pushNewConfig_copy_counter tm2cfg' ∧
+      tm2cfg'.l = none ∧
       Turing.Reaches (Turing.TM2.step (dovetailMachine gen)) tm2cfg tm2cfg' := by
   sorry
 
-/-- From pushNewConfig_copy_counter at round r, we reach checkAll at round r+1. -/
-lemma pushNewConfig_to_next_checkAll
+/-- If in correspondence and no instance halts with matching output,
+    one dovetailStep and finitely many TM2 steps lead to new configs
+    in correspondence. -/
+lemma inCorrespondence_step
     (gen : Generator Γw Γo Q)
     (target : List Γo)
-    (round : ℕ)
+    (ds : DovetailState (Γw := Γw) (Γo := Γo) (Q := Q))
     (tm2cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) DovetailLabel (DovetailSigma Γw Γo Q))
-    (hInv : QuiescentInvariant gen target round DovetailLabel.pushNewConfig_copy_counter tm2cfg) :
+    (hCorr : InCorrespondence gen target ds tm2cfg)
+    (hNoMatch : ∀ i, i < ds.instances.length →
+      ¬(IsHalting gen (instanceConfig gen i ds.instances.length) ∧
+        (instanceConfig gen i ds.instances.length).output.reverse = target)) :
     ∃ tm2cfg',
-      QuiescentInvariant gen target (round + 1) DovetailLabel.checkAll tm2cfg' ∧
+      InCorrespondence gen target (dovetailStep gen ds) tm2cfg' ∧
       Turing.Reaches (Turing.TM2.step (dovetailMachine gen)) tm2cfg tm2cfg' := by
   sorry
 
+/-- The dovetail TM2 halts on input w iff DovetailRecognises gen w.reverse. -/
+theorem dovetailTM2_halts_iff_DovetailRecognises
+    (gen : Generator Γw Γo Q)
+    (w : List Γo) :
+    (Turing.TM2.eval (dovetailMachine gen) DovetailStack.target w).Dom ↔
+    DovetailRecognises gen w.reverse := by
+  constructor
+  · -- Forward: TM2 halts → DovetailRecognises
+    sorry
+  · -- Backward: DovetailRecognises → TM2 halts
+    intro ⟨n, i, cfg, h_inst, h_halt, h_out⟩
+    suffices ∃ tm2cfg' : Turing.TM2.Cfg (stackAlphabet Γw Γo Q)
+          DovetailLabel (DovetailSigma Γw Γo Q),
+        tm2cfg'.l = none ∧
+        Turing.Reaches (Turing.TM2.step (dovetailMachine gen))
+          (dovetailInit w) tm2cfg' by
+      obtain ⟨tm2cfg', h_halt', h_reaches⟩ := this
+      rw [Turing.TM2.eval, Part.dom_iff_mem]
+      have h_halt_step : Turing.TM2.step (dovetailMachine gen) tm2cfg' = none := by
+        cases tm2cfg'; simp_all [Turing.TM2.step]
+      exact ⟨tm2cfg'.stk DovetailStack.target,
+        Part.mem_map _ (Turing.mem_eval.mpr ⟨h_reaches, h_halt_step⟩)⟩
+    -- We show: for any r, either we halt by round r, or we reach round r in correspondence.
+    -- Since we know a match exists at round n, we must halt by round n.
+    suffices ∀ r,
+        ∃ (tm2cfg_r : Turing.TM2.Cfg (stackAlphabet Γw Γo Q)
+              DovetailLabel (DovetailSigma Γw Γo Q)),
+          (tm2cfg_r.l = none ∨
+           InCorrespondence gen w
+             ((dovetailStep gen)^[r] initDovetailState) tm2cfg_r) ∧
+          Turing.Reaches (Turing.TM2.step (dovetailMachine gen))
+            (dovetailInit w) tm2cfg_r by
+      obtain ⟨tm2cfg_n, hAlt, hReach_n⟩ := this n
+      rcases hAlt with h_halt' | hCorr_n
+      · -- Already halted at or before round n
+        exact ⟨tm2cfg_n, h_halt', hReach_n⟩
+      · -- Reached round n in correspondence; now there's a match
+        have hi : i < n := by
+          by_contra h; push_neg at h
+          exact absurd h_inst (by
+            rw [List.getElem?_eq_none (by rw [instances_length_after_steps]; omega)]
+            exact Option.some_ne_none _ ∘ Eq.symm)
+        have hMatch : ∃ j,
+            j < ((dovetailStep gen)^[n] initDovetailState).instances.length ∧
+            IsHalting gen (instanceConfig gen j
+              ((dovetailStep gen)^[n] initDovetailState).instances.length) ∧
+            (instanceConfig gen j
+              ((dovetailStep gen)^[n] initDovetailState).instances.length).output.reverse = w := by
+          rw [instances_length_after_steps]
+          refine ⟨i, hi, ?_⟩
+          rw [instance_config_after_steps gen n i hi] at h_inst
+          have h_eq := Option.some.inj h_inst
+          rw [← h_eq] at h_halt h_out
+          exact ⟨h_halt, by simp only [instanceConfig]; rw [h_out, List.reverse_reverse]⟩
+        obtain ⟨tm2cfg', h_halt', h_reaches'⟩ :=
+          inCorrespondence_halt gen w _ tm2cfg_n hCorr_n hMatch
+        exact ⟨tm2cfg', h_halt', Relation.ReflTransGen.trans hReach_n h_reaches'⟩
+    -- Prove by induction: at each round, either halted or in correspondence
+    intro r
+    induction r with
+    | zero =>
+      exact ⟨dovetailInit w, Or.inr (inCorrespondence_init gen w),
+        Relation.ReflTransGen.refl⟩
+    | succ r ih =>
+      obtain ⟨tm2cfg_r, hAlt_r, hReach_r⟩ := ih
+      rcases hAlt_r with h_halt_r | hCorr_r
+      · -- Already halted: propagate
+        exact ⟨tm2cfg_r, Or.inl h_halt_r, hReach_r⟩
+      · -- In correspondence at round r: check for match
+        by_cases hMatch_r : ∃ j,
+            j < ((dovetailStep gen)^[r] initDovetailState).instances.length ∧
+            IsHalting gen (instanceConfig gen j
+              ((dovetailStep gen)^[r] initDovetailState).instances.length) ∧
+            (instanceConfig gen j
+              ((dovetailStep gen)^[r] initDovetailState).instances.length).output.reverse = w
+        · -- Match at round r: halt
+          obtain ⟨tm2cfg', h_halt', h_reaches'⟩ :=
+            inCorrespondence_halt gen w _ tm2cfg_r hCorr_r hMatch_r
+          exact ⟨tm2cfg', Or.inl h_halt', Relation.ReflTransGen.trans hReach_r h_reaches'⟩
+        · -- No match at round r: step forward
+          push_neg at hMatch_r
+          have hNoMatch : ∀ j,
+              j < ((dovetailStep gen)^[r] initDovetailState).instances.length →
+              ¬(IsHalting gen (instanceConfig gen j
+                  ((dovetailStep gen)^[r] initDovetailState).instances.length) ∧
+                (instanceConfig gen j
+                  ((dovetailStep gen)^[r] initDovetailState).instances.length).output.reverse
+                  = w) := by
+            intro j hj ⟨hHalt, hOut⟩
+            exact hMatch_r j hj hHalt hOut
+          obtain ⟨tm2cfg_next, hCorr_next, hReach_next⟩ :=
+            inCorrespondence_step gen w _ tm2cfg_r hCorr_r hNoMatch
+          rw [show (dovetailStep gen)^[r + 1] initDovetailState =
+              dovetailStep gen ((dovetailStep gen)^[r] initDovetailState) from
+            by rw [Function.iterate_succ', Function.comp_apply]]
+          exact ⟨tm2cfg_next, Or.inr hCorr_next,
+            Relation.ReflTransGen.trans hReach_r hReach_next⟩
+
+set_option linter.unusedSectionVars true
 end Dovetailing
 
--- The dovetail TM2 halts on input `target` iff `target` is in the generated language.
+-- The dovetail   TM2 halts on input `target` iff `target` is in the generated language.
 theorem dovetailMachine_recognises {Γw Γo Q : Type u}
     [FinEnum Γw] [Inhabited Γw] [Inhabited Γo] [FinEnum Γo] [FinEnum Q]
     (gen : Generator Γw Γo Q)
     (target : List Γo) :
     (Turing.TM2.eval (dovetailMachine gen) DovetailStack.target target.reverse).Dom ↔
     target ∈ generatedLanguage gen Finset.univ (generator_supports_univ gen) := by
-  sorry
+  rw [dovetailTM2_halts_iff_DovetailRecognises]
+  simp only [List.reverse_reverse]
+  rw [DovetailRecognises_iff_Computes]
+  simp only [generatedLanguage, Set.mem_setOf_eq]
 
 lemma every_generable_language_is_tm2_recognisable
     {Γ : Type u}

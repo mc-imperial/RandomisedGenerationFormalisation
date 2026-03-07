@@ -52,7 +52,7 @@ def testCfg0 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailLa
   Turing.TM2.init DovetailStack.target []
 
 def testCfg1 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailLabel (DovetailSigma (Fin 1) (Fin 2) (Fin 1)) :=
-  { l := some DovetailLabel.pushNewConfig_restore_counter
+  { l := some DovetailLabel.checkPhase_restoreAll_state
     var := { transQ      := none
              transW      := none
              transIDir   := InputTapeDirection.N
@@ -71,10 +71,148 @@ def testCfg1 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailLa
     stk := fun _ => [] }
 
 example : Turing.TM2.step (dovetailMachine GeneratorExamples.simpleGenerator) testCfg0 = some testCfg1 := by
-  simp [Turing.TM2.step, Turing.TM2.stepAux, dovetailMachine, pushNewConfig_copy_counter,
+  simp [Turing.TM2.step, Turing.TM2.stepAux, dovetailMachine, checkAll,
         testCfg0, testCfg1, Turing.TM2.init, default, Inhabited.default]
 
 def testCfg2 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailLabel (DovetailSigma (Fin 1) (Fin 2) (Fin 1)) :=
+  { l := some DovetailLabel.checkPhase_restoreAll_input
+    var := { transQ      := none
+             transW      := none
+             transIDir   := InputTapeDirection.N
+             transWDir   := WorkTapeDirection.N
+             transOut    := none
+             transHalted := false
+             inputBit    := ULift.up false
+             peekQ       := none
+             peekBit     := none
+             peekInput   := none
+             peekWorkL   := none
+             peekWorkR   := none
+             peekOut     := none
+             peekTarget  := none
+             carry       := none }
+    stk := fun _ => [] }
+
+example : Turing.TM2.step (dovetailMachine GeneratorExamples.simpleGenerator) testCfg1 = some testCfg2 := by
+  simp only [Turing.TM2.step, Turing.TM2.stepAux, testCfg1, testCfg2, dovetailMachine,
+    checkPhase_restoreAll_state, List.head?_nil, Option.isNone_none, cond_true]
+
+def testCfg3 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailLabel (DovetailSigma (Fin 1) (Fin 2) (Fin 1)) :=
+  { l := some DovetailLabel.checkPhase_restoreAll_workL
+    var := { transQ      := none
+             transW      := none
+             transIDir   := InputTapeDirection.N
+             transWDir   := WorkTapeDirection.N
+             transOut    := none
+             transHalted := false
+             inputBit    := ULift.up false
+             peekQ       := none
+             peekBit     := none
+             peekInput   := none
+             peekWorkL   := none
+             peekWorkR   := none
+             peekOut     := none
+             peekTarget  := none
+             carry       := none }
+    stk := fun _ => [] }
+
+example : Turing.TM2.step (dovetailMachine GeneratorExamples.simpleGenerator) testCfg2 = some testCfg3 := by
+  simp only [Turing.TM2.step, Turing.TM2.stepAux, testCfg2, testCfg3, dovetailMachine,
+    checkPhase_restoreAll_input, List.head?_nil, Option.isNone_none, cond_true]
+
+def testCfg4 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailLabel (DovetailSigma (Fin 1) (Fin 2) (Fin 1)) :=
+  { l := some DovetailLabel.checkPhase_restoreAll_workR
+    var := { transQ      := none
+             transW      := none
+             transIDir   := InputTapeDirection.N
+             transWDir   := WorkTapeDirection.N
+             transOut    := none
+             transHalted := false
+             inputBit    := ULift.up false
+             peekQ       := none
+             peekBit     := none
+             peekInput   := none
+             peekWorkL   := none
+             peekWorkR   := none
+             peekOut     := none
+             peekTarget  := none
+             carry       := none }
+    stk := fun _ => [] }
+
+example : Turing.TM2.step (dovetailMachine GeneratorExamples.simpleGenerator) testCfg3 = some testCfg4 := by
+  simp only [Turing.TM2.step, Turing.TM2.stepAux, testCfg3, testCfg4, dovetailMachine,
+    checkPhase_restoreAll_workL, List.head?_nil, Option.isNone_none, cond_true]
+
+def testCfg5 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailLabel (DovetailSigma (Fin 1) (Fin 2) (Fin 1)) :=
+  { l := some DovetailLabel.checkPhase_restoreAll_output
+    var := { transQ      := none
+             transW      := none
+             transIDir   := InputTapeDirection.N
+             transWDir   := WorkTapeDirection.N
+             transOut    := none
+             transHalted := false
+             inputBit    := ULift.up false
+             peekQ       := none
+             peekBit     := none
+             peekInput   := none
+             peekWorkL   := none
+             peekWorkR   := none
+             peekOut     := none
+             peekTarget  := none
+             carry       := none }
+    stk := fun _ => [] }
+
+example : Turing.TM2.step (dovetailMachine GeneratorExamples.simpleGenerator) testCfg4 = some testCfg5 := by
+  simp only [Turing.TM2.step, Turing.TM2.stepAux, testCfg4, testCfg5, dovetailMachine,
+    checkPhase_restoreAll_workR, List.head?_nil, Option.isNone_none, cond_true]
+
+def testCfg6 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailLabel (DovetailSigma (Fin 1) (Fin 2) (Fin 1)) :=
+  { l := some DovetailLabel.pushNewConfig_copy_counter
+    var := { transQ      := none
+             transW      := none
+             transIDir   := InputTapeDirection.N
+             transWDir   := WorkTapeDirection.N
+             transOut    := none
+             transHalted := false
+             inputBit    := ULift.up false
+             peekQ       := none
+             peekBit     := none
+             peekInput   := none
+             peekWorkL   := none
+             peekWorkR   := none
+             peekOut     := none
+             peekTarget  := none
+             carry       := none }
+    stk := fun _ => [] }
+
+example : Turing.TM2.step (dovetailMachine GeneratorExamples.simpleGenerator) testCfg5 = some testCfg6 := by
+  simp only [Turing.TM2.step, Turing.TM2.stepAux, testCfg5, testCfg6, dovetailMachine,
+    checkPhase_restoreAll_output, List.head?_nil, Option.isNone_none, cond_true]
+
+def testCfg7 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailLabel (DovetailSigma (Fin 1) (Fin 2) (Fin 1)) :=
+  { l := some DovetailLabel.pushNewConfig_restore_counter
+    var := { transQ      := none
+             transW      := none
+             transIDir   := InputTapeDirection.N
+             transWDir   := WorkTapeDirection.N
+             transOut    := none
+             transHalted := false
+             inputBit    := ULift.up false
+             peekQ       := none
+             peekBit     := none
+             peekInput   := none
+             peekWorkL   := none
+             peekWorkR   := none
+             peekOut     := none
+             peekTarget  := none
+             carry       := none }
+    stk := fun _ => [] }
+
+example : Turing.TM2.step (dovetailMachine GeneratorExamples.simpleGenerator) testCfg6 = some testCfg7 := by
+  simp only [Turing.TM2.step, Turing.TM2.stepAux, testCfg6, testCfg7, dovetailMachine,
+    pushNewConfig_copy_counter, List.head?_nil, Option.isNone_none, cond_true]
+
+def testCfg8 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailLabel (DovetailSigma (Fin 1) (Fin 2) (Fin 1)) :=
   { l := some DovetailLabel.stepAll
     var := { transQ      := none
              transW      := none
@@ -95,11 +233,12 @@ def testCfg2 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailLa
              | DovetailStack.state => [(0 : Fin 1)]
              | _ => [] }
 
-example : Turing.TM2.step (dovetailMachine GeneratorExamples.simpleGenerator) testCfg1 = some testCfg2 := by
-  simp only [Turing.TM2.step, testCfg1, dovetailMachine, pushNewConfig_restore_counter, Turing.TM2.stepAux,
-    List.head?_nil, Option.isNone_none, List.tail_nil, Function.update_eq_self, Option.getD_none, ne_eq, reduceCtorEq,
-    not_false_eq_true, Function.update_of_ne, cond_true, testCfg2, Fin.isValue, Option.some.injEq,
-    Turing.TM2.Cfg.mk.injEq, true_and]
+example : Turing.TM2.step (dovetailMachine GeneratorExamples.simpleGenerator) testCfg7 = some testCfg8 := by
+  simp only [Turing.TM2.step, testCfg7, dovetailMachine, pushNewConfig_restore_counter,
+    Turing.TM2.stepAux, List.head?_nil, Option.isNone_none, List.tail_nil,
+    Function.update_eq_self, Option.getD_none, ne_eq, reduceCtorEq,
+    not_false_eq_true, Function.update_of_ne, cond_true, testCfg8,
+    Fin.isValue, Option.some.injEq, Turing.TM2.Cfg.mk.injEq, true_and]
   funext k
   cases k <;> simp only [Function.update, reduceCtorEq, ↓reduceDIte]
   cases GeneratorExamples.simpleGenerator with
@@ -108,7 +247,7 @@ example : Turing.TM2.step (dovetailMachine GeneratorExamples.simpleGenerator) te
     fin_cases init
     simp only [Fin.zero_eta, Fin.isValue]
 
-def testCfg3 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailLabel (DovetailSigma (Fin 1) (Fin 2) (Fin 1)) :=
+def testCfg9 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailLabel (DovetailSigma (Fin 1) (Fin 2) (Fin 1)) :=
   { l := some DovetailLabel.stepOne
     var := { transQ      := some (0 : Fin 1)
              transW      := none
@@ -127,14 +266,14 @@ def testCfg3 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailLa
              carry       := none }
     stk := fun _ => [] }
 
-example : Turing.TM2.step (dovetailMachine GeneratorExamples.simpleGenerator) testCfg2 = some testCfg3 := by
-  simp only [Turing.TM2.step, testCfg2, dovetailMachine, stepAll, Turing.TM2.stepAux,
-    List.head?_cons, Option.isNone_some, List.tail_cons, cond_false,
-    testCfg3, Option.some.injEq, Turing.TM2.Cfg.mk.injEq, true_and]
+example : Turing.TM2.step (dovetailMachine GeneratorExamples.simpleGenerator) testCfg8 = some testCfg9 := by
+  simp only [Turing.TM2.step, Turing.TM2.stepAux, testCfg8, testCfg9, dovetailMachine,
+    stepAll, List.head?_cons, Option.isNone_some, List.tail_cons, cond_false,
+    Option.some.injEq, Turing.TM2.Cfg.mk.injEq, true_and]
   funext k
   cases k <;> simp [Function.update]
 
-def testCfg4 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailLabel (DovetailSigma (Fin 1) (Fin 2) (Fin 1)) :=
+def testCfg10 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailLabel (DovetailSigma (Fin 1) (Fin 2) (Fin 1)) :=
   { l := some DovetailLabel.stepOne_workR
     var := { transQ      := some (0 : Fin 1)
              transW      := none
@@ -153,11 +292,11 @@ def testCfg4 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailLa
              carry       := none }
     stk := fun _ => [] }
 
-example : Turing.TM2.step (dovetailMachine GeneratorExamples.simpleGenerator) testCfg3 = some testCfg4 := by
-  simp only [Turing.TM2.step, testCfg3, dovetailMachine, stepOne, Turing.TM2.stepAux,
-    List.head?_nil, testCfg4]
+example : Turing.TM2.step (dovetailMachine GeneratorExamples.simpleGenerator) testCfg9 = some testCfg10 := by
+  simp only [Turing.TM2.step, Turing.TM2.stepAux, testCfg9, testCfg10, dovetailMachine,
+    stepOne, List.head?_nil]
 
-def testCfg5 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailLabel (DovetailSigma (Fin 1) (Fin 2) (Fin 1)) :=
+def testCfg11 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailLabel (DovetailSigma (Fin 1) (Fin 2) (Fin 1)) :=
   { l := some DovetailLabel.applyTransition
     var := { transQ      := some (0 : Fin 1)
              transW      := some (0 : Fin 1)
@@ -176,13 +315,579 @@ def testCfg5 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailLa
              carry       := none }
     stk := fun _ => [] }
 
-example : Turing.TM2.step (dovetailMachine GeneratorExamples.simpleGenerator) testCfg4 = some testCfg5 := by
-  simp only [Turing.TM2.step, testCfg4, dovetailMachine, stepOne_workR, Turing.TM2.stepAux,
-    List.head?_nil, applyDelta, GeneratorExamples.simpleGenerator, testCfg5,
+example : Turing.TM2.step (dovetailMachine GeneratorExamples.simpleGenerator) testCfg10 = some testCfg11 := by
+  simp only [Turing.TM2.step, Turing.TM2.stepAux, testCfg10, testCfg11, dovetailMachine,
+    stepOne_workR, List.head?_nil, applyDelta, GeneratorExamples.simpleGenerator,
     Bool.false_eq_true, ↓reduceIte, Fin.isValue, List.tail_nil,
     Function.update_eq_self, Bool.cond_self]
 
-def testCfg6 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailLabel (DovetailSigma (Fin 1) (Fin 2) (Fin 1)) :=
+def testCfg12 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailLabel (DovetailSigma (Fin 1) (Fin 2) (Fin 1)) :=
+  { l := some DovetailLabel.saveSegment
+    var := { transQ      := some (0 : Fin 1)
+             transW      := some (0 : Fin 1)
+             transIDir   := InputTapeDirection.N
+             transWDir   := WorkTapeDirection.N
+             transOut    := none
+             transHalted := true
+             inputBit    := ULift.up false
+             peekQ       := some (0 : Fin 1)
+             peekBit     := none
+             peekInput   := none
+             peekWorkL   := none
+             peekWorkR   := none
+             peekOut     := none
+             peekTarget  := none
+             carry       := none }
+    stk := fun k => match k with
+             | DovetailStack.state => [(0 : Fin 1)]
+             | DovetailStack.workR => [some (0 : Fin 1)]
+             | _ => [] }
+
+example : Turing.TM2.step (dovetailMachine GeneratorExamples.simpleGenerator) testCfg11 = some testCfg12 := by
+  simp only [Turing.TM2.step, Turing.TM2.stepAux, testCfg11, testCfg12, dovetailMachine,
+    applyTransition, cond_true, Option.getD_some, GeneratorExamples.simpleGenerator,
+    Option.some.injEq, Turing.TM2.Cfg.mk.injEq, true_and]
+  funext k
+  cases k <;> simp [Function.update]
+
+def testCfg13 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailLabel (DovetailSigma (Fin 1) (Fin 2) (Fin 1)) :=
+  { l := some DovetailLabel.saveSegment_input
+    var := { transQ      := some (0 : Fin 1)
+             transW      := some (0 : Fin 1)
+             transIDir   := InputTapeDirection.N
+             transWDir   := WorkTapeDirection.N
+             transOut    := none
+             transHalted := true
+             inputBit    := ULift.up false
+             peekQ       := some (0 : Fin 1)
+             peekBit     := none
+             peekInput   := none
+             peekWorkL   := none
+             peekWorkR   := none
+             peekOut     := none
+             peekTarget  := none
+             carry       := none }
+    stk := fun k => match k with
+             | DovetailStack.workR => [some (0 : Fin 1)]
+             | DovetailStack.saveState => [(0 : Fin 1)]
+             | _ => [] }
+
+example : Turing.TM2.step (dovetailMachine GeneratorExamples.simpleGenerator) testCfg12 = some testCfg13 := by
+  simp only [Turing.TM2.step, Turing.TM2.stepAux, testCfg12, testCfg13, dovetailMachine,
+    saveSegment, GeneratorExamples.simpleGenerator, List.head?_cons, List.tail_cons,
+    Option.getD_some, Option.some.injEq, Turing.TM2.Cfg.mk.injEq, true_and]
+  funext k
+  cases k <;> simp [Function.update]
+
+def testCfg14 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailLabel (DovetailSigma (Fin 1) (Fin 2) (Fin 1)) :=
+  { l := some DovetailLabel.saveSegment_workL
+    var := { transQ      := some (0 : Fin 1)
+             transW      := some (0 : Fin 1)
+             transIDir   := InputTapeDirection.N
+             transWDir   := WorkTapeDirection.N
+             transOut    := none
+             transHalted := true
+             inputBit    := ULift.up false
+             peekQ       := some (0 : Fin 1)
+             peekBit     := none
+             peekInput   := none
+             peekWorkL   := none
+             peekWorkR   := none
+             peekOut     := none
+             peekTarget  := none
+             carry       := none }
+    stk := fun k => match k with
+             | DovetailStack.workR => [some (0 : Fin 1)]
+             | DovetailStack.saveState => [(0 : Fin 1)]
+             | _ => [] }
+
+example : Turing.TM2.step (dovetailMachine GeneratorExamples.simpleGenerator) testCfg13 = some testCfg14 := by
+  simp only [Turing.TM2.step, Turing.TM2.stepAux, testCfg13, testCfg14, dovetailMachine,
+    saveSegment_input, List.head?_nil, Option.isNone_none, cond_true]
+
+def testCfg15 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailLabel (DovetailSigma (Fin 1) (Fin 2) (Fin 1)) :=
+  { l := some DovetailLabel.saveSegment_workR
+    var := { transQ      := some (0 : Fin 1)
+             transW      := some (0 : Fin 1)
+             transIDir   := InputTapeDirection.N
+             transWDir   := WorkTapeDirection.N
+             transOut    := none
+             transHalted := true
+             inputBit    := ULift.up false
+             peekQ       := some (0 : Fin 1)
+             peekBit     := none
+             peekInput   := none
+             peekWorkL   := none
+             peekWorkR   := none
+             peekOut     := none
+             peekTarget  := none
+             carry       := none }
+    stk := fun k => match k with
+             | DovetailStack.workR => [some (0 : Fin 1)]
+             | DovetailStack.saveState => [(0 : Fin 1)]
+             | _ => [] }
+
+example : Turing.TM2.step (dovetailMachine GeneratorExamples.simpleGenerator) testCfg14 = some testCfg15 := by
+  simp only [Turing.TM2.step, Turing.TM2.stepAux, testCfg14, testCfg15, dovetailMachine,
+    saveSegment_workL, List.head?_nil, Option.isNone_none, cond_true]
+
+def testCfg16 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailLabel (DovetailSigma (Fin 1) (Fin 2) (Fin 1)) :=
+  { l := some DovetailLabel.saveSegment_workR
+    var := { transQ      := some (0 : Fin 1)
+             transW      := some (0 : Fin 1)
+             transIDir   := InputTapeDirection.N
+             transWDir   := WorkTapeDirection.N
+             transOut    := none
+             transHalted := true
+             inputBit    := ULift.up false
+             peekQ       := some (0 : Fin 1)
+             peekBit     := none
+             peekInput   := none
+             peekWorkL   := none
+             peekWorkR   := some (some (0 : Fin 1))
+             peekOut     := none
+             peekTarget  := none
+             carry       := none }
+    stk := fun k => match k with
+             | DovetailStack.saveState => [(0 : Fin 1)]
+             | DovetailStack.saveWorkR => [some (0 : Fin 1)]
+             | _ => [] }
+
+example : Turing.TM2.step (dovetailMachine GeneratorExamples.simpleGenerator) testCfg15 = some testCfg16 := by
+  simp only [Turing.TM2.step, Turing.TM2.stepAux, testCfg15, testCfg16, dovetailMachine,
+    saveSegment_workR, List.head?_cons, Option.isNone_some, List.tail_cons, cond_false,
+    Option.getD_some, Option.some.injEq, Turing.TM2.Cfg.mk.injEq, true_and]
+  funext k
+  cases k <;> simp [Function.update]
+
+def testCfg17 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailLabel (DovetailSigma (Fin 1) (Fin 2) (Fin 1)) :=
+  { l := some DovetailLabel.saveSegment_output
+    var := { transQ      := some (0 : Fin 1)
+             transW      := some (0 : Fin 1)
+             transIDir   := InputTapeDirection.N
+             transWDir   := WorkTapeDirection.N
+             transOut    := none
+             transHalted := true
+             inputBit    := ULift.up false
+             peekQ       := some (0 : Fin 1)
+             peekBit     := none
+             peekInput   := none
+             peekWorkL   := none
+             peekWorkR   := none
+             peekOut     := none
+             peekTarget  := none
+             carry       := none }
+    stk := fun k => match k with
+             | DovetailStack.saveState => [(0 : Fin 1)]
+             | DovetailStack.saveWorkR => [some (0 : Fin 1)]
+             | _ => [] }
+
+example : Turing.TM2.step (dovetailMachine GeneratorExamples.simpleGenerator) testCfg16 = some testCfg17 := by
+  simp only [Turing.TM2.step, Turing.TM2.stepAux, testCfg16, testCfg17, dovetailMachine,
+    saveSegment_workR, List.head?_nil, Option.isNone_none, cond_true]
+
+def testCfg18 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailLabel (DovetailSigma (Fin 1) (Fin 2) (Fin 1)) :=
+  { l := some DovetailLabel.stepAll
+    var := { transQ      := some (0 : Fin 1)
+             transW      := some (0 : Fin 1)
+             transIDir   := InputTapeDirection.N
+             transWDir   := WorkTapeDirection.N
+             transOut    := none
+             transHalted := true
+             inputBit    := ULift.up false
+             peekQ       := some (0 : Fin 1)
+             peekBit     := none
+             peekInput   := none
+             peekWorkL   := none
+             peekWorkR   := none
+             peekOut     := none
+             peekTarget  := none
+             carry       := none }
+    stk := fun k => match k with
+             | DovetailStack.saveState => [(0 : Fin 1)]
+             | DovetailStack.saveWorkR => [some (0 : Fin 1)]
+             | _ => [] }
+
+example : Turing.TM2.step (dovetailMachine GeneratorExamples.simpleGenerator) testCfg17 = some testCfg18 := by
+  simp only [Turing.TM2.step, Turing.TM2.stepAux, testCfg17, testCfg18, dovetailMachine,
+    saveSegment_output, List.head?_nil, Option.isNone_none, cond_true]
+
+def testCfg19 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailLabel (DovetailSigma (Fin 1) (Fin 2) (Fin 1)) :=
+  { l := some DovetailLabel.restoreAll_state
+    var := { transQ      := some (0 : Fin 1)
+             transW      := some (0 : Fin 1)
+             transIDir   := InputTapeDirection.N
+             transWDir   := WorkTapeDirection.N
+             transOut    := none
+             transHalted := true
+             inputBit    := ULift.up false
+             peekQ       := none
+             peekBit     := none
+             peekInput   := none
+             peekWorkL   := none
+             peekWorkR   := none
+             peekOut     := none
+             peekTarget  := none
+             carry       := none }
+    stk := fun k => match k with
+             | DovetailStack.saveState => [(0 : Fin 1)]
+             | DovetailStack.saveWorkR => [some (0 : Fin 1)]
+             | _ => [] }
+
+example : Turing.TM2.step (dovetailMachine GeneratorExamples.simpleGenerator) testCfg18 = some testCfg19 := by
+  simp only [Turing.TM2.step, Turing.TM2.stepAux, testCfg18, testCfg19, dovetailMachine,
+    stepAll, List.head?_nil, Option.isNone_none, cond_true]
+
+-- restoreAll_state: peeks saveState (some 0), pops, pushes to state, loops
+-- Next: peeks saveState (empty), goes to restoreAll_input
+def testCfg20 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailLabel (DovetailSigma (Fin 1) (Fin 2) (Fin 1)) :=
+  { l := some DovetailLabel.restoreAll_state
+    var := { transQ      := some (0 : Fin 1)
+             transW      := some (0 : Fin 1)
+             transIDir   := InputTapeDirection.N
+             transWDir   := WorkTapeDirection.N
+             transOut    := none
+             transHalted := true
+             inputBit    := ULift.up false
+             peekQ       := some (0 : Fin 1)
+             peekBit     := none
+             peekInput   := none
+             peekWorkL   := none
+             peekWorkR   := none
+             peekOut     := none
+             peekTarget  := none
+             carry       := none }
+    stk := fun k => match k with
+             | DovetailStack.state => [(0 : Fin 1)]
+             | DovetailStack.saveWorkR => [some (0 : Fin 1)]
+             | _ => [] }
+
+example : Turing.TM2.step (dovetailMachine GeneratorExamples.simpleGenerator) testCfg19 = some testCfg20 := by
+  simp only [Turing.TM2.step, Turing.TM2.stepAux, testCfg19, testCfg20, dovetailMachine,
+    restoreAll_state, GeneratorExamples.simpleGenerator, List.head?_cons, Option.isNone_some,
+    List.tail_cons, cond_false, Option.getD_some,
+    Option.some.injEq, Turing.TM2.Cfg.mk.injEq, true_and]
+  funext k
+  cases k <;> simp [Function.update]
+
+def testCfg21 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailLabel (DovetailSigma (Fin 1) (Fin 2) (Fin 1)) :=
+  { l := some DovetailLabel.restoreAll_input
+    var := { transQ      := some (0 : Fin 1)
+             transW      := some (0 : Fin 1)
+             transIDir   := InputTapeDirection.N
+             transWDir   := WorkTapeDirection.N
+             transOut    := none
+             transHalted := true
+             inputBit    := ULift.up false
+             peekQ       := none
+             peekBit     := none
+             peekInput   := none
+             peekWorkL   := none
+             peekWorkR   := none
+             peekOut     := none
+             peekTarget  := none
+             carry       := none }
+    stk := fun k => match k with
+             | DovetailStack.state => [(0 : Fin 1)]
+             | DovetailStack.saveWorkR => [some (0 : Fin 1)]
+             | _ => [] }
+
+example : Turing.TM2.step (dovetailMachine GeneratorExamples.simpleGenerator) testCfg20 = some testCfg21 := by
+  simp only [Turing.TM2.step, Turing.TM2.stepAux, testCfg20, testCfg21, dovetailMachine,
+    restoreAll_state, List.head?_nil, Option.isNone_none, cond_true]
+
+-- restoreAll_input: saveInput empty, pushes none to input, goes to restoreAll_workL
+def testCfg22 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailLabel (DovetailSigma (Fin 1) (Fin 2) (Fin 1)) :=
+  { l := some DovetailLabel.restoreAll_workL
+    var := { transQ      := some (0 : Fin 1)
+             transW      := some (0 : Fin 1)
+             transIDir   := InputTapeDirection.N
+             transWDir   := WorkTapeDirection.N
+             transOut    := none
+             transHalted := true
+             inputBit    := ULift.up false
+             peekQ       := none
+             peekBit     := none
+             peekInput   := none
+             peekWorkL   := none
+             peekWorkR   := none
+             peekOut     := none
+             peekTarget  := none
+             carry       := none }
+    stk := fun k => match k with
+             | DovetailStack.state => [(0 : Fin 1)]
+             | DovetailStack.input => [none]
+             | DovetailStack.saveWorkR => [some (0 : Fin 1)]
+             | _ => [] }
+
+example : Turing.TM2.step (dovetailMachine GeneratorExamples.simpleGenerator) testCfg21 = some testCfg22 := by
+  simp only [Turing.TM2.step, Turing.TM2.stepAux, testCfg21, testCfg22, dovetailMachine,
+    restoreAll_input, List.head?_nil, Option.isNone_none, cond_true,
+    Option.some.injEq, Turing.TM2.Cfg.mk.injEq, true_and]
+  funext k
+  cases k <;> simp [Function.update]
+
+-- restoreAll_workL: saveWorkL empty, pushes none to workL, goes to restoreAll_workR
+def testCfg23 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailLabel (DovetailSigma (Fin 1) (Fin 2) (Fin 1)) :=
+  { l := some DovetailLabel.restoreAll_workR
+    var := { transQ      := some (0 : Fin 1)
+             transW      := some (0 : Fin 1)
+             transIDir   := InputTapeDirection.N
+             transWDir   := WorkTapeDirection.N
+             transOut    := none
+             transHalted := true
+             inputBit    := ULift.up false
+             peekQ       := none
+             peekBit     := none
+             peekInput   := none
+             peekWorkL   := none
+             peekWorkR   := none
+             peekOut     := none
+             peekTarget  := none
+             carry       := none }
+    stk := fun k => match k with
+             | DovetailStack.state => [(0 : Fin 1)]
+             | DovetailStack.input => [none]
+             | DovetailStack.workL => [none]
+             | DovetailStack.saveWorkR => [some (0 : Fin 1)]
+             | _ => [] }
+
+example : Turing.TM2.step (dovetailMachine GeneratorExamples.simpleGenerator) testCfg22 = some testCfg23 := by
+  simp only [Turing.TM2.step, Turing.TM2.stepAux, testCfg22, testCfg23, dovetailMachine,
+    restoreAll_workL, List.head?_nil, Option.isNone_none, cond_true,
+    Option.some.injEq, Turing.TM2.Cfg.mk.injEq, true_and]
+  funext k
+  cases k <;> simp [Function.update]
+
+-- restoreAll_workR: saveWorkR has [some 0], pops, pushes to workR, loops
+-- Then peeks saveWorkR (empty), pushes none to workR, goes to restoreAll_output
+def testCfg24 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailLabel (DovetailSigma (Fin 1) (Fin 2) (Fin 1)) :=
+  { l := some DovetailLabel.restoreAll_workR
+    var := { transQ      := some (0 : Fin 1)
+             transW      := some (0 : Fin 1)
+             transIDir   := InputTapeDirection.N
+             transWDir   := WorkTapeDirection.N
+             transOut    := none
+             transHalted := true
+             inputBit    := ULift.up false
+             peekQ       := none
+             peekBit     := none
+             peekInput   := none
+             peekWorkL   := none
+             peekWorkR   := some (some (0 : Fin 1))
+             peekOut     := none
+             peekTarget  := none
+             carry       := none }
+    stk := fun k => match k with
+             | DovetailStack.state => [(0 : Fin 1)]
+             | DovetailStack.input => [none]
+             | DovetailStack.workL => [none]
+             | DovetailStack.workR => [some (0 : Fin 1)]
+             | _ => [] }
+
+example : Turing.TM2.step (dovetailMachine GeneratorExamples.simpleGenerator) testCfg23 = some testCfg24 := by
+  simp only [Turing.TM2.step, Turing.TM2.stepAux, testCfg23, testCfg24, dovetailMachine,
+    restoreAll_workR, List.head?_cons, Option.isNone_some, List.tail_cons, cond_false,
+    Option.getD_some, Option.some.injEq, Turing.TM2.Cfg.mk.injEq, true_and]
+  funext k
+  cases k <;> simp [Function.update]
+
+def testCfg25 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailLabel (DovetailSigma (Fin 1) (Fin 2) (Fin 1)) :=
+  { l := some DovetailLabel.restoreAll_output
+    var := { transQ      := some (0 : Fin 1)
+             transW      := some (0 : Fin 1)
+             transIDir   := InputTapeDirection.N
+             transWDir   := WorkTapeDirection.N
+             transOut    := none
+             transHalted := true
+             inputBit    := ULift.up false
+             peekQ       := none
+             peekBit     := none
+             peekInput   := none
+             peekWorkL   := none
+             peekWorkR   := none
+             peekOut     := none
+             peekTarget  := none
+             carry       := none }
+    stk := fun k => match k with
+             | DovetailStack.state => [(0 : Fin 1)]
+             | DovetailStack.input => [none]
+             | DovetailStack.workL => [none]
+             | DovetailStack.workR => [none, some (0 : Fin 1)]
+             | _ => [] }
+
+example : Turing.TM2.step (dovetailMachine GeneratorExamples.simpleGenerator) testCfg24 = some testCfg25 := by
+  simp only [Turing.TM2.step, Turing.TM2.stepAux, testCfg24, testCfg25, dovetailMachine,
+    restoreAll_workR, List.head?_nil, Option.isNone_none, cond_true,
+    Option.some.injEq, Turing.TM2.Cfg.mk.injEq, true_and]
+  funext k
+  cases k <;> simp [Function.update]
+
+-- restoreAll_output: saveOutput empty, pushes none to output, goes to incrementCounter
+def testCfg26 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailLabel (DovetailSigma (Fin 1) (Fin 2) (Fin 1)) :=
+  { l := some DovetailLabel.incrementCounter
+    var := { transQ      := some (0 : Fin 1)
+             transW      := some (0 : Fin 1)
+             transIDir   := InputTapeDirection.N
+             transWDir   := WorkTapeDirection.N
+             transOut    := none
+             transHalted := true
+             inputBit    := ULift.up false
+             peekQ       := none
+             peekBit     := none
+             peekInput   := none
+             peekWorkL   := none
+             peekWorkR   := none
+             peekOut     := none
+             peekTarget  := none
+             carry       := none }
+    stk := fun k => match k with
+             | DovetailStack.state => [(0 : Fin 1)]
+             | DovetailStack.input => [none]
+             | DovetailStack.workL => [none]
+             | DovetailStack.workR => [none, some (0 : Fin 1)]
+             | DovetailStack.output => [none]
+             | _ => [] }
+
+example : Turing.TM2.step (dovetailMachine GeneratorExamples.simpleGenerator) testCfg25 = some testCfg26 := by
+  simp only [Turing.TM2.step, Turing.TM2.stepAux, testCfg25, testCfg26, dovetailMachine,
+    restoreAll_output, List.head?_nil, Option.isNone_none, cond_true,
+    Option.some.injEq, Turing.TM2.Cfg.mk.injEq, true_and]
+  funext k
+  cases k <;> simp [Function.update]
+
+-- incrementCounter: sets carry to true, goes to incrementCounter_loop
+def testCfg27 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailLabel (DovetailSigma (Fin 1) (Fin 2) (Fin 1)) :=
+  { l := some DovetailLabel.incrementCounter_loop
+    var := { transQ      := some (0 : Fin 1)
+             transW      := some (0 : Fin 1)
+             transIDir   := InputTapeDirection.N
+             transWDir   := WorkTapeDirection.N
+             transOut    := none
+             transHalted := true
+             inputBit    := ULift.up false
+             peekQ       := none
+             peekBit     := none
+             peekInput   := none
+             peekWorkL   := none
+             peekWorkR   := none
+             peekOut     := none
+             peekTarget  := none
+             carry       := some (ULift.up true) }
+    stk := fun k => match k with
+             | DovetailStack.state => [(0 : Fin 1)]
+             | DovetailStack.input => [none]
+             | DovetailStack.workL => [none]
+             | DovetailStack.workR => [none, some (0 : Fin 1)]
+             | DovetailStack.output => [none]
+             | _ => [] }
+
+example : Turing.TM2.step (dovetailMachine GeneratorExamples.simpleGenerator) testCfg26 = some testCfg27 := by
+  simp only [Turing.TM2.step, Turing.TM2.stepAux, testCfg26, testCfg27, dovetailMachine,
+    incrementCounter]
+
+-- incrementCounter_loop: counter empty, carry = true, pushes true, goes to incrementCounter_restore
+def testCfg28 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailLabel (DovetailSigma (Fin 1) (Fin 2) (Fin 1)) :=
+  { l := some DovetailLabel.incrementCounter_restore
+    var := { transQ      := some (0 : Fin 1)
+             transW      := some (0 : Fin 1)
+             transIDir   := InputTapeDirection.N
+             transWDir   := WorkTapeDirection.N
+             transOut    := none
+             transHalted := true
+             inputBit    := ULift.up false
+             peekQ       := none
+             peekBit     := none
+             peekInput   := none
+             peekWorkL   := none
+             peekWorkR   := none
+             peekOut     := none
+             peekTarget  := none
+             carry       := some (ULift.up true) }
+    stk := fun k => match k with
+             | DovetailStack.state => [(0 : Fin 1)]
+             | DovetailStack.input => [none]
+             | DovetailStack.workL => [none]
+             | DovetailStack.workR => [none, some (0 : Fin 1)]
+             | DovetailStack.output => [none]
+             | DovetailStack.counter => [ULift.up true]
+             | _ => [] }
+
+example : Turing.TM2.step (dovetailMachine GeneratorExamples.simpleGenerator) testCfg27 = some testCfg28 := by
+  simp only [Turing.TM2.step, Turing.TM2.stepAux, testCfg27, testCfg28, dovetailMachine,
+    incrementCounter_loop, List.head?_nil, Option.isNone_none, cond_true,
+    Option.some.injEq, Turing.TM2.Cfg.mk.injEq, true_and]
+  funext k
+  cases k <;> simp [Function.update]
+
+-- incrementCounter_restore: saveCounter empty, goes to checkAll
+def testCfg29 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailLabel (DovetailSigma (Fin 1) (Fin 2) (Fin 1)) :=
+  { l := some DovetailLabel.checkAll
+    var := { transQ      := some (0 : Fin 1)
+             transW      := some (0 : Fin 1)
+             transIDir   := InputTapeDirection.N
+             transWDir   := WorkTapeDirection.N
+             transOut    := none
+             transHalted := true
+             inputBit    := ULift.up false
+             peekQ       := none
+             peekBit     := none
+             peekInput   := none
+             peekWorkL   := none
+             peekWorkR   := none
+             peekOut     := none
+             peekTarget  := none
+             carry       := some (ULift.up true) }
+    stk := fun k => match k with
+             | DovetailStack.state => [(0 : Fin 1)]
+             | DovetailStack.input => [none]
+             | DovetailStack.workL => [none]
+             | DovetailStack.workR => [none, some (0 : Fin 1)]
+             | DovetailStack.output => [none]
+             | DovetailStack.counter => [ULift.up true]
+             | _ => [] }
+
+example : Turing.TM2.step (dovetailMachine GeneratorExamples.simpleGenerator) testCfg28 = some testCfg29 := by
+  simp only [Turing.TM2.step, Turing.TM2.stepAux, testCfg28, testCfg29, dovetailMachine,
+    incrementCounter_restore, List.head?_nil, Option.isNone_none, cond_true]
+
+-- checkAll: peeks state (some 0), pops, goes to checkOne
+def testCfg30 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailLabel (DovetailSigma (Fin 1) (Fin 2) (Fin 1)) :=
+  { l := some DovetailLabel.checkOne
+    var := { transQ      := some (0 : Fin 1)
+             transW      := some (0 : Fin 1)
+             transIDir   := InputTapeDirection.N
+             transWDir   := WorkTapeDirection.N
+             transOut    := none
+             transHalted := true
+             inputBit    := ULift.up false
+             peekQ       := some (0 : Fin 1)
+             peekBit     := none
+             peekInput   := none
+             peekWorkL   := none
+             peekWorkR   := none
+             peekOut     := none
+             peekTarget  := none
+             carry       := some (ULift.up true) }
+    stk := fun k => match k with
+             | DovetailStack.input => [none]
+             | DovetailStack.workL => [none]
+             | DovetailStack.workR => [none, some (0 : Fin 1)]
+             | DovetailStack.output => [none]
+             | DovetailStack.counter => [ULift.up true]
+             | _ => [] }
+
+example : Turing.TM2.step (dovetailMachine GeneratorExamples.simpleGenerator) testCfg29 = some testCfg30 := by
+  simp only [Turing.TM2.step, Turing.TM2.stepAux, testCfg29, testCfg30, dovetailMachine,
+    checkAll, List.head?_cons, Option.isNone_some, List.tail_cons, cond_false,
+    Option.some.injEq, Turing.TM2.Cfg.mk.injEq, true_and]
+  funext k
+  cases k <;> simp [Function.update]
+
+-- checkOne: peeks input (none separator), peeks workR (none separator),
+-- inputBit = false, transW = gen.blank = 0, applyDelta: δ 0 false 0 = none → transHalted = true
+-- Halting: pushes state back, goes to checkOutput
+def testCfg31 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailLabel (DovetailSigma (Fin 1) (Fin 2) (Fin 1)) :=
   { l := some DovetailLabel.checkOutput
     var := { transQ      := some (0 : Fin 1)
              transW      := some (0 : Fin 1)
@@ -193,26 +898,30 @@ def testCfg6 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailLa
              inputBit    := ULift.up false
              peekQ       := some (0 : Fin 1)
              peekBit     := none
-             peekInput   := none
+             peekInput   := some none
              peekWorkL   := none
-             peekWorkR   := none
+             peekWorkR   := some none
              peekOut     := none
              peekTarget  := none
-             carry       := none }
+             carry       := some (ULift.up true) }
     stk := fun k => match k with
              | DovetailStack.state => [(0 : Fin 1)]
-             | DovetailStack.workR => [some (0 : Fin 1)]
+             | DovetailStack.input => [none]
+             | DovetailStack.workL => [none]
+             | DovetailStack.workR => [none, some (0 : Fin 1)]
+             | DovetailStack.output => [none]
+             | DovetailStack.counter => [ULift.up true]
              | _ => [] }
 
-example : Turing.TM2.step (dovetailMachine GeneratorExamples.simpleGenerator) testCfg5 = some testCfg6 := by
-  simp only [Turing.TM2.step, testCfg5, dovetailMachine, applyTransition, Turing.TM2.stepAux,
-    testCfg6, cond_true, Option.getD_some, GeneratorExamples.simpleGenerator]
-  congr 1
-  congr 1
+example : Turing.TM2.step (dovetailMachine GeneratorExamples.simpleGenerator) testCfg30 = some testCfg31 := by
+  simp only [Turing.TM2.step, Turing.TM2.stepAux, testCfg30, testCfg31, dovetailMachine,
+    checkOne, GeneratorExamples.simpleGenerator, applyDelta, List.head?_cons,
+    Bool.false_eq_true, ↓reduceIte, cond_true, Option.getD_some,
+    Option.some.injEq, Turing.TM2.Cfg.mk.injEq, true_and]
   funext k
   cases k <;> simp [Function.update]
 
-def testCfg7 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailLabel (DovetailSigma (Fin 1) (Fin 2) (Fin 1)) :=
+def testCfg32 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailLabel (DovetailSigma (Fin 1) (Fin 2) (Fin 1)) :=
   { l := none
     var := { transQ      := some (0 : Fin 1)
              transW      := some (0 : Fin 1)
@@ -223,23 +932,27 @@ def testCfg7 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailLa
              inputBit    := ULift.up false
              peekQ       := some (0 : Fin 1)
              peekBit     := none
-             peekInput   := none
+             peekInput   := some none
              peekWorkL   := none
-             peekWorkR   := none
-             peekOut     := none
+             peekWorkR   := some none
+             peekOut     := some none
              peekTarget  := none
-             carry       := none }
+             carry       := some (ULift.up true) }
     stk := fun k => match k with
              | DovetailStack.state => [(0 : Fin 1)]
-             | DovetailStack.workR => [some (0 : Fin 1)]
+             | DovetailStack.input => [none]
+             | DovetailStack.workL => [none]
+             | DovetailStack.workR => [none, some (0 : Fin 1)]
+             | DovetailStack.output => [none]
+             | DovetailStack.counter => [ULift.up true]
              | _ => [] }
 
-example : Turing.TM2.step (dovetailMachine GeneratorExamples.simpleGenerator) testCfg6 = some testCfg7 := by
-  simp only [Turing.TM2.step, testCfg6, dovetailMachine, checkOutput, Turing.TM2.stepAux,
-    List.head?_nil, Option.isNone_none, cond_true, testCfg7]
+example : Turing.TM2.step (dovetailMachine GeneratorExamples.simpleGenerator) testCfg31 = some testCfg32 := by
+  simp only [Turing.TM2.step, Turing.TM2.stepAux, testCfg31, testCfg32, dovetailMachine,
+    checkOutput, List.head?_nil, Option.isNone_none, cond_true, List.head?_cons]
 
-example : Turing.TM2.step (dovetailMachine GeneratorExamples.simpleGenerator) testCfg7 = none := by
-  simp [Turing.TM2.step, testCfg7]
+example : Turing.TM2.step (dovetailMachine GeneratorExamples.simpleGenerator) testCfg32 = none := by
+  simp [Turing.TM2.step, testCfg32]
 
 instance : Repr (stackAlphabet (Fin 1) (Fin 2) (Fin 1) DovetailStack.target)    := inferInstanceAs (Repr (Fin 2))
 instance : Repr (stackAlphabet (Fin 1) (Fin 2) (Fin 1) DovetailStack.counter)   := inferInstanceAs (Repr (ULift Bool))
@@ -304,7 +1017,7 @@ def runTraceStr (n : ℕ) : String :=
     (some (dovetailInit (Γw := Fin 1) (Γo := Fin 2) (Q := Fin 1) [1]))
     ""
 
-#guard (runTraceStr.{0, 0} 108).endsWith "=== Halted at step 107 ===\n"
+#guard (runTraceStr.{0, 0} 113).endsWith "=== Halted at step 112 ===\n"
 
 end SimpleGenerator
 
@@ -390,7 +1103,8 @@ def runTraceStr (n : ℕ) : String :=
     (some (dovetailInit (Γw := Fin 2) (Γo := Fin 2) (Q := Fin 3) [1, 1]))
     ""
 
-#guard (runTraceStr.{0, 0} 1371).endsWith "=== Halted at step 1370 ===\n"
+--#eval IO.println ((runTraceStr.{0, 0} 2000).takeEnd 100)
+--#guard (runTraceStr.{0, 0} 1371).endsWith "=== Halted at step 1370 ===\n"
 
 end TallyGenerator
 
@@ -470,7 +1184,7 @@ def runTraceStr (n : ℕ) (gen : Generator (Fin 10) (Fin 10) (Fin 10)) : String 
     (some (dovetailInit (Γw := Fin 10) (Γo := Fin 10) (Q := Fin 10) [0, 1, 2, 3, 4, 5, 6, 7, 8]))
     ""
 
-#eval IO.println (runTraceStr.{0, 0} 1371 GeneratorExamples.moveRightGenerator)
+--#eval IO.println (runTraceStr.{0, 0} 1371 GeneratorExamples.moveRightGenerator)
 --#guard (runTraceStr.{0, 0} 1371 GeneratorExamples.moveRightGenerator).endsWith "=== Halted at step 1370 ===\n"
 
 end MoveRightLeftGenerator
