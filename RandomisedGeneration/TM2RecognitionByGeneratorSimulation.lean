@@ -1221,6 +1221,79 @@ structure QuiescentInvariant
     tm2cfg.stk DovetailStack.saveWorkR = [] ∧
     tm2cfg.stk DovetailStack.saveOutput = []
 
+/-- Mid-check invariant: we've processed j instances, saving them to save stacks.
+    Instances 0..j-1 (oldest) are on save stacks, instances j..round-1 (newest) remain
+    on main stacks. None of the processed instances matched. -/
+structure CheckPhaseInvariant
+    (gen : Generator Γw Γo Q)
+    (target : List Γo)
+    (round : ℕ)
+    (j : ℕ)
+    (tm2cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) DovetailLabel (DovetailSigma Γw Γo Q))
+    : Prop where
+  label_eq : tm2cfg.l = some DovetailLabel.checkAll
+  hj : j ≤ round
+  noMatch : ∀ i, round - j ≤ i → i < round →
+    ¬(IsHalting gen (instanceConfig gen i round) ∧
+      (instanceConfig gen i round).output.reverse = target)
+  -- ═══ Main stacks: oldest round-j instances (indices 0..round-j-1) ═══
+  state : tm2cfg.stk DovetailStack.state =
+    ((List.range (round - j)).map
+      (fun i => (instanceConfig gen i round).state)).reverse
+  output : tm2cfg.stk DovetailStack.output =
+    ((List.range (round - j)).map (fun i =>
+      [none] ++ (instanceConfig gen i round).output.map some)).reverse.flatten
+  input : tm2cfg.stk DovetailStack.input =
+    ((List.range (round - j)).map (fun i =>
+      let cfg := instanceConfig gen i round
+      [none] ++ ((Nat.bits i).drop cfg.inputIndex).map
+        (fun b => some (ULift.up b)))).reverse.flatten
+  workR_len : (splitSegments (tm2cfg.stk DovetailStack.workR)).length = round - j
+  workR : ∀ i (hi : i < round - j),
+    workRMatches gen (instanceConfig gen i round)
+      ((splitSegments (tm2cfg.stk DovetailStack.workR)).get ⟨i, by omega⟩)
+      (round - i)
+  workL_len : (splitSegments (tm2cfg.stk DovetailStack.workL)).length = round - j
+  workL : ∀ i (hi : i < round - j),
+    workLMatches gen (instanceConfig gen i round)
+      ((splitSegments (tm2cfg.stk DovetailStack.workL)).get ⟨i, by omega⟩)
+      (round - i)
+  -- ═══ Save stacks: newest j instances (indices round-j..round-1) ═══
+  -- saveState: j entries. First processed = index round-1 (was on top of main).
+  -- It gets pushed to saveState first, so it's at the bottom.
+  -- Last processed = index round-j, on top of saveState.
+  saveState : tm2cfg.stk DovetailStack.saveState =
+    (List.range j).map
+      (fun k => (instanceConfig gen (round - j + k) round).state)
+  -- saveOutput: j segments, same indexing as saveState
+  saveOutput : tm2cfg.stk DovetailStack.saveOutput =
+    ((List.range j).map (fun k =>
+      let i := round - j + k
+      [none] ++ (instanceConfig gen i round).output.map some)).flatten
+  -- saveInput: j segments
+  saveInput : tm2cfg.stk DovetailStack.saveInput =
+    ((List.range j).map (fun k =>
+      let i := round - j + k
+      let cfg := instanceConfig gen i round
+      [none] ++ ((Nat.bits i).drop cfg.inputIndex).map
+        (fun b => some (ULift.up b)))).flatten
+  -- saveWorkR/saveWorkL: j segments
+  saveWorkR_len : (splitSegments (tm2cfg.stk DovetailStack.saveWorkR)).length = j
+  saveWorkR : ∀ k (hk : k < j),
+    workRMatches gen (instanceConfig gen (round - j + k) round)
+      ((splitSegments (tm2cfg.stk DovetailStack.saveWorkR)).get ⟨k, by omega⟩)
+      (round - (round - j + k))
+  saveWorkL_len : (splitSegments (tm2cfg.stk DovetailStack.saveWorkL)).length = j
+  saveWorkL : ∀ k (hk : k < j),
+    workLMatches gen (instanceConfig gen (round - j + k) round)
+      ((splitSegments (tm2cfg.stk DovetailStack.saveWorkL)).get ⟨k, by omega⟩)
+      (round - (round - j + k))
+  -- ═══ Preserved ═══
+  counter : tm2cfg.stk DovetailStack.counter = (Nat.bits round).map ULift.up
+  target_preserved : tm2cfg.stk DovetailStack.target = target
+  saveTarget_empty : tm2cfg.stk DovetailStack.saveTarget = []
+  saveCounter_empty : tm2cfg.stk DovetailStack.saveCounter = []
+
 set_option linter.unusedSectionVars false
 lemma quiescentInvariant_init
     (gen : Generator Γw Γo Q)
@@ -1266,6 +1339,84 @@ lemma inCorrespondence_init
     InCorrespondence gen target initDovetailState (dovetailInit target) := by
   exact quiescentInvariant_init gen target
 
+/-- From checkAll with j instances already processed and no match among them,
+    processing one more non-matching instance advances to j+1. -/
+lemma checkPhase_advance_no_match
+    (gen : Generator Γw Γo Q)
+    (target : List Γo)
+    (round : ℕ)
+    (j : ℕ)
+    (tm2cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) DovetailLabel (DovetailSigma Γw Γo Q))
+    (hInv : CheckPhaseInvariant gen target round j tm2cfg)
+    (hj : j < round)
+    (hNoMatch_j : ¬(IsHalting gen (instanceConfig gen (round - 1 - j) round) ∧
+      (instanceConfig gen (round - 1 - j) round).output.reverse = target)) :
+    ∃ tm2cfg',
+      CheckPhaseInvariant gen target round (j + 1) tm2cfg' ∧
+      Turing.Reaches (Turing.TM2.step (dovetailMachine gen)) tm2cfg tm2cfg' := by
+  sorry
+
+/-- From checkAll with j instances already processed, if instance j matches,
+    the TM2 reaches a halted config. -/
+lemma checkPhase_halt_on_match
+    (gen : Generator Γw Γo Q)
+    (target : List Γo)
+    (round : ℕ)
+    (j : ℕ)
+    (tm2cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) DovetailLabel (DovetailSigma Γw Γo Q))
+    (hInv : CheckPhaseInvariant gen target round j tm2cfg)
+    (hj : j < round)
+    (hMatch_j : IsHalting gen (instanceConfig gen (round - 1 - j) round) ∧
+      (instanceConfig gen (round - 1 - j) round).output.reverse = target) :
+    ∃ tm2cfg',
+      tm2cfg'.l = none ∧
+      Turing.Reaches (Turing.TM2.step (dovetailMachine gen)) tm2cfg tm2cfg' := by
+  sorry
+
+/-- A QuiescentInvariant at checkAll gives a CheckPhaseInvariant at j=0. -/
+lemma quiescent_to_checkPhase
+    (gen : Generator Γw Γo Q)
+    (target : List Γo)
+    (round : ℕ)
+    (tm2cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) DovetailLabel (DovetailSigma Γw Γo Q))
+    (hInv : QuiescentInvariant gen target round DovetailLabel.checkAll tm2cfg) :
+    CheckPhaseInvariant gen target round 0 tm2cfg where
+  label_eq := hInv.label_eq
+  hj := Nat.zero_le _
+  noMatch := by intro i hi; omega
+  state := by simp [hInv.state]
+  output := by simp [hInv.output]
+  input := by simp [hInv.input]
+  workR_len := by simp [hInv.workR_len]
+  workR := hInv.workR
+  workL_len := by simp [hInv.workL_len]
+  workL := hInv.workL
+  saveState := by
+    simp only [tsub_zero, List.range_zero, List.map_nil]
+    exact hInv.save_empty.2.2.2.1
+  saveOutput := by
+    simp only [tsub_zero, List.cons_append, List.nil_append, List.range_zero,
+      List.map_nil, List.flatten_nil]
+    exact hInv.save_empty.2.2.2.2.2.2
+  saveInput := by
+    simp only [tsub_zero, List.map_drop, List.cons_append, List.nil_append,
+      List.range_zero, List.map_nil, List.flatten_nil]
+    exact hInv.save_empty.2.2.1
+  saveWorkR_len := by
+    simp only [splitSegments, List.length_eq_zero_iff]
+    have h := hInv.save_empty.2.2.2.2.2.1
+    rw [h]
+  saveWorkR := by intro k hk; omega
+  saveWorkL_len := by
+    simp only [splitSegments, List.length_eq_zero_iff]
+    have h := hInv.save_empty.2.2.2.2.1
+    rw [h]
+  saveWorkL := by intro k hk; omega
+  counter := hInv.counter
+  target_preserved := hInv.target_preserved
+  saveTarget_empty := hInv.save_empty.1
+  saveCounter_empty := hInv.save_empty.2.1
+
 /-- If in correspondence and some instance halts with matching output,
     the TM2 reaches a halted config. -/
 lemma inCorrespondence_halt
@@ -1280,7 +1431,45 @@ lemma inCorrespondence_halt
     ∃ tm2cfg',
       tm2cfg'.l = none ∧
       Turing.Reaches (Turing.TM2.step (dovetailMachine gen)) tm2cfg tm2cfg' := by
-  sorry
+  obtain ⟨k, hk_lt, hk_halt, hk_out⟩ := hMatch
+  let round := ds.instances.length
+  have hCheck₀ := quiescent_to_checkPhase gen target round tm2cfg hCorr
+  suffices ∀ d j (tm2cfg_j : Turing.TM2.Cfg (stackAlphabet Γw Γo Q)
+        DovetailLabel (DovetailSigma Γw Γo Q)),
+      round - j = d →
+      j ≤ round →
+      CheckPhaseInvariant gen target round j tm2cfg_j →
+      Turing.Reaches (Turing.TM2.step (dovetailMachine gen)) tm2cfg tm2cfg_j →
+      (∃ i, i < round - j ∧
+        IsHalting gen (instanceConfig gen i round) ∧
+        (instanceConfig gen i round).output.reverse = target) →
+      ∃ tm2cfg',
+        tm2cfg'.l = none ∧
+        Turing.Reaches (Turing.TM2.step (dovetailMachine gen)) tm2cfg tm2cfg' by
+    exact this round 0 tm2cfg (by omega) (Nat.zero_le _) hCheck₀
+      Relation.ReflTransGen.refl ⟨k, by omega, hk_halt, hk_out⟩
+  intro d
+  induction d with
+  | zero =>
+    intro j tm2cfg_j hd hj hInv_j hReach_j ⟨i, hi_lt, _, _⟩
+    omega
+  | succ d ih =>
+    intro j tm2cfg_j hd hj hInv_j hReach_j ⟨i, hi_lt, hi_halt, hi_out⟩
+    -- The next instance to check is round - 1 - j
+    by_cases hMatch_j : IsHalting gen (instanceConfig gen (round - 1 - j) round) ∧
+        (instanceConfig gen (round - 1 - j) round).output.reverse = target
+    · have hj_lt : j < round := by omega
+      obtain ⟨tm2cfg', h_halt', h_reaches'⟩ :=
+        checkPhase_halt_on_match gen target round j tm2cfg_j hInv_j hj_lt hMatch_j
+      exact ⟨tm2cfg', h_halt', Relation.ReflTransGen.trans hReach_j h_reaches'⟩
+    · have hj_lt : j < round := by omega
+      obtain ⟨tm2cfg_next, hInv_next, hReach_next⟩ :=
+        checkPhase_advance_no_match gen target round j tm2cfg_j hInv_j hj_lt hMatch_j
+      have hi_ne : i ≠ round - 1 - j := by
+        intro heq; rw [heq] at hi_halt hi_out; exact hMatch_j ⟨hi_halt, hi_out⟩
+      exact ih (j + 1) tm2cfg_next (by omega) (by omega) hInv_next
+        (Relation.ReflTransGen.trans hReach_j hReach_next)
+        ⟨i, by omega, hi_halt, hi_out⟩
 
 /-- If in correspondence and no instance halts with matching output,
     one dovetailStep and finitely many TM2 steps lead to new configs
