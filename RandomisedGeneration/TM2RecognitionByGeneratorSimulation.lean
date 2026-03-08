@@ -370,47 +370,48 @@ def stackAlphabet (Γw Γo Q : Type u)
   | DovetailStack.saveOutput  => Option Γo
 
 -- Labels correspond to the subroutines and their internal loops
+-- Labels correspond to the subroutines and their internal loops
 inductive DovetailLabel : Type u
   -- Phase 1: Check all instances for halting + output match
-  | checkAll
-  | checkOne
-  | checkOutput
-  | restoreTarget
-  | restoreOutput
-  | checkPhase_saveSegment
-  | checkPhase_saveSegment_input
-  | checkPhase_saveSegment_workL
-  | checkPhase_saveSegment_workR
-  | checkPhase_saveSegment_output
+  | checkAll -- check_iterateInstances -- loop entry: peek state, pop next instance or finish
+  | checkOne -- check_testHalting -- peek input/workR, apply delta, branch on halting
+  | checkOutput -- check_compareOutput -- compare output against target element by element
+  | restoreTarget -- check_compareOutput_restoreTarget -- restore target from saveTarget after mismatch
+  | restoreOutput -- check_compareOutput_restoreOutput -- restore output from saveOutput after mismatch
+  | checkPhase_saveSegment -- check_saveInstance_state -- save current instance's state to saveState
+  | checkPhase_saveSegment_input -- check_saveInstance_input -- save current instance's input segment to saveInput
+  | checkPhase_saveSegment_workL -- check_saveInstance_workL -- save current instance's workL segment to saveWorkL
+  | checkPhase_saveSegment_workR -- check_saveInstance_workR -- save current instance's workR segment to saveWorkR
+  | checkPhase_saveSegment_output -- check_saveInstance_output -- save current instance's output segment to saveOutput
   -- Phase 2: Restore from check phase, then spawn new instance
-  | checkPhase_restoreAll_state
-  | checkPhase_restoreAll_input
-  | checkPhase_restoreAll_workL
-  | checkPhase_restoreAll_workR
-  | checkPhase_restoreAll_output
-  | pushNewConfig_copy_counter
-  | pushNewConfig_restore_counter
+  | checkPhase_restoreAll_state -- check_restoreAll_state          -- restore all states from saveState
+  | checkPhase_restoreAll_input -- check_restoreAll_input          -- restore all input segments from saveInput
+  | checkPhase_restoreAll_workL -- check_restoreAll_workL          -- restore all workL segments from saveWorkL
+  | checkPhase_restoreAll_workR -- check_restoreAll_workR          -- restore all workR segments from saveWorkR
+  | checkPhase_restoreAll_output -- check_restoreAll_output         -- restore all output segments from saveOutput
+  | pushNewConfig_copy_counter -- spawn_copyCounter               -- copy counter bits to saveCounter
+  | pushNewConfig_restore_counter -- spawn_restoreAndPush            -- restore counter from saveCounter, push bits to input
   -- Phase 3: Step all instances
-  | stepAll
-  | stepOne
-  | stepOne_workR
-  | applyTransition
-  | applyInputDir
-  | applyWorkDir
-  | saveSegment
-  | saveSegment_input
-  | saveSegment_workL
-  | saveSegment_workR
-  | saveSegment_output
+  | stepAll -- step_iterateInstances           -- loop entry: peek state, pop next instance or finish
+  | stepOne -- step_peekInput                  -- peek input to get current bit
+  | stepOne_workR -- step_peekWorkR                  -- peek workR to get head symbol, pop if real, apply delta
+  | applyTransition -- step_applyTransition            -- push new state and workR, handle output, branch on halting
+  | applyInputDir -- step_consumeInput               -- conditionally pop input bit if direction is R
+  | applyWorkDir -- step_moveWorkHead               -- move work tape head left/right/stay
+  | saveSegment -- step_saveInstance_state         -- save stepped instance's state to saveState
+  | saveSegment_input -- step_saveInstance_input         -- save stepped instance's input segment to saveInput
+  | saveSegment_workL -- step_saveInstance_workL         -- save stepped instance's workL segment to saveWorkL
+  | saveSegment_workR -- step_saveInstance_workR         -- save stepped instance's workR segment to saveWorkR
+  | saveSegment_output -- step_saveInstance_output        -- save stepped instance's output segment to saveOutput
   -- Phase 4: Restore from step phase, increment counter
-  | restoreAll_state
-  | restoreAll_input
-  | restoreAll_workL
-  | restoreAll_workR
-  | restoreAll_output
-  | incrementCounter
-  | incrementCounter_loop
-  | incrementCounter_restore
+  | restoreAll_state -- step_restoreAll_state           -- restore all states from saveState
+  | restoreAll_input -- step_restoreAll_input           -- restore all input segments from saveInput
+  | restoreAll_workL -- step_restoreAll_workL           -- restore all workL segments from saveWorkL
+  | restoreAll_workR -- step_restoreAll_workR           -- restore all workR segments from saveWorkR
+  | restoreAll_output -- step_restoreAll_output          -- restore all output segments from saveOutput
+  | incrementCounter -- counter_increment               -- set carry bit, enter increment loop
+  | incrementCounter_loop -- counter_increment_loop          -- process one counter bit with carry
+  | incrementCounter_restore -- counter_increment_restore       -- restore counter from saveCounter after increment
 deriving DecidableEq, Fintype
 
 set_option linter.style.whitespace false
