@@ -71,7 +71,7 @@ def testCfg1 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailLa
     stk := fun _ => [] }
 
 example : Turing.TM2.step (dovetailMachine GeneratorExamples.simpleGenerator) testCfg0 = some testCfg1 := by
-  simp [Turing.TM2.step, Turing.TM2.stepAux, dovetailMachine, checkAll,
+  simp [Turing.TM2.step, Turing.TM2.stepAux, dovetailMachine, check_iterateInstances,
         testCfg0, testCfg1, Turing.TM2.init, default, Inhabited.default]
 
 def testCfg2 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailLabel (DovetailSigma (Fin 1) (Fin 2) (Fin 1)) :=
@@ -822,7 +822,7 @@ example : Turing.TM2.step (dovetailMachine GeneratorExamples.simpleGenerator) te
 
 -- incrementCounter_restore: saveCounter empty, goes to checkAll
 def testCfg29 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailLabel (DovetailSigma (Fin 1) (Fin 2) (Fin 1)) :=
-  { l := some DovetailLabel.checkAll
+  { l := some DovetailLabel.check_iterateInstances
     var := { transQ      := some (0 : Fin 1)
              transW      := some (0 : Fin 1)
              transIDir   := InputTapeDirection.N
@@ -853,7 +853,7 @@ example : Turing.TM2.step (dovetailMachine GeneratorExamples.simpleGenerator) te
 
 -- checkAll: peeks state (some 0), pops, goes to checkOne
 def testCfg30 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailLabel (DovetailSigma (Fin 1) (Fin 2) (Fin 1)) :=
-  { l := some DovetailLabel.checkOne
+  { l := some DovetailLabel.check_testHalting
     var := { transQ      := some (0 : Fin 1)
              transW      := some (0 : Fin 1)
              transIDir   := InputTapeDirection.N
@@ -879,7 +879,7 @@ def testCfg30 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailL
 
 example : Turing.TM2.step (dovetailMachine GeneratorExamples.simpleGenerator) testCfg29 = some testCfg30 := by
   simp only [Turing.TM2.step, Turing.TM2.stepAux, testCfg29, testCfg30, dovetailMachine,
-    checkAll, List.head?_cons, Option.isNone_some, List.tail_cons, cond_false,
+    check_iterateInstances, List.head?_cons, Option.isNone_some, List.tail_cons, cond_false,
     Option.some.injEq, Turing.TM2.Cfg.mk.injEq, true_and]
   funext k
   cases k <;> simp [Function.update]
@@ -888,7 +888,7 @@ example : Turing.TM2.step (dovetailMachine GeneratorExamples.simpleGenerator) te
 -- inputBit = false, transW = gen.blank = 0, applyDelta: δ 0 false 0 = none → transHalted = true
 -- Halting: pushes state back, goes to checkOutput
 def testCfg31 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailLabel (DovetailSigma (Fin 1) (Fin 2) (Fin 1)) :=
-  { l := some DovetailLabel.checkOutput
+  { l := some DovetailLabel.check_compareOutput
     var := { transQ      := some (0 : Fin 1)
              transW      := some (0 : Fin 1)
              transIDir   := InputTapeDirection.N
@@ -915,7 +915,7 @@ def testCfg31 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailL
 
 example : Turing.TM2.step (dovetailMachine GeneratorExamples.simpleGenerator) testCfg30 = some testCfg31 := by
   simp only [Turing.TM2.step, Turing.TM2.stepAux, testCfg30, testCfg31, dovetailMachine,
-    checkOne, GeneratorExamples.simpleGenerator, applyDelta, List.head?_cons,
+    check_testHalting, GeneratorExamples.simpleGenerator, applyDelta, List.head?_cons,
     Bool.false_eq_true, ↓reduceIte, cond_true, Option.getD_some,
     Option.some.injEq, Turing.TM2.Cfg.mk.injEq, true_and]
   funext k
@@ -949,7 +949,7 @@ def testCfg32 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailL
 
 example : Turing.TM2.step (dovetailMachine GeneratorExamples.simpleGenerator) testCfg31 = some testCfg32 := by
   simp only [Turing.TM2.step, Turing.TM2.stepAux, testCfg31, testCfg32, dovetailMachine,
-    checkOutput, List.head?_nil, Option.isNone_none, cond_true, List.head?_cons]
+    check_compareOutput, List.head?_nil, Option.isNone_none, cond_true, List.head?_cons]
 
 example : Turing.TM2.step (dovetailMachine GeneratorExamples.simpleGenerator) testCfg32 = none := by
   simp [Turing.TM2.step, testCfg32]
@@ -1164,12 +1164,12 @@ def runTraceStr (n : ℕ) (gen : Generator (Fin 10) (Fin 10) (Fin 10)) : String 
       | some c =>
         let isCheckpoint :=
           (match c.l with
-          | some DovetailLabel.checkAll => true
-          | some DovetailLabel.checkOne => true
-          | some DovetailLabel.checkOutput => true
-          | some DovetailLabel.restoreTarget => true
-          | some DovetailLabel.restoreOutput => true
-          | some DovetailLabel.checkPhase_saveSegment => true
+          | some DovetailLabel.check_iterateInstances => true
+          | some DovetailLabel.check_testHalting => true
+          | some DovetailLabel.check_compareOutput => true
+          | some DovetailLabel.check_compareOutput_restoreTarget => true
+          | some DovetailLabel.check_compareOutput_restoreOutput => true
+          | some DovetailLabel.check_saveInstance_state => true
           | none => true
           | _ => false)
         -- let isCheckpoint :=
