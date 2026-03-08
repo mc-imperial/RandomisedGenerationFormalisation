@@ -542,29 +542,33 @@ def checkAll {Γw Γo Q : Type u}
       <| Turing.TM2.Stmt.goto (fun _ => DovetailLabel.checkOne) )
 
 -- Peek input and workR to determine if this instance is halting
+-- Non-destructive: pushes the ORIGINAL state back, not the delta result
 def checkOne {Γw Γo Q : Type u}
     [FinEnum Γw] [Inhabited Γo] [FinEnum Γo] [FinEnum Q]
     (gen : Generator Γw Γo Q) :
     Turing.TM2.Stmt (stackAlphabet Γw Γo Q) DovetailLabel (DovetailSigma Γw Γo Q) :=
+  -- peek input to get the current bit (non-destructive)
   Turing.TM2.Stmt.peek DovetailStack.input (fun σ i => { σ with
     inputBit  := match i with
                  | some (some b) => b
                  | _             => ULift.up false
     peekInput := i })
+  -- peek workR to get the head symbol (non-destructive)
   <| Turing.TM2.Stmt.peek DovetailStack.workR (fun σ w => { σ with
     transW    := match w with
                  | some (some x) => some x
                  | _             => some gen.blank
     peekWorkR := w })
+  -- apply delta to check if halting
   <| Turing.TM2.Stmt.load (fun σ => applyDelta gen σ)
   <| Turing.TM2.Stmt.branch (fun σ => σ.transHalted)
-    ( -- halting: push state back and check output
+    ( -- halting: push ORIGINAL state back (peekQ, set by checkAll), go to checkOutput
       Turing.TM2.Stmt.push DovetailStack.state
-        (fun σ => σ.transQ.getD gen.init)
+        (fun σ => σ.peekQ.getD gen.init)
       <| Turing.TM2.Stmt.goto (fun _ => DovetailLabel.checkOutput) )
-    ( -- not halting: push state back and save segments to move to next instance
+    ( -- not halting: push ORIGINAL state back, save segments
       Turing.TM2.Stmt.push DovetailStack.state
-        (fun σ => σ.transQ.getD gen.init)
+        (fun σ => σ.peekQ.getD gen.init)
       <| Turing.TM2.Stmt.goto (fun _ => DovetailLabel.checkPhase_saveSegment) )
 
 -- Compare output of halting instance against target
@@ -1356,6 +1360,26 @@ lemma checkPhase_advance_no_match
       Turing.Reaches (Turing.TM2.step (dovetailMachine gen)) tm2cfg tm2cfg' := by
   sorry
 
+/-- If checkOutput is entered with matching output on top of the stacks,
+    the TM2 halts. The output stack has the output symbols reversed
+    (last symbol on top) followed by a separator or end. -/
+lemma checkOutput_halts_on_match
+    (gen : Generator Γw Γo Q)
+    (target : List Γo)
+    (tm2cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) DovetailLabel (DovetailSigma Γw Γo Q))
+    (hLabel : tm2cfg.l = some DovetailLabel.checkOutput)
+    (hTarget : tm2cfg.stk DovetailStack.target = target)
+    -- Output stack: reversed output on top, then none or empty
+    (hOutput : ∃ rest : List (Option Γo),
+      tm2cfg.stk DovetailStack.output = target.reverse.map some ++ rest ∧
+      (rest = [] ∨ rest.head? = some none))
+    (hSaveTarget : tm2cfg.stk DovetailStack.saveTarget = [])
+    (hSaveOutput : tm2cfg.stk DovetailStack.saveOutput = []) :
+    ∃ tm2cfg',
+      tm2cfg'.l = none ∧
+      Turing.Reaches (Turing.TM2.step (dovetailMachine gen)) tm2cfg tm2cfg' := by
+  sorry
+
 /-- From checkAll with j instances already processed, if instance j matches,
     the TM2 reaches a halted config. -/
 lemma checkPhase_halt_on_match
@@ -1371,7 +1395,40 @@ lemma checkPhase_halt_on_match
     ∃ tm2cfg',
       tm2cfg'.l = none ∧
       Turing.Reaches (Turing.TM2.step (dovetailMachine gen)) tm2cfg tm2cfg' := by
-  sorry
+  obtain ⟨hHalt_j, hOut_j⟩ := hMatch_j
+  let idx := round - 1 - j
+  let cfg := instanceConfig gen idx round
+  -- Step 1: checkAll pops state, goes to checkOne
+  -- The top of state stack is (instanceConfig gen idx round).state
+  -- Step 2: checkOne peeks input, peeks workR, applies delta, finds halting
+  -- Step 3: pushes state back, goes to checkOutput
+  -- These are a bounded number of TM2 steps from tm2cfg to some tm2cfg_co
+  -- at label checkOutput
+  have hSteps : ∃ tm2cfg_co : Turing.TM2.Cfg (stackAlphabet Γw Γo Q)
+        DovetailLabel (DovetailSigma Γw Γo Q),
+      tm2cfg_co.l = some DovetailLabel.checkOutput ∧
+      tm2cfg_co.stk DovetailStack.target = target ∧
+      (∃ rest : List (Option Γo), tm2cfg_co.stk DovetailStack.output =
+        cfg.output.map some ++ rest) ∧
+      tm2cfg_co.stk DovetailStack.saveTarget = [] ∧
+      tm2cfg_co.stk DovetailStack.saveOutput = [] ∧
+      Turing.Reaches (Turing.TM2.step (dovetailMachine gen)) tm2cfg tm2cfg_co := by
+    sorry
+  obtain ⟨tm2cfg_co, hLabel_co, hTarget_co, ⟨rest, hOutput_co⟩,
+    hSaveTarget_co, hSaveOutput_co, hReach_co⟩ := hSteps
+  -- Step 4: checkOutput compares and halts
+  -- output on stack is cfg.output.map some ++ rest (newest output symbol on top)
+  -- target on stack is target
+  -- cfg.output.reverse = target (from hOut_j)
+  -- So the comparison succeeds
+  have hOutEq : cfg.output = target.reverse :=
+    List.reverse_injective (by rw [List.reverse_reverse]; exact hOut_j)
+  obtain ⟨tm2cfg', hHalt', hReach'⟩ := checkOutput_halts_on_match gen
+    target tm2cfg_co
+    hLabel_co hTarget_co
+    ⟨rest, by rw [hOutput_co, hOutEq], sorry⟩
+    hSaveTarget_co hSaveOutput_co
+  exact ⟨tm2cfg', hHalt', Relation.ReflTransGen.trans hReach_co hReach'⟩
 
 /-- A QuiescentInvariant at checkAll gives a CheckPhaseInvariant at j=0. -/
 lemma quiescent_to_checkPhase
@@ -1471,6 +1528,32 @@ lemma inCorrespondence_halt
         (Relation.ReflTransGen.trans hReach_j hReach_next)
         ⟨i, by omega, hi_halt, hi_out⟩
 
+/-- From CheckPhaseInvariant with all instances checked (j = round) and no match,
+    restoring save stacks reaches pushNewConfig_copy_counter with QuiescentInvariant. -/
+lemma checkPhase_complete_to_pushNewConfig
+    (gen : Generator Γw Γo Q)
+    (target : List Γo)
+    (round : ℕ)
+    (tm2cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) DovetailLabel (DovetailSigma Γw Γo Q))
+    (hInv : CheckPhaseInvariant gen target round round tm2cfg) :
+    ∃ tm2cfg',
+      QuiescentInvariant gen target round DovetailLabel.pushNewConfig_copy_counter tm2cfg' ∧
+      Turing.Reaches (Turing.TM2.step (dovetailMachine gen)) tm2cfg tm2cfg' := by
+  sorry
+
+/-- From pushNewConfig_copy_counter, spawn a new instance and step all,
+    reaching checkAll at round+1. -/
+lemma pushNewConfig_step_to_next_checkAll
+    (gen : Generator Γw Γo Q)
+    (target : List Γo)
+    (round : ℕ)
+    (tm2cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) DovetailLabel (DovetailSigma Γw Γo Q))
+    (hInv : QuiescentInvariant gen target round DovetailLabel.pushNewConfig_copy_counter tm2cfg) :
+    ∃ tm2cfg',
+      QuiescentInvariant gen target (round + 1) DovetailLabel.checkAll tm2cfg' ∧
+      Turing.Reaches (Turing.TM2.step (dovetailMachine gen)) tm2cfg tm2cfg' := by
+  sorry
+
 /-- If in correspondence and no instance halts with matching output,
     one dovetailStep and finitely many TM2 steps lead to new configs
     in correspondence. -/
@@ -1486,14 +1569,66 @@ lemma inCorrespondence_step
     ∃ tm2cfg',
       InCorrespondence gen target (dovetailStep gen ds) tm2cfg' ∧
       Turing.Reaches (Turing.TM2.step (dovetailMachine gen)) tm2cfg tm2cfg' := by
-  sorry
+  let round := ds.instances.length
+  -- Phase 1: Check all instances, find no match, advance to j = round
+  have hCheck₀ := quiescent_to_checkPhase gen target round tm2cfg hCorr
+  have hCheckAll : ∃ tm2cfg_check,
+      CheckPhaseInvariant gen target round round tm2cfg_check ∧
+      Turing.Reaches (Turing.TM2.step (dovetailMachine gen)) tm2cfg tm2cfg_check := by
+    suffices ∀ d j (tm2cfg_j : Turing.TM2.Cfg (stackAlphabet Γw Γo Q)
+          DovetailLabel (DovetailSigma Γw Γo Q)),
+        round - j = d →
+        j ≤ round →
+        CheckPhaseInvariant gen target round j tm2cfg_j →
+        Turing.Reaches (Turing.TM2.step (dovetailMachine gen)) tm2cfg tm2cfg_j →
+        ∃ tm2cfg_check,
+          CheckPhaseInvariant gen target round round tm2cfg_check ∧
+          Turing.Reaches (Turing.TM2.step (dovetailMachine gen)) tm2cfg tm2cfg_check by
+      exact this round 0 tm2cfg rfl (Nat.zero_le _) hCheck₀ Relation.ReflTransGen.refl
+    intro d
+    induction d with
+    | zero =>
+      intro j tm2cfg_j hd hj hInv_j hReach_j
+      have : j = round := by omega
+      subst this
+      exact ⟨tm2cfg_j, hInv_j, hReach_j⟩
+    | succ d ih =>
+      intro j tm2cfg_j hd hj hInv_j hReach_j
+      have hj_lt : j < round := by omega
+      -- Instance round-1-j doesn't match (from hNoMatch)
+      have hNoMatch_j : ¬(IsHalting gen (instanceConfig gen (round - 1 - j) round) ∧
+          (instanceConfig gen (round - 1 - j) round).output.reverse = target) :=
+        hNoMatch (round - 1 - j) (by omega)
+      obtain ⟨tm2cfg_next, hInv_next, hReach_next⟩ :=
+        checkPhase_advance_no_match gen target round j tm2cfg_j hInv_j hj_lt hNoMatch_j
+      exact ih (j + 1) tm2cfg_next (by omega) (by omega) hInv_next
+        (Relation.ReflTransGen.trans hReach_j hReach_next)
+  -- Phase 2: From CheckPhaseInvariant at j=round, restore to pushNewConfig
+  obtain ⟨tm2cfg_check, hInv_check, hReach_check⟩ := hCheckAll
+  obtain ⟨tm2cfg_push, hInv_push, hReach_push⟩ :=
+    checkPhase_complete_to_pushNewConfig gen target round tm2cfg_check hInv_check
+  -- Phase 3: From pushNewConfig, spawn + step + restore + increment to next checkAll
+  obtain ⟨tm2cfg_next, hInv_next, hReach_next⟩ :=
+    pushNewConfig_step_to_next_checkAll gen target round tm2cfg_push hInv_push
+  -- Connect everything
+  refine ⟨tm2cfg_next, ?_, ?_⟩
+  · -- InCorrespondence gen target (dovetailStep gen ds) tm2cfg_next
+    -- This is QuiescentInvariant gen target (round+1) checkAll tm2cfg_next
+    -- which is hInv_next, but we need to show round+1 = (dovetailStep gen ds).instances.length
+    change QuiescentInvariant gen target (dovetailStep gen ds).instances.length
+      DovetailLabel.checkAll tm2cfg_next
+    rw [show (dovetailStep gen ds).instances.length = round + 1 from by
+      simp [dovetailStep, round]]
+    exact hInv_next
+  · exact Relation.ReflTransGen.trans
+      (Relation.ReflTransGen.trans hReach_check hReach_push) hReach_next
 
-/-- Forward: if the TM2 halts, then DovetailRecognises. -/
 lemma dovetailTM2_halts_implies_DovetailRecognises
     (gen : Generator Γw Γo Q)
     (w : List Γo) :
     (Turing.TM2.eval (dovetailMachine gen) DovetailStack.target w).Dom →
     DovetailRecognises gen w.reverse := by
+  -- One idea is to prove this by contrapositive.
   sorry
 
 /-- Backward: if DovetailRecognises, then the TM2 halts. -/

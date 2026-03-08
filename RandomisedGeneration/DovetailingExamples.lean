@@ -1143,6 +1143,7 @@ def reprCfg (cfg : Turing.TM2.Cfg (stackAlphabet (Fin 10) (Fin 10) (Fin 10)) Dov
   let saveWR    := repr (cfg.stk DovetailStack.saveWorkR)
   let saveOut   := repr (cfg.stk DovetailStack.saveOutput)
   s!"label: {l}\nvar: {var}\ntarget: {target}\ncounter: {counter}\ninput: {input}\nstate: {state}\nworkL: {workL}\nworkR: {workR}\noutput: {output}\nsaveTarget: {saveTgt}\nsaveCounter: {saveCtr}\nsaveInput: {saveInp}\nsaveState: {saveSt}\nsaveWorkL: {saveWL}\nsaveWorkR: {saveWR}\nsaveOutput: {saveOut}"
+  --s!"label: {l}\ntarget: {target}\nstate: {state}\ninput: {input}\nworkR: {workR}\noutput: {output}\nsaveTarget: {saveTgt}\nsaveOutput: {saveOut}"
 
 def runTraceStr (n : ℕ) (gen : Generator (Fin 10) (Fin 10) (Fin 10)) : String :=
   let rec loop
@@ -1163,10 +1164,20 @@ def runTraceStr (n : ℕ) (gen : Generator (Fin 10) (Fin 10) (Fin 10)) : String 
       | some c =>
         let isCheckpoint :=
           (match c.l with
-          | some DovetailLabel.pushNewConfig_copy_counter =>
-              (c.stk DovetailStack.saveCounter).length == 0
+          | some DovetailLabel.checkAll => true
+          | some DovetailLabel.checkOne => true
+          | some DovetailLabel.checkOutput => true
+          | some DovetailLabel.restoreTarget => true
+          | some DovetailLabel.restoreOutput => true
+          | some DovetailLabel.checkPhase_saveSegment => true
           | none => true
           | _ => false)
+        -- let isCheckpoint :=
+        --   (match c.l with
+        --   | some DovetailLabel.pushNewConfig_copy_counter =>
+        --       (c.stk DovetailStack.saveCounter).length == 0
+        --   | none => true
+        --   | _ => false)
         let acc := if isCheckpoint then
           acc
           ++ s!"=== Step {step} ===\n"
@@ -1184,7 +1195,7 @@ def runTraceStr (n : ℕ) (gen : Generator (Fin 10) (Fin 10) (Fin 10)) : String 
     (some (dovetailInit (Γw := Fin 10) (Γo := Fin 10) (Q := Fin 10) [0, 1, 2, 3, 4, 5, 6, 7, 8]))
     ""
 
---#eval IO.println (runTraceStr.{0, 0} 1371 GeneratorExamples.moveRightGenerator)
+#eval IO.println (runTraceStr.{0, 0} 1371 GeneratorExamples.moveRightGenerator)
 --#guard (runTraceStr.{0, 0} 1371 GeneratorExamples.moveRightGenerator).endsWith "=== Halted at step 1370 ===\n"
 
 end MoveRightLeftGenerator
