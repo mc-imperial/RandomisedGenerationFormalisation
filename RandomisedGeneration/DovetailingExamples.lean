@@ -52,7 +52,7 @@ def testCfg0 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailLa
   Turing.TM2.init DovetailStack.target []
 
 def testCfg1 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailLabel (DovetailSigma (Fin 1) (Fin 2) (Fin 1)) :=
-  { l := some DovetailLabel.checkPhase_restoreAll_state
+  { l := some DovetailLabel.check_restoreAll_state
     var := { transQ      := none
              transW      := none
              transIDir   := InputTapeDirection.N
@@ -75,7 +75,7 @@ example : Turing.TM2.step (dovetailMachine GeneratorExamples.simpleGenerator) te
         testCfg0, testCfg1, Turing.TM2.init, default, Inhabited.default]
 
 def testCfg2 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailLabel (DovetailSigma (Fin 1) (Fin 2) (Fin 1)) :=
-  { l := some DovetailLabel.checkPhase_restoreAll_input
+  { l := some DovetailLabel.check_restoreAll_input
     var := { transQ      := none
              transW      := none
              transIDir   := InputTapeDirection.N
@@ -95,10 +95,10 @@ def testCfg2 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailLa
 
 example : Turing.TM2.step (dovetailMachine GeneratorExamples.simpleGenerator) testCfg1 = some testCfg2 := by
   simp only [Turing.TM2.step, Turing.TM2.stepAux, testCfg1, testCfg2, dovetailMachine,
-    checkPhase_restoreAll_state, List.head?_nil, Option.isNone_none, cond_true]
+    check_restoreAll_state, List.head?_nil, Option.isNone_none, cond_true]
 
 def testCfg3 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailLabel (DovetailSigma (Fin 1) (Fin 2) (Fin 1)) :=
-  { l := some DovetailLabel.checkPhase_restoreAll_workL
+  { l := some DovetailLabel.check_restoreAll_workL
     var := { transQ      := none
              transW      := none
              transIDir   := InputTapeDirection.N
@@ -118,10 +118,10 @@ def testCfg3 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailLa
 
 example : Turing.TM2.step (dovetailMachine GeneratorExamples.simpleGenerator) testCfg2 = some testCfg3 := by
   simp only [Turing.TM2.step, Turing.TM2.stepAux, testCfg2, testCfg3, dovetailMachine,
-    checkPhase_restoreAll_input, List.head?_nil, Option.isNone_none, cond_true]
+    check_restoreAll_input, List.head?_nil, Option.isNone_none, cond_true]
 
 def testCfg4 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailLabel (DovetailSigma (Fin 1) (Fin 2) (Fin 1)) :=
-  { l := some DovetailLabel.checkPhase_restoreAll_workR
+  { l := some DovetailLabel.check_restoreAll_workR
     var := { transQ      := none
              transW      := none
              transIDir   := InputTapeDirection.N
@@ -141,10 +141,10 @@ def testCfg4 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailLa
 
 example : Turing.TM2.step (dovetailMachine GeneratorExamples.simpleGenerator) testCfg3 = some testCfg4 := by
   simp only [Turing.TM2.step, Turing.TM2.stepAux, testCfg3, testCfg4, dovetailMachine,
-    checkPhase_restoreAll_workL, List.head?_nil, Option.isNone_none, cond_true]
+    check_restoreAll_workL, List.head?_nil, Option.isNone_none, cond_true]
 
 def testCfg5 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailLabel (DovetailSigma (Fin 1) (Fin 2) (Fin 1)) :=
-  { l := some DovetailLabel.checkPhase_restoreAll_output
+  { l := some DovetailLabel.check_restoreAll_output
     var := { transQ      := none
              transW      := none
              transIDir   := InputTapeDirection.N
@@ -164,10 +164,10 @@ def testCfg5 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailLa
 
 example : Turing.TM2.step (dovetailMachine GeneratorExamples.simpleGenerator) testCfg4 = some testCfg5 := by
   simp only [Turing.TM2.step, Turing.TM2.stepAux, testCfg4, testCfg5, dovetailMachine,
-    checkPhase_restoreAll_workR, List.head?_nil, Option.isNone_none, cond_true]
+    check_restoreAll_workR, List.head?_nil, Option.isNone_none, cond_true]
 
 def testCfg6 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailLabel (DovetailSigma (Fin 1) (Fin 2) (Fin 1)) :=
-  { l := some DovetailLabel.pushNewConfig_copy_counter
+  { l := some DovetailLabel.spawn_copyCounter
     var := { transQ      := none
              transW      := none
              transIDir   := InputTapeDirection.N
@@ -187,10 +187,10 @@ def testCfg6 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailLa
 
 example : Turing.TM2.step (dovetailMachine GeneratorExamples.simpleGenerator) testCfg5 = some testCfg6 := by
   simp only [Turing.TM2.step, Turing.TM2.stepAux, testCfg5, testCfg6, dovetailMachine,
-    checkPhase_restoreAll_output, List.head?_nil, Option.isNone_none, cond_true]
+    check_restoreAll_output, List.head?_nil, Option.isNone_none, cond_true]
 
 def testCfg7 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailLabel (DovetailSigma (Fin 1) (Fin 2) (Fin 1)) :=
-  { l := some DovetailLabel.pushNewConfig_restore_counter
+  { l := some DovetailLabel.spawn_restoreAndPush
     var := { transQ      := none
              transW      := none
              transIDir   := InputTapeDirection.N
@@ -210,7 +210,7 @@ def testCfg7 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailLa
 
 example : Turing.TM2.step (dovetailMachine GeneratorExamples.simpleGenerator) testCfg6 = some testCfg7 := by
   simp only [Turing.TM2.step, Turing.TM2.stepAux, testCfg6, testCfg7, dovetailMachine,
-    pushNewConfig_copy_counter, List.head?_nil, Option.isNone_none, cond_true]
+    spawn_copyCounter, List.head?_nil, Option.isNone_none, cond_true]
 
 def testCfg8 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailLabel (DovetailSigma (Fin 1) (Fin 2) (Fin 1)) :=
   { l := some DovetailLabel.stepAll
@@ -234,7 +234,7 @@ def testCfg8 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailLa
              | _ => [] }
 
 example : Turing.TM2.step (dovetailMachine GeneratorExamples.simpleGenerator) testCfg7 = some testCfg8 := by
-  simp only [Turing.TM2.step, testCfg7, dovetailMachine, pushNewConfig_restore_counter,
+  simp only [Turing.TM2.step, testCfg7, dovetailMachine, spawn_restoreAndPush,
     Turing.TM2.stepAux, List.head?_nil, Option.isNone_none, List.tail_nil,
     Function.update_eq_self, Option.getD_none, ne_eq, reduceCtorEq,
     not_false_eq_true, Function.update_of_ne, cond_true, testCfg8,
