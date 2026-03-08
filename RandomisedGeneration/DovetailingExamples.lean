@@ -213,7 +213,7 @@ example : Turing.TM2.step (dovetailMachine GeneratorExamples.simpleGenerator) te
     spawn_copyCounter, List.head?_nil, Option.isNone_none, cond_true]
 
 def testCfg8 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailLabel (DovetailSigma (Fin 1) (Fin 2) (Fin 1)) :=
-  { l := some DovetailLabel.stepAll
+  { l := some DovetailLabel.step_iterateInstances
     var := { transQ      := none
              transW      := none
              transIDir   := InputTapeDirection.N
@@ -248,7 +248,7 @@ example : Turing.TM2.step (dovetailMachine GeneratorExamples.simpleGenerator) te
     simp only [Fin.zero_eta, Fin.isValue]
 
 def testCfg9 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailLabel (DovetailSigma (Fin 1) (Fin 2) (Fin 1)) :=
-  { l := some DovetailLabel.stepOne
+  { l := some DovetailLabel.step_peekInput
     var := { transQ      := some (0 : Fin 1)
              transW      := none
              transIDir   := InputTapeDirection.N
@@ -268,13 +268,13 @@ def testCfg9 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailLa
 
 example : Turing.TM2.step (dovetailMachine GeneratorExamples.simpleGenerator) testCfg8 = some testCfg9 := by
   simp only [Turing.TM2.step, Turing.TM2.stepAux, testCfg8, testCfg9, dovetailMachine,
-    stepAll, List.head?_cons, Option.isNone_some, List.tail_cons, cond_false,
+    step_iterateInstances, List.head?_cons, Option.isNone_some, List.tail_cons, cond_false,
     Option.some.injEq, Turing.TM2.Cfg.mk.injEq, true_and]
   funext k
   cases k <;> simp [Function.update]
 
 def testCfg10 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailLabel (DovetailSigma (Fin 1) (Fin 2) (Fin 1)) :=
-  { l := some DovetailLabel.stepOne_workR
+  { l := some DovetailLabel.step_peekWorkR
     var := { transQ      := some (0 : Fin 1)
              transW      := none
              transIDir   := InputTapeDirection.N
@@ -294,10 +294,10 @@ def testCfg10 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailL
 
 example : Turing.TM2.step (dovetailMachine GeneratorExamples.simpleGenerator) testCfg9 = some testCfg10 := by
   simp only [Turing.TM2.step, Turing.TM2.stepAux, testCfg9, testCfg10, dovetailMachine,
-    stepOne, List.head?_nil]
+    step_peekInput, List.head?_nil]
 
 def testCfg11 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailLabel (DovetailSigma (Fin 1) (Fin 2) (Fin 1)) :=
-  { l := some DovetailLabel.applyTransition
+  { l := some DovetailLabel.step_applyTransition
     var := { transQ      := some (0 : Fin 1)
              transW      := some (0 : Fin 1)
              transIDir   := InputTapeDirection.N
@@ -317,7 +317,7 @@ def testCfg11 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailL
 
 example : Turing.TM2.step (dovetailMachine GeneratorExamples.simpleGenerator) testCfg10 = some testCfg11 := by
   simp only [Turing.TM2.step, Turing.TM2.stepAux, testCfg10, testCfg11, dovetailMachine,
-    stepOne_workR, List.head?_nil, applyDelta, GeneratorExamples.simpleGenerator,
+    step_peekWorkR, List.head?_nil, applyDelta, GeneratorExamples.simpleGenerator,
     Bool.false_eq_true, ↓reduceIte, Fin.isValue, List.tail_nil,
     Function.update_eq_self, Bool.cond_self]
 
@@ -345,7 +345,7 @@ def testCfg12 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailL
 
 example : Turing.TM2.step (dovetailMachine GeneratorExamples.simpleGenerator) testCfg11 = some testCfg12 := by
   simp only [Turing.TM2.step, Turing.TM2.stepAux, testCfg11, testCfg12, dovetailMachine,
-    applyTransition, cond_true, Option.getD_some, GeneratorExamples.simpleGenerator,
+    step_applyTransition, cond_true, Option.getD_some, GeneratorExamples.simpleGenerator,
     Option.some.injEq, Turing.TM2.Cfg.mk.injEq, true_and]
   funext k
   cases k <;> simp [Function.update]
@@ -487,7 +487,7 @@ example : Turing.TM2.step (dovetailMachine GeneratorExamples.simpleGenerator) te
     saveSegment_workR, List.head?_nil, Option.isNone_none, cond_true]
 
 def testCfg18 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailLabel (DovetailSigma (Fin 1) (Fin 2) (Fin 1)) :=
-  { l := some DovetailLabel.stepAll
+  { l := some DovetailLabel.step_iterateInstances
     var := { transQ      := some (0 : Fin 1)
              transW      := some (0 : Fin 1)
              transIDir   := InputTapeDirection.N
@@ -536,7 +536,7 @@ def testCfg19 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailL
 
 example : Turing.TM2.step (dovetailMachine GeneratorExamples.simpleGenerator) testCfg18 = some testCfg19 := by
   simp only [Turing.TM2.step, Turing.TM2.stepAux, testCfg18, testCfg19, dovetailMachine,
-    stepAll, List.head?_nil, Option.isNone_none, cond_true]
+    step_iterateInstances, List.head?_nil, Option.isNone_none, cond_true]
 
 -- restoreAll_state: peeks saveState (some 0), pops, pushes to state, loops
 -- Next: peeks saveState (empty), goes to restoreAll_input
