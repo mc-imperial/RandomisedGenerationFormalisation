@@ -13,6 +13,166 @@ deriving instance Repr for InputTapeDirection
 deriving instance Repr for WorkTapeDirection
 deriving instance Repr for DovetailSigma
 
+def stripPrefix (s : String) : String :=
+  (s.splitOn ".").getLast!
+
+def reprCfg
+    {Γw Γo Q : Type}
+    [FinEnum Γw] [Inhabited Γw]
+    [FinEnum Γo] [Inhabited Γo]
+    [FinEnum Q] [Inhabited Q]
+    [Repr (stackAlphabet Γw Γo Q DovetailStack.target)]
+    [Repr (stackAlphabet Γw Γo Q DovetailStack.counter)]
+    [Repr (stackAlphabet Γw Γo Q DovetailStack.input)]
+    [Repr (stackAlphabet Γw Γo Q DovetailStack.state)]
+    [Repr (stackAlphabet Γw Γo Q DovetailStack.workL)]
+    [Repr (stackAlphabet Γw Γo Q DovetailStack.workR)]
+    [Repr (stackAlphabet Γw Γo Q DovetailStack.output)]
+    [Repr (stackAlphabet Γw Γo Q DovetailStack.saveTarget)]
+    [Repr (stackAlphabet Γw Γo Q DovetailStack.saveCounter)]
+    [Repr (stackAlphabet Γw Γo Q DovetailStack.saveInput)]
+    [Repr (stackAlphabet Γw Γo Q DovetailStack.saveState)]
+    [Repr (stackAlphabet Γw Γo Q DovetailStack.saveWorkL)]
+    [Repr (stackAlphabet Γw Γo Q DovetailStack.saveWorkR)]
+    [Repr (stackAlphabet Γw Γo Q DovetailStack.saveOutput)]
+    (cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) DovetailLabel (DovetailSigma Γw Γo Q)) : String :=
+  let showStack (name : String) (s : String) : Option String :=
+    if s == "[]" then none else some s!"  {name}: {s}"
+  let r := fun {α} [Repr α] (x : α) => toString (repr x)
+  let lines : List String := List.filterMap id [
+    some s!"  label: {stripPrefix (r cfg.l)}",
+    showStack "target     " (r (cfg.stk DovetailStack.target)),
+    showStack "counter    " (r (cfg.stk DovetailStack.counter)),
+    showStack "input      " (r (cfg.stk DovetailStack.input)),
+    showStack "state      " (r (cfg.stk DovetailStack.state)),
+    showStack "workL      " (r (cfg.stk DovetailStack.workL)),
+    showStack "workR      " (r (cfg.stk DovetailStack.workR)),
+    showStack "output     " (r (cfg.stk DovetailStack.output)),
+    showStack "saveTarget " (r (cfg.stk DovetailStack.saveTarget)),
+    showStack "saveCounter" (r (cfg.stk DovetailStack.saveCounter)),
+    showStack "saveInput  " (r (cfg.stk DovetailStack.saveInput)),
+    showStack "saveState  " (r (cfg.stk DovetailStack.saveState)),
+    showStack "saveWorkL  " (r (cfg.stk DovetailStack.saveWorkL)),
+    showStack "saveWorkR  " (r (cfg.stk DovetailStack.saveWorkR)),
+    showStack "saveOutput " (r (cfg.stk DovetailStack.saveOutput))
+  ]
+  "\n".intercalate lines
+
+def runTraceStr
+    {Γw Γo Q : Type}
+    [FinEnum Γw] [Inhabited Γw]
+    [FinEnum Γo] [Inhabited Γo]
+    [FinEnum Q] [Inhabited Q]
+    [Repr (stackAlphabet Γw Γo Q DovetailStack.target)]
+    [Repr (stackAlphabet Γw Γo Q DovetailStack.counter)]
+    [Repr (stackAlphabet Γw Γo Q DovetailStack.input)]
+    [Repr (stackAlphabet Γw Γo Q DovetailStack.state)]
+    [Repr (stackAlphabet Γw Γo Q DovetailStack.workL)]
+    [Repr (stackAlphabet Γw Γo Q DovetailStack.workR)]
+    [Repr (stackAlphabet Γw Γo Q DovetailStack.output)]
+    [Repr (stackAlphabet Γw Γo Q DovetailStack.saveTarget)]
+    [Repr (stackAlphabet Γw Γo Q DovetailStack.saveCounter)]
+    [Repr (stackAlphabet Γw Γo Q DovetailStack.saveInput)]
+    [Repr (stackAlphabet Γw Γo Q DovetailStack.saveState)]
+    [Repr (stackAlphabet Γw Γo Q DovetailStack.saveWorkL)]
+    [Repr (stackAlphabet Γw Γo Q DovetailStack.saveWorkR)]
+    [Repr (stackAlphabet Γw Γo Q DovetailStack.saveOutput)]
+    (gen : Generator Γw Γo Q)
+    (target : List Γo)
+    (n : ℕ) : String :=
+  Id.run do
+    let mut cfg := dovetailInit (Γw := Γw) (Γo := Γo) (Q := Q) target
+    let mut acc := ""
+    for step in List.range n do
+      acc := acc ++ s!"=== Step {step} ===\n" ++ reprCfg cfg ++ "\n"
+      match Turing.TM2.step (dovetailMachine gen) cfg with
+      | none =>
+        acc := acc ++ s!"=== Halted after step {step} ===\n"
+        return acc
+      | some c' =>
+        cfg := c'
+    return acc
+
+def runTraceStrRoundStarts
+    {Γw Γo Q : Type}
+    [FinEnum Γw] [Inhabited Γw]
+    [FinEnum Γo] [Inhabited Γo]
+    [FinEnum Q] [Inhabited Q]
+    [Repr (stackAlphabet Γw Γo Q DovetailStack.target)]
+    [Repr (stackAlphabet Γw Γo Q DovetailStack.counter)]
+    [Repr (stackAlphabet Γw Γo Q DovetailStack.input)]
+    [Repr (stackAlphabet Γw Γo Q DovetailStack.state)]
+    [Repr (stackAlphabet Γw Γo Q DovetailStack.workL)]
+    [Repr (stackAlphabet Γw Γo Q DovetailStack.workR)]
+    [Repr (stackAlphabet Γw Γo Q DovetailStack.output)]
+    [Repr (stackAlphabet Γw Γo Q DovetailStack.saveTarget)]
+    [Repr (stackAlphabet Γw Γo Q DovetailStack.saveCounter)]
+    [Repr (stackAlphabet Γw Γo Q DovetailStack.saveInput)]
+    [Repr (stackAlphabet Γw Γo Q DovetailStack.saveState)]
+    [Repr (stackAlphabet Γw Γo Q DovetailStack.saveWorkL)]
+    [Repr (stackAlphabet Γw Γo Q DovetailStack.saveWorkR)]
+    [Repr (stackAlphabet Γw Γo Q DovetailStack.saveOutput)]
+    (gen : Generator Γw Γo Q)
+    (target : List Γo)
+    (n : ℕ) : String :=
+  let isRoundStart (cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) DovetailLabel (DovetailSigma Γw Γo Q)) : Bool :=
+    cfg.l == some DovetailLabel.check_iterateInstances &&
+    (cfg.stk DovetailStack.saveState).length == 0
+  Id.run do
+    let mut cfg := dovetailInit (Γw := Γw) (Γo := Γo) (Q := Q) target
+    let mut acc := ""
+    for step in List.range n do
+      if isRoundStart cfg then
+        acc := acc ++ s!"=== Step {step} ===\n" ++ reprCfg cfg ++ "\n"
+      match Turing.TM2.step (dovetailMachine gen) cfg with
+      | none =>
+        acc := acc ++ s!"=== Halted after step {step} ===\n"
+        return acc
+      | some c' =>
+        cfg := c'
+    return acc
+
+instance instReprStackAlphabet
+    {Γw Γo Q : Type}
+    [FinEnum Γw] [Inhabited Γw]
+    [FinEnum Γo] [Inhabited Γo]
+    [FinEnum Q] [Inhabited Q]
+    [Repr Γo] [Repr Γw] [Repr Q]
+    (s : DovetailStack) : Repr (stackAlphabet Γw Γo Q s) :=
+  match s with
+  | .target      => inferInstanceAs (Repr Γo)
+  | .counter     => inferInstanceAs (Repr (ULift Bool))
+  | .input       => inferInstanceAs (Repr (Option (ULift Bool)))
+  | .state       => inferInstanceAs (Repr Q)
+  | .workL       => inferInstanceAs (Repr (Option Γw))
+  | .workR       => inferInstanceAs (Repr (Option Γw))
+  | .output      => inferInstanceAs (Repr (Option Γo))
+  | .saveTarget  => inferInstanceAs (Repr Γo)
+  | .saveCounter => inferInstanceAs (Repr (ULift Bool))
+  | .saveInput   => inferInstanceAs (Repr (Option (ULift Bool)))
+  | .saveState   => inferInstanceAs (Repr Q)
+  | .saveWorkL   => inferInstanceAs (Repr (Option Γw))
+  | .saveWorkR   => inferInstanceAs (Repr (Option Γw))
+  | .saveOutput  => inferInstanceAs (Repr (Option Γo))
+
+--#eval IO.println (runTraceStr GeneratorExamples.simpleGenerator [1] 200)
+
+def nonHaltingGenerator : Generator (Fin 1) (Fin 2) (Fin 1) where
+  init  := 0
+  blank := 0
+  δ := fun _q _b _w =>
+    some (0, 0, some 1, InputTapeDirection.N, WorkTapeDirection.N)
+
+--#eval IO.println (runTraceStr nonHaltingGenerator [0] 300)
+
+--#eval IO.println (runTraceStrRoundStarts nonHaltingGenerator [0] 1000)
+
+--#eval IO.println (runTraceStr GeneratorExamples.tallyGenerator [1, 1] 500)
+
+--#eval IO.println (runTraceStrRoundStarts GeneratorExamples.moveRightGenerator [1, 1] 500)
+
+--#eval IO.println (runTraceStrRoundStarts GeneratorExamples.moveLeftGenerator [1, 1] 500)
+
 namespace SimpleGenerator
 
 -- [] is recognised: the all-zeros input halts immediately with empty output
@@ -884,9 +1044,6 @@ example : Turing.TM2.step (dovetailMachine GeneratorExamples.simpleGenerator) te
   funext k
   cases k <;> simp [Function.update]
 
--- checkOne: peeks input (none separator), peeks workR (none separator),
--- inputBit = false, transW = gen.blank = 0, applyDelta: δ 0 false 0 = none → transHalted = true
--- Halting: pushes state back, goes to checkOutput
 def testCfg31 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailLabel (DovetailSigma (Fin 1) (Fin 2) (Fin 1)) :=
   { l := some DovetailLabel.check_compareOutput
     var := { transQ      := some (0 : Fin 1)
@@ -905,18 +1062,19 @@ def testCfg31 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailL
              peekTarget  := none
              carry       := some (ULift.up true) }
     stk := fun k => match k with
-             | DovetailStack.state => [(0 : Fin 1)]
-             | DovetailStack.input => [none]
-             | DovetailStack.workL => [none]
-             | DovetailStack.workR => [none, some (0 : Fin 1)]
-             | DovetailStack.output => [none]
-             | DovetailStack.counter => [ULift.up true]
+             | DovetailStack.state      => [(0 : Fin 1)]
+             | DovetailStack.input      => [none]
+             | DovetailStack.workL      => [none]
+             | DovetailStack.workR      => [none, some (0 : Fin 1)]
+             | DovetailStack.output     => []
+             | DovetailStack.counter    => [ULift.up true]
+             | DovetailStack.saveOutput => [none]
              | _ => [] }
 
 example : Turing.TM2.step (dovetailMachine GeneratorExamples.simpleGenerator) testCfg30 = some testCfg31 := by
   simp only [Turing.TM2.step, Turing.TM2.stepAux, testCfg30, testCfg31, dovetailMachine,
-    check_testHalting, GeneratorExamples.simpleGenerator, applyDelta, List.head?_cons,
-    Bool.false_eq_true, ↓reduceIte, cond_true, Option.getD_some,
+    check_testHalting, applyDelta, GeneratorExamples.simpleGenerator,
+    List.head?_cons, Bool.false_eq_true, ite_false, Option.getD_some, Bool.cond_true,
     Option.some.injEq, Turing.TM2.Cfg.mk.injEq, true_and]
   funext k
   cases k <;> simp [Function.update]
@@ -935,270 +1093,27 @@ def testCfg32 : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailL
              peekInput   := some none
              peekWorkL   := none
              peekWorkR   := some none
-             peekOut     := some none
+             peekOut     := none
              peekTarget  := none
              carry       := some (ULift.up true) }
     stk := fun k => match k with
-             | DovetailStack.state => [(0 : Fin 1)]
-             | DovetailStack.input => [none]
-             | DovetailStack.workL => [none]
-             | DovetailStack.workR => [none, some (0 : Fin 1)]
-             | DovetailStack.output => [none]
-             | DovetailStack.counter => [ULift.up true]
+             | DovetailStack.state      => [(0 : Fin 1)]
+             | DovetailStack.input      => [none]
+             | DovetailStack.workL      => [none]
+             | DovetailStack.workR      => [none, some (0 : Fin 1)]
+             | DovetailStack.output     => []
+             | DovetailStack.counter    => [ULift.up true]
+             | DovetailStack.saveOutput => [none]
              | _ => [] }
 
 example : Turing.TM2.step (dovetailMachine GeneratorExamples.simpleGenerator) testCfg31 = some testCfg32 := by
   simp only [Turing.TM2.step, Turing.TM2.stepAux, testCfg31, testCfg32, dovetailMachine,
-    check_compareOutput, List.head?_nil, Option.isNone_none, cond_true, List.head?_cons]
+    check_compareOutput, List.head?_nil, Option.isNone_none, cond_true]
 
 example : Turing.TM2.step (dovetailMachine GeneratorExamples.simpleGenerator) testCfg32 = none := by
   simp [Turing.TM2.step, testCfg32]
 
-instance : Repr (stackAlphabet (Fin 1) (Fin 2) (Fin 1) DovetailStack.target)    := inferInstanceAs (Repr (Fin 2))
-instance : Repr (stackAlphabet (Fin 1) (Fin 2) (Fin 1) DovetailStack.counter)   := inferInstanceAs (Repr (ULift Bool))
-instance : Repr (stackAlphabet (Fin 1) (Fin 2) (Fin 1) DovetailStack.input)     := inferInstanceAs (Repr (Option (ULift Bool)))
-instance : Repr (stackAlphabet (Fin 1) (Fin 2) (Fin 1) DovetailStack.state)     := inferInstanceAs (Repr (Fin 1))
-instance : Repr (stackAlphabet (Fin 1) (Fin 2) (Fin 1) DovetailStack.workL)     := inferInstanceAs (Repr (Option (Fin 1)))
-instance : Repr (stackAlphabet (Fin 1) (Fin 2) (Fin 1) DovetailStack.workR)     := inferInstanceAs (Repr (Option (Fin 1)))
-instance : Repr (stackAlphabet (Fin 1) (Fin 2) (Fin 1) DovetailStack.output)    := inferInstanceAs (Repr (Option (Fin 2)))
-instance : Repr (stackAlphabet (Fin 1) (Fin 2) (Fin 1) DovetailStack.saveTarget)  := inferInstanceAs (Repr (Fin 2))
-instance : Repr (stackAlphabet (Fin 1) (Fin 2) (Fin 1) DovetailStack.saveCounter) := inferInstanceAs (Repr (ULift Bool))
-instance : Repr (stackAlphabet (Fin 1) (Fin 2) (Fin 1) DovetailStack.saveInput)   := inferInstanceAs (Repr (Option (ULift Bool)))
-instance : Repr (stackAlphabet (Fin 1) (Fin 2) (Fin 1) DovetailStack.saveState)   := inferInstanceAs (Repr (Fin 1))
-instance : Repr (stackAlphabet (Fin 1) (Fin 2) (Fin 1) DovetailStack.saveWorkL)   := inferInstanceAs (Repr (Option (Fin 1)))
-instance : Repr (stackAlphabet (Fin 1) (Fin 2) (Fin 1) DovetailStack.saveWorkR)   := inferInstanceAs (Repr (Option (Fin 1)))
-instance : Repr (stackAlphabet (Fin 1) (Fin 2) (Fin 1) DovetailStack.saveOutput)  := inferInstanceAs (Repr (Option (Fin 2)))
-
-def reprCfg (cfg : Turing.TM2.Cfg (stackAlphabet (Fin 1) (Fin 2) (Fin 1)) DovetailLabel (DovetailSigma (Fin 1) (Fin 2) (Fin 1))) : String :=
-  let l := repr cfg.l
-  let var := repr cfg.var
-  let target    := repr (cfg.stk DovetailStack.target)
-  let counter   := repr (cfg.stk DovetailStack.counter)
-  let input     := repr (cfg.stk DovetailStack.input)
-  let state     := repr (cfg.stk DovetailStack.state)
-  let workL     := repr (cfg.stk DovetailStack.workL)
-  let workR     := repr (cfg.stk DovetailStack.workR)
-  let output    := repr (cfg.stk DovetailStack.output)
-  let saveTgt   := repr (cfg.stk DovetailStack.saveTarget)
-  let saveCtr   := repr (cfg.stk DovetailStack.saveCounter)
-  let saveInp   := repr (cfg.stk DovetailStack.saveInput)
-  let saveSt    := repr (cfg.stk DovetailStack.saveState)
-  let saveWL    := repr (cfg.stk DovetailStack.saveWorkL)
-  let saveWR    := repr (cfg.stk DovetailStack.saveWorkR)
-  let saveOut   := repr (cfg.stk DovetailStack.saveOutput)
-  s!"label: {l}\nvar: {var}\ntarget: {target}\ncounter: {counter}\ninput: {input}\nstate: {state}\nworkL: {workL}\nworkR: {workR}\noutput: {output}\nsaveTarget: {saveTgt}\nsaveCounter: {saveCtr}\nsaveInput: {saveInp}\nsaveState: {saveSt}\nsaveWorkL: {saveWL}\nsaveWorkR: {saveWR}\nsaveOutput: {saveOut}"
-
-def runTraceStr (n : ℕ) : String :=
-  let rec loop
-      (fuel : ℕ)
-      (step : ℕ)
-      (cfg : Option
-        (Turing.TM2.Cfg
-          (stackAlphabet (Fin 1) (Fin 2) (Fin 1))
-          DovetailLabel
-          (DovetailSigma (Fin 1) (Fin 2) (Fin 1))))
-      (acc : String) : String :=
-    match fuel with
-    | 0 => acc
-    | fuel + 1 =>
-      match cfg with
-      | none =>
-        acc ++ s!"=== Halted at step {step} ===\n"
-      | some c =>
-        let acc :=
-          acc
-          ++ s!"=== Step {step} ===\n"
-          ++ reprCfg c ++ "\n"
-        let cfg' := cfg.bind
-            (Turing.TM2.step
-              (dovetailMachine GeneratorExamples.simpleGenerator))
-        loop fuel (step + 1) cfg' acc
-  loop n 0
-    (some (dovetailInit (Γw := Fin 1) (Γo := Fin 2) (Q := Fin 1) [1]))
-    ""
-
-#guard (runTraceStr.{0, 0} 113).endsWith "=== Halted at step 112 ===\n"
-
 end SimpleGenerator
-
-namespace TallyGenerator
-
-instance : Repr (stackAlphabet (Fin 2) (Fin 2) (Fin 3) DovetailStack.target)    := inferInstanceAs (Repr (Fin 2))
-instance : Repr (stackAlphabet (Fin 2) (Fin 2) (Fin 3) DovetailStack.counter)   := inferInstanceAs (Repr (ULift Bool))
-instance : Repr (stackAlphabet (Fin 2) (Fin 2) (Fin 3) DovetailStack.input)     := inferInstanceAs (Repr (Option (ULift Bool)))
-instance : Repr (stackAlphabet (Fin 2) (Fin 2) (Fin 3) DovetailStack.state)     := inferInstanceAs (Repr (Fin 3))
-instance : Repr (stackAlphabet (Fin 2) (Fin 2) (Fin 3) DovetailStack.workL)     := inferInstanceAs (Repr (Option (Fin 2)))
-instance : Repr (stackAlphabet (Fin 2) (Fin 2) (Fin 3) DovetailStack.workR)     := inferInstanceAs (Repr (Option (Fin 2)))
-instance : Repr (stackAlphabet (Fin 2) (Fin 2) (Fin 3) DovetailStack.output)    := inferInstanceAs (Repr (Option (Fin 2)))
-instance : Repr (stackAlphabet (Fin 2) (Fin 2) (Fin 3) DovetailStack.saveTarget)  := inferInstanceAs (Repr (Fin 2))
-instance : Repr (stackAlphabet (Fin 2) (Fin 2) (Fin 3) DovetailStack.saveCounter) := inferInstanceAs (Repr (ULift Bool))
-instance : Repr (stackAlphabet (Fin 2) (Fin 2) (Fin 3) DovetailStack.saveInput)   := inferInstanceAs (Repr (Option (ULift Bool)))
-instance : Repr (stackAlphabet (Fin 2) (Fin 2) (Fin 3) DovetailStack.saveState)   := inferInstanceAs (Repr (Fin 3))
-instance : Repr (stackAlphabet (Fin 2) (Fin 2) (Fin 3) DovetailStack.saveWorkL)   := inferInstanceAs (Repr (Option (Fin 2)))
-instance : Repr (stackAlphabet (Fin 2) (Fin 2) (Fin 3) DovetailStack.saveWorkR)   := inferInstanceAs (Repr (Option (Fin 2)))
-instance : Repr (stackAlphabet (Fin 2) (Fin 2) (Fin 3) DovetailStack.saveOutput)  := inferInstanceAs (Repr (Option (Fin 2)))
-
-def reprCfg (cfg : Turing.TM2.Cfg (stackAlphabet (Fin 2) (Fin 2) (Fin 3)) DovetailLabel (DovetailSigma (Fin 2) (Fin 2) (Fin 3))) : String :=
-  let l := repr cfg.l
-  let var := repr cfg.var
-  let target    := repr (cfg.stk DovetailStack.target)
-  let counter   := repr (cfg.stk DovetailStack.counter)
-  let input     := repr (cfg.stk DovetailStack.input)
-  let state     := repr (cfg.stk DovetailStack.state)
-  let workL     := repr (cfg.stk DovetailStack.workL)
-  let workR     := repr (cfg.stk DovetailStack.workR)
-  let output    := repr (cfg.stk DovetailStack.output)
-  let saveTgt   := repr (cfg.stk DovetailStack.saveTarget)
-  let saveCtr   := repr (cfg.stk DovetailStack.saveCounter)
-  let saveInp   := repr (cfg.stk DovetailStack.saveInput)
-  let saveSt    := repr (cfg.stk DovetailStack.saveState)
-  let saveWL    := repr (cfg.stk DovetailStack.saveWorkL)
-  let saveWR    := repr (cfg.stk DovetailStack.saveWorkR)
-  let saveOut   := repr (cfg.stk DovetailStack.saveOutput)
-  s!"label: {l}\nvar: {var}\ntarget: {target}\ncounter: {counter}\ninput: {input}\nstate: {state}\nworkL: {workL}\nworkR: {workR}\noutput: {output}\nsaveTarget: {saveTgt}\nsaveCounter: {saveCtr}\nsaveInput: {saveInp}\nsaveState: {saveSt}\nsaveWorkL: {saveWL}\nsaveWorkR: {saveWR}\nsaveOutput: {saveOut}"
-
-def runTrace (n : ℕ) (target : List (Fin 2)) : IO Unit := do
-  let mut cfg : Option (Turing.TM2.Cfg _ DovetailLabel _) :=
-    some (dovetailInit (Γw := Fin 2) (Γo := Fin 2) (Q := Fin 3) target)
-  for i in List.range n do
-    match cfg with
-    | none =>
-      IO.println s!"=== Halted at step {i} ==="
-      return
-    | some c =>
-      IO.println s!"=== Step {i} ==="
-      IO.println (reprCfg c)
-      cfg := cfg.bind (Turing.TM2.step (dovetailMachine GeneratorExamples.tallyGenerator))
-
-def runTraceStr (n : ℕ) : String :=
-  let rec loop
-      (fuel : ℕ)
-      (step : ℕ)
-      (cfg : Option
-        (Turing.TM2.Cfg
-          (stackAlphabet (Fin 2) (Fin 2) (Fin 3))
-          DovetailLabel
-          (DovetailSigma (Fin 2) (Fin 2) (Fin 3))))
-      (acc : String) : String :=
-    match fuel with
-    | 0 => acc
-    | fuel + 1 =>
-      match cfg with
-      | none =>
-        acc ++ s!"=== Halted at step {step} ===\n"
-      | some c =>
-        let acc :=
-          acc
-          ++ s!"=== Step {step} ===\n"
-          ++ reprCfg c ++ "\n"
-        let cfg' : Option (Turing.TM2.Cfg
-            (stackAlphabet (Fin 2) (Fin 2) (Fin 3))
-            DovetailLabel
-            (DovetailSigma (Fin 2) (Fin 2) (Fin 3))) :=
-          cfg.bind
-            (Turing.TM2.step
-              (dovetailMachine GeneratorExamples.tallyGenerator))
-        loop fuel (step + 1) cfg' acc
-  loop n 0
-    (some (dovetailInit (Γw := Fin 2) (Γo := Fin 2) (Q := Fin 3) [1, 1]))
-    ""
-
---#eval IO.println ((runTraceStr.{0, 0} 2000).takeEnd 100)
---#guard (runTraceStr.{0, 0} 1371).endsWith "=== Halted at step 1370 ===\n"
-
-end TallyGenerator
-
-namespace MoveRightLeftGenerator
-
-instance : Repr (stackAlphabet (Fin 10) (Fin 10) (Fin 10) DovetailStack.target)    := inferInstanceAs (Repr (Fin 10))
-instance : Repr (stackAlphabet (Fin 10) (Fin 10) (Fin 10) DovetailStack.counter)   := inferInstanceAs (Repr (ULift Bool))
-instance : Repr (stackAlphabet (Fin 10) (Fin 10) (Fin 10) DovetailStack.input)     := inferInstanceAs (Repr (Option (ULift Bool)))
-instance : Repr (stackAlphabet (Fin 10) (Fin 10) (Fin 10) DovetailStack.state)     := inferInstanceAs (Repr (Fin 10))
-instance : Repr (stackAlphabet (Fin 10) (Fin 10) (Fin 10) DovetailStack.workL)     := inferInstanceAs (Repr (Option (Fin 10)))
-instance : Repr (stackAlphabet (Fin 10) (Fin 10) (Fin 10) DovetailStack.workR)     := inferInstanceAs (Repr (Option (Fin 10)))
-instance : Repr (stackAlphabet (Fin 10) (Fin 10) (Fin 10) DovetailStack.output)    := inferInstanceAs (Repr (Option (Fin 10)))
-instance : Repr (stackAlphabet (Fin 10) (Fin 10) (Fin 10) DovetailStack.saveTarget)  := inferInstanceAs (Repr (Fin 10))
-instance : Repr (stackAlphabet (Fin 10) (Fin 10) (Fin 10) DovetailStack.saveCounter) := inferInstanceAs (Repr (ULift Bool))
-instance : Repr (stackAlphabet (Fin 10) (Fin 10) (Fin 10) DovetailStack.saveInput)   := inferInstanceAs (Repr (Option (ULift Bool)))
-instance : Repr (stackAlphabet (Fin 10) (Fin 10) (Fin 10) DovetailStack.saveState)   := inferInstanceAs (Repr (Fin 10))
-instance : Repr (stackAlphabet (Fin 10) (Fin 10) (Fin 10) DovetailStack.saveWorkL)   := inferInstanceAs (Repr (Option (Fin 10)))
-instance : Repr (stackAlphabet (Fin 10) (Fin 10) (Fin 10) DovetailStack.saveWorkR)   := inferInstanceAs (Repr (Option (Fin 10)))
-instance : Repr (stackAlphabet (Fin 10) (Fin 10) (Fin 10) DovetailStack.saveOutput)  := inferInstanceAs (Repr (Option (Fin 10)))
-
-def reprCfg (cfg : Turing.TM2.Cfg (stackAlphabet (Fin 10) (Fin 10) (Fin 10)) DovetailLabel (DovetailSigma (Fin 10) (Fin 10) (Fin 10))) : String :=
-  let l := repr cfg.l
-  let var := repr cfg.var
-  let target    := repr (cfg.stk DovetailStack.target)
-  let counter   := repr (cfg.stk DovetailStack.counter)
-  let input     := repr (cfg.stk DovetailStack.input)
-  let state     := repr (cfg.stk DovetailStack.state)
-  let workL     := repr (cfg.stk DovetailStack.workL)
-  let workR     := repr (cfg.stk DovetailStack.workR)
-  let output    := repr (cfg.stk DovetailStack.output)
-  let saveTgt   := repr (cfg.stk DovetailStack.saveTarget)
-  let saveCtr   := repr (cfg.stk DovetailStack.saveCounter)
-  let saveInp   := repr (cfg.stk DovetailStack.saveInput)
-  let saveSt    := repr (cfg.stk DovetailStack.saveState)
-  let saveWL    := repr (cfg.stk DovetailStack.saveWorkL)
-  let saveWR    := repr (cfg.stk DovetailStack.saveWorkR)
-  let saveOut   := repr (cfg.stk DovetailStack.saveOutput)
-  s!"label: {l}\nvar: {var}\ntarget: {target}\ncounter: {counter}\ninput: {input}\nstate: {state}\nworkL: {workL}\nworkR: {workR}\noutput: {output}\nsaveTarget: {saveTgt}\nsaveCounter: {saveCtr}\nsaveInput: {saveInp}\nsaveState: {saveSt}\nsaveWorkL: {saveWL}\nsaveWorkR: {saveWR}\nsaveOutput: {saveOut}"
-  --s!"label: {l}\ntarget: {target}\nstate: {state}\ninput: {input}\nworkR: {workR}\noutput: {output}\nsaveTarget: {saveTgt}\nsaveOutput: {saveOut}"
-
-def runTraceStr (n : ℕ) (gen : Generator (Fin 10) (Fin 10) (Fin 10)) : String :=
-  let rec loop
-      (fuel : ℕ)
-      (step : ℕ)
-      (cfg : Option
-        (Turing.TM2.Cfg
-          (stackAlphabet (Fin 10) (Fin 10) (Fin 10))
-          DovetailLabel
-          (DovetailSigma (Fin 10) (Fin 10) (Fin 10))))
-      (acc : String) : String :=
-    match fuel with
-    | 0 => acc
-    | fuel + 1 =>
-      match cfg with
-      | none =>
-        acc ++ s!"=== Halted at step {step} ===\n"
-      | some c =>
-        let isCheckpoint :=
-          (match c.l with
-          | some DovetailLabel.check_iterateInstances => true
-          | some DovetailLabel.check_testHalting => true
-          | some DovetailLabel.check_compareOutput => true
-          | some DovetailLabel.check_compareOutput_restoreTarget => true
-          | some DovetailLabel.check_compareOutput_restoreOutput => true
-          | some DovetailLabel.check_saveInstance_state => true
-          | none => true
-          | _ => false)
-        -- let isCheckpoint :=
-        --   (match c.l with
-        --   | some DovetailLabel.pushNewConfig_copy_counter =>
-        --       (c.stk DovetailStack.saveCounter).length == 0
-        --   | none => true
-        --   | _ => false)
-        let acc := if isCheckpoint then
-          acc
-          ++ s!"=== Step {step} ===\n"
-          ++ reprCfg c ++ "\n"
-        else acc
-        let cfg' : Option (Turing.TM2.Cfg
-            (stackAlphabet (Fin 10) (Fin 10) (Fin 10))
-            DovetailLabel
-            (DovetailSigma (Fin 10) (Fin 10) (Fin 10))) :=
-          cfg.bind
-            (Turing.TM2.step
-              (dovetailMachine gen))
-        loop fuel (step + 1) cfg' acc
-  loop n 0
-    (some (dovetailInit (Γw := Fin 10) (Γo := Fin 10) (Q := Fin 10) [0, 1, 2, 3, 4, 5, 6, 7, 8]))
-    ""
-
---#eval IO.println (runTraceStr.{0, 0} 1371 GeneratorExamples.moveRightGenerator)
---#guard (runTraceStr.{0, 0} 1371 GeneratorExamples.moveRightGenerator).endsWith "=== Halted at step 1370 ===\n"
-
-end MoveRightLeftGenerator
 
 set_option linter.style.longLine true
 set_option linter.hashCommand true
