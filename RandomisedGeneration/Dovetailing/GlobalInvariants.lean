@@ -13,7 +13,9 @@ variable {Γw Γo Q : Type u}
 variable [Inhabited Γo] [FinEnum Γo] [FinEnum Γw] [Inhabited Γw] [FinEnum Q]
 
 /-- Split a none-separated stack into segments.
-    The stack has newest data on top (head of list).
+    The stack has newest data on top (head of list), with the format
+    [none, stuff, none, stuff, ..., none, stuff] where none is a leading
+    separator for each segment.
     Returns segments oldest-first (index 0 = oldest instance). -/
 def splitSegments {α : Type u} : List (Option α) → List (List α)
   | [] => []
@@ -57,29 +59,32 @@ def workLMatches
       cfg.work (cfg.workIndex - 1 - ↑j) = gen.blank
 
 /-- Quiescent invariant: the TM2 stacks correctly represent the state of
-    the abstract dovetail machine at the start of a phase.
+    the abstract dovetail machine at the start of a round.
+
+    The quiescent point is at check_stripSeparators, which is the entry
+    point of the main loop (reached from counter_increment_restore, or
+    directly on round 0).
 
     Parameterised by:
     • gen: the generator being dovetailed
     • target: the word on the target stack (set at initialisation, never modified)
     • round: the number of completed rounds (= number of spawned instances)
-    • label: the current TM2 label (check_iterateInstances or spawn_copyCounter)
     • tm2cfg: the TM2 configuration
 
     At round r, there are r instances. Instance i (0-indexed, 0 = oldest)
     has been stepped (r - i) times. Its abstract state is given by
     instanceConfig gen i r = stepNHalt gen (initConfig gen i.testBit) (r - i).
 
-    The stacks encode all r instances' data with none separators between
-    segments. Newest instance data is on top of each stack. -/
+    The stacks encode all r instances' data with none separators before
+    each segment: [none, stuff_newest, none, stuff, ..., none, stuff_oldest].
+    Newest instance data is on top of each stack. -/
 structure QuiescentInvariant
     (gen : Generator Γw Γo Q)
     (target : List Γo)
     (round : ℕ)
-    (label : RandomisedGeneration.DovetailLabel)
     (tm2cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) DovetailLabel (DovetailSigma Γw Γo Q))
     : Prop where
-  label_eq : tm2cfg.l = some label
+  label_eq : tm2cfg.l = some DovetailLabel.check_stripSeparators
   counter : tm2cfg.stk DovetailStack.counter = (Nat.bits round).map ULift.up
   input : tm2cfg.stk DovetailStack.input =
     ((List.range round).map (fun i =>

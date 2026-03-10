@@ -23,7 +23,7 @@ set_option linter.unusedSectionVars false
 lemma quiescentInvariant_init
     (gen : Generator Γw Γo Q)
     (target : List Γo) :
-    QuiescentInvariant gen target 0 DovetailLabel.check_iterateInstances (dovetailInit target) where
+    QuiescentInvariant gen target 0  (dovetailInit target) where
   label_eq := by
     rfl
   counter := by
@@ -64,7 +64,7 @@ def InCorrespondence
     (ds : DovetailState (Γw := Γw) (Γo := Γo) (Q := Q))
     (tm2cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) DovetailLabel (DovetailSigma Γw Γo Q))
     : Prop :=
-  QuiescentInvariant gen target ds.instances.length DovetailLabel.check_iterateInstances tm2cfg
+  QuiescentInvariant gen target ds.instances.length tm2cfg
 
 /-- The initial configs are in correspondence. -/
 lemma inCorrespondence_init
@@ -91,43 +91,44 @@ lemma inCorrespondence_halt
       Turing.Reaches (Turing.TM2.step (dovetailMachine gen)) tm2cfg tm2cfg' := by
   obtain ⟨k, hk_lt, hk_halt, hk_out⟩ := hMatch
   let round := ds.instances.length
-  have hCheck₀ := quiescent_to_checkPhase gen target round tm2cfg hCorr
-  suffices ∀ d j (tm2cfg_j : Turing.TM2.Cfg (stackAlphabet Γw Γo Q)
-        DovetailLabel (DovetailSigma Γw Γo Q)),
-      round - j = d →
-      j ≤ round →
-      CheckPhaseInvariant gen target round j tm2cfg_j →
-      Turing.Reaches (Turing.TM2.step (dovetailMachine gen)) tm2cfg tm2cfg_j →
-      (∃ i, i < round - j ∧
-        IsHalting gen (instanceConfig gen i round) ∧
-        (instanceConfig gen i round).output.reverse = target) →
-      ∃ tm2cfg',
-        tm2cfg'.l = none ∧
-        Turing.Reaches (Turing.TM2.step (dovetailMachine gen)) tm2cfg tm2cfg' by
-    exact this round 0 tm2cfg (by omega) (Nat.zero_le _) hCheck₀
-      Relation.ReflTransGen.refl ⟨k, by omega, hk_halt, hk_out⟩
-  intro d
-  induction d with
-  | zero =>
-    intro j tm2cfg_j hd hj hInv_j hReach_j ⟨i, hi_lt, _, _⟩
-    omega
-  | succ d ih =>
-    intro j tm2cfg_j hd hj hInv_j hReach_j ⟨i, hi_lt, hi_halt, hi_out⟩
-    -- The next instance to check is round - 1 - j
-    by_cases hMatch_j : IsHalting gen (instanceConfig gen (round - 1 - j) round) ∧
-        (instanceConfig gen (round - 1 - j) round).output.reverse = target
-    · have hj_lt : j < round := by omega
-      obtain ⟨tm2cfg', h_halt', h_reaches'⟩ :=
-        checkPhase_halt_on_match gen target round j tm2cfg_j hInv_j hj_lt hMatch_j
-      exact ⟨tm2cfg', h_halt', Relation.ReflTransGen.trans hReach_j h_reaches'⟩
-    · have hj_lt : j < round := by omega
-      obtain ⟨tm2cfg_next, hInv_next, hReach_next⟩ :=
-        checkPhase_advance_no_match gen target round j tm2cfg_j hInv_j hj_lt hMatch_j
-      have hi_ne : i ≠ round - 1 - j := by
-        intro heq; rw [heq] at hi_halt hi_out; exact hMatch_j ⟨hi_halt, hi_out⟩
-      exact ih (j + 1) tm2cfg_next (by omega) (by omega) hInv_next
-        (Relation.ReflTransGen.trans hReach_j hReach_next)
-        ⟨i, by omega, hi_halt, hi_out⟩
+  sorry -- revisit once we have quiescent_to_checkPhase again
+  -- have hCheck₀ := quiescent_to_checkPhase gen target round tm2cfg hCorr
+  -- suffices ∀ d j (tm2cfg_j : Turing.TM2.Cfg (stackAlphabet Γw Γo Q)
+  --       DovetailLabel (DovetailSigma Γw Γo Q)),
+  --     round - j = d →
+  --     j ≤ round →
+  --     CheckPhaseInvariant gen target round j tm2cfg_j →
+  --     Turing.Reaches (Turing.TM2.step (dovetailMachine gen)) tm2cfg tm2cfg_j →
+  --     (∃ i, i < round - j ∧
+  --       IsHalting gen (instanceConfig gen i round) ∧
+  --       (instanceConfig gen i round).output.reverse = target) →
+  --     ∃ tm2cfg',
+  --       tm2cfg'.l = none ∧
+  --       Turing.Reaches (Turing.TM2.step (dovetailMachine gen)) tm2cfg tm2cfg' by
+  --   exact this round 0 tm2cfg (by omega) (Nat.zero_le _) hCheck₀
+  --     Relation.ReflTransGen.refl ⟨k, by omega, hk_halt, hk_out⟩
+  -- intro d
+  -- induction d with
+  -- | zero =>
+  --   intro j tm2cfg_j hd hj hInv_j hReach_j ⟨i, hi_lt, _, _⟩
+  --   omega
+  -- | succ d ih =>
+  --   intro j tm2cfg_j hd hj hInv_j hReach_j ⟨i, hi_lt, hi_halt, hi_out⟩
+  --   -- The next instance to check is round - 1 - j
+  --   by_cases hMatch_j : IsHalting gen (instanceConfig gen (round - 1 - j) round) ∧
+  --       (instanceConfig gen (round - 1 - j) round).output.reverse = target
+  --   · have hj_lt : j < round := by omega
+  --     obtain ⟨tm2cfg', h_halt', h_reaches'⟩ :=
+  --       checkPhase_halt_on_match gen target round j tm2cfg_j hInv_j hj_lt hMatch_j
+  --     exact ⟨tm2cfg', h_halt', Relation.ReflTransGen.trans hReach_j h_reaches'⟩
+  --   · have hj_lt : j < round := by omega
+  --     obtain ⟨tm2cfg_next, hInv_next, hReach_next⟩ :=
+  --       checkPhase_advance_no_match gen target round j tm2cfg_j hInv_j hj_lt hMatch_j
+  --     have hi_ne : i ≠ round - 1 - j := by
+  --       intro heq; rw [heq] at hi_halt hi_out; exact hMatch_j ⟨hi_halt, hi_out⟩
+  --     exact ih (j + 1) tm2cfg_next (by omega) (by omega) hInv_next
+  --       (Relation.ReflTransGen.trans hReach_j hReach_next)
+  --       ⟨i, by omega, hi_halt, hi_out⟩
 
 /-- From CheckPhaseInvariant with all instances checked (j = round) and no match,
     restoring save stacks reaches spawn_copyCounter with QuiescentInvariant. -/
@@ -138,9 +139,9 @@ lemma checkPhase_complete_to_pushNewConfig
     (tm2cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) DovetailLabel (DovetailSigma Γw Γo Q))
     (hInv : CheckPhaseInvariant gen target round round tm2cfg) :
     ∃ tm2cfg',
-      QuiescentInvariant gen target round DovetailLabel.spawn_copyCounter tm2cfg' ∧
+      QuiescentInvariant gen target round tm2cfg' ∧
       Turing.Reaches (Turing.TM2.step (dovetailMachine gen)) tm2cfg tm2cfg' := by
-  sorry
+  sorry -- TODO - reconsider this. QuiescentInvariant I think now just applies to the start of a round.
 
 /-- From spawn_copyCounter, spawn a new instance and step all,
     reaching check_iterateInstances at round+1. -/
@@ -149,11 +150,11 @@ lemma pushNewConfig_step_to_next_check_iterateInstances
     (target : List Γo)
     (round : ℕ)
     (tm2cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) DovetailLabel (DovetailSigma Γw Γo Q))
-    (hInv : QuiescentInvariant gen target round DovetailLabel.spawn_copyCounter tm2cfg) :
+    (hInv : QuiescentInvariant gen target round tm2cfg) :
     ∃ tm2cfg',
-      QuiescentInvariant gen target (round + 1) DovetailLabel.check_iterateInstances tm2cfg' ∧
+      QuiescentInvariant gen target (round + 1) tm2cfg' ∧
       Turing.Reaches (Turing.TM2.step (dovetailMachine gen)) tm2cfg tm2cfg' := by
-  sorry
+  sorry -- Needs work - the two QuiescentInvariants are meant to refer to different things here; one at the start and one after checking is done.
 
 /-- If in correspondence and no instance matches, one abstract dovetailStep
     corresponds to finitely many TM2 steps, reaching a new correspondence.
@@ -171,58 +172,59 @@ lemma inCorrespondence_step
       InCorrespondence gen target (dovetailStep gen ds) tm2cfg' ∧
       Turing.Reaches (Turing.TM2.step (dovetailMachine gen)) tm2cfg tm2cfg' := by
   let round := ds.instances.length
+  sorry -- REVISIT
   -- Phase 1: Check all instances, find no match, advance to j = round
-  have hCheck₀ := quiescent_to_checkPhase gen target round tm2cfg hCorr
-  have hCheckAll : ∃ tm2cfg_check,
-      CheckPhaseInvariant gen target round round tm2cfg_check ∧
-      Turing.Reaches (Turing.TM2.step (dovetailMachine gen)) tm2cfg tm2cfg_check := by
-    suffices ∀ d j (tm2cfg_j : Turing.TM2.Cfg (stackAlphabet Γw Γo Q)
-          DovetailLabel (DovetailSigma Γw Γo Q)),
-        round - j = d →
-        j ≤ round →
-        CheckPhaseInvariant gen target round j tm2cfg_j →
-        Turing.Reaches (Turing.TM2.step (dovetailMachine gen)) tm2cfg tm2cfg_j →
-        ∃ tm2cfg_check,
-          CheckPhaseInvariant gen target round round tm2cfg_check ∧
-          Turing.Reaches (Turing.TM2.step (dovetailMachine gen)) tm2cfg tm2cfg_check by
-      exact this round 0 tm2cfg rfl (Nat.zero_le _) hCheck₀ Relation.ReflTransGen.refl
-    intro d
-    induction d with
-    | zero =>
-      intro j tm2cfg_j hd hj hInv_j hReach_j
-      have : j = round := by omega
-      subst this
-      exact ⟨tm2cfg_j, hInv_j, hReach_j⟩
-    | succ d ih =>
-      intro j tm2cfg_j hd hj hInv_j hReach_j
-      have hj_lt : j < round := by omega
-      -- Instance round-1-j doesn't match (from hNoMatch)
-      have hNoMatch_j : ¬(IsHalting gen (instanceConfig gen (round - 1 - j) round) ∧
-          (instanceConfig gen (round - 1 - j) round).output.reverse = target) :=
-        hNoMatch (round - 1 - j) (by omega)
-      obtain ⟨tm2cfg_next, hInv_next, hReach_next⟩ :=
-        checkPhase_advance_no_match gen target round j tm2cfg_j hInv_j hj_lt hNoMatch_j
-      exact ih (j + 1) tm2cfg_next (by omega) (by omega) hInv_next
-        (Relation.ReflTransGen.trans hReach_j hReach_next)
-  -- Phase 2: From CheckPhaseInvariant at j=round, restore to pushNewConfig
-  obtain ⟨tm2cfg_check, hInv_check, hReach_check⟩ := hCheckAll
-  obtain ⟨tm2cfg_push, hInv_push, hReach_push⟩ :=
-    checkPhase_complete_to_pushNewConfig gen target round tm2cfg_check hInv_check
-  -- Phase 3: From pushNewConfig, spawn + step + restore + increment to next check_iterateInstances
-  obtain ⟨tm2cfg_next, hInv_next, hReach_next⟩ :=
-    pushNewConfig_step_to_next_check_iterateInstances gen target round tm2cfg_push hInv_push
-  -- Connect everything
-  refine ⟨tm2cfg_next, ?_, ?_⟩
-  · -- InCorrespondence gen target (dovetailStep gen ds) tm2cfg_next
-    -- This is QuiescentInvariant gen target (round+1) check_iterateInstances tm2cfg_next
-    -- which is hInv_next, but we need to show round+1 = (dovetailStep gen ds).instances.length
-    change QuiescentInvariant gen target (dovetailStep gen ds).instances.length
-      DovetailLabel.check_iterateInstances tm2cfg_next
-    rw [show (dovetailStep gen ds).instances.length = round + 1 from by
-      simp [dovetailStep, round]]
-    exact hInv_next
-  · exact Relation.ReflTransGen.trans
-      (Relation.ReflTransGen.trans hReach_check hReach_push) hReach_next
+  -- have hCheck₀ := quiescent_to_checkPhase gen target round tm2cfg hCorr
+  -- have hCheckAll : ∃ tm2cfg_check,
+  --     CheckPhaseInvariant gen target round round tm2cfg_check ∧
+  --     Turing.Reaches (Turing.TM2.step (dovetailMachine gen)) tm2cfg tm2cfg_check := by
+  --   suffices ∀ d j (tm2cfg_j : Turing.TM2.Cfg (stackAlphabet Γw Γo Q)
+  --         DovetailLabel (DovetailSigma Γw Γo Q)),
+  --       round - j = d →
+  --       j ≤ round →
+  --       CheckPhaseInvariant gen target round j tm2cfg_j →
+  --       Turing.Reaches (Turing.TM2.step (dovetailMachine gen)) tm2cfg tm2cfg_j →
+  --       ∃ tm2cfg_check,
+  --         CheckPhaseInvariant gen target round round tm2cfg_check ∧
+  --         Turing.Reaches (Turing.TM2.step (dovetailMachine gen)) tm2cfg tm2cfg_check by
+  --     exact this round 0 tm2cfg rfl (Nat.zero_le _) hCheck₀ Relation.ReflTransGen.refl
+  --   intro d
+  --   induction d with
+  --   | zero =>
+  --     intro j tm2cfg_j hd hj hInv_j hReach_j
+  --     have : j = round := by omega
+  --     subst this
+  --     exact ⟨tm2cfg_j, hInv_j, hReach_j⟩
+  --   | succ d ih =>
+  --     intro j tm2cfg_j hd hj hInv_j hReach_j
+  --     have hj_lt : j < round := by omega
+  --     -- Instance round-1-j doesn't match (from hNoMatch)
+  --     have hNoMatch_j : ¬(IsHalting gen (instanceConfig gen (round - 1 - j) round) ∧
+  --         (instanceConfig gen (round - 1 - j) round).output.reverse = target) :=
+  --       hNoMatch (round - 1 - j) (by omega)
+  --     obtain ⟨tm2cfg_next, hInv_next, hReach_next⟩ :=
+  --       checkPhase_advance_no_match gen target round j tm2cfg_j hInv_j hj_lt hNoMatch_j
+  --     exact ih (j + 1) tm2cfg_next (by omega) (by omega) hInv_next
+  --       (Relation.ReflTransGen.trans hReach_j hReach_next)
+  -- -- Phase 2: From CheckPhaseInvariant at j=round, restore to pushNewConfig
+  -- obtain ⟨tm2cfg_check, hInv_check, hReach_check⟩ := hCheckAll
+  -- obtain ⟨tm2cfg_push, hInv_push, hReach_push⟩ :=
+  --   checkPhase_complete_to_pushNewConfig gen target round tm2cfg_check hInv_check
+  -- -- Phase 3: From pushNewConfig, spawn + step + restore + increment to next check_iterateInstances
+  -- obtain ⟨tm2cfg_next, hInv_next, hReach_next⟩ :=
+  --   pushNewConfig_step_to_next_check_iterateInstances gen target round tm2cfg_push hInv_push
+  -- -- Connect everything
+  -- refine ⟨tm2cfg_next, ?_, ?_⟩
+  -- · -- InCorrespondence gen target (dovetailStep gen ds) tm2cfg_next
+  --   -- This is QuiescentInvariant gen target (round+1) check_iterateInstances tm2cfg_next
+  --   -- which is hInv_next, but we need to show round+1 = (dovetailStep gen ds).instances.length
+  --   change QuiescentInvariant gen target (dovetailStep gen ds).instances.length
+  --     DovetailLabel.check_iterateInstances tm2cfg_next
+  --   rw [show (dovetailStep gen ds).instances.length = round + 1 from by
+  --     simp [dovetailStep, round]]
+  --   exact hInv_next
+  -- · exact Relation.ReflTransGen.trans
+  --     (Relation.ReflTransGen.trans hReach_check hReach_push) hReach_next
 
 lemma dovetailTM2_halts_implies_DovetailRecognises
     (gen : Generator Γw Γo Q)
