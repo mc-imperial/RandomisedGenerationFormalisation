@@ -110,6 +110,7 @@ def stackAlphabet (Γw Γo Q : Type u)
     Phase 5 — Increment: increment the binary counter for the next spawn. -/
 inductive DovetailLabel : Type u
   -- Phase 1: Check all instances for halting + output match
+  | check_stripSeparators           -- pop none separators from input/workL/workR/output, push to save stacks
   | check_iterateInstances          -- loop: peek state stack, pop next or finish
   | check_testHalting               -- peek input/workR, apply δ, branch on halting
   | check_compareOutput             -- compare output vs target element by element
@@ -126,10 +127,11 @@ inductive DovetailLabel : Type u
   | check_restoreAll_workL          -- restore workL segments from saveWorkL to workL
   | check_restoreAll_workR          -- restore workR segments from saveWorkR to workR
   | check_restoreAll_output         -- restore output segments from saveOutput to output
-  -- Phase 2: Spawn a new instance
+-- Phase 2: Spawn a new instance
   | spawn_copyCounter               -- pop counter bits to saveCounter
   | spawn_restoreAndPush            -- restore counter, push bits to input, push init state
   -- Phase 3: Step all instances
+  | step_stripSeparators            -- pop none separators from input/workL/workR/output, push to save stacks
   | step_iterateInstances           -- loop: peek state stack, pop next or finish
   | step_peekInput                  -- peek input to read current bit (non-destructive)
   | step_peekWorkR                  -- peek/pop workR head cell, apply δ
@@ -191,7 +193,7 @@ structure DovetailSigma (Γw Γo Q : Type u)
 set_option linter.style.whitespace true
 set_option linter.style.longLine true
 
-instance : Inhabited DovetailLabel := ⟨DovetailLabel.check_iterateInstances⟩
+instance : Inhabited DovetailLabel := ⟨DovetailLabel.check_stripSeparators⟩
 
 instance : Inhabited (DovetailSigma Γw Γo Q) :=
   ⟨{ transQ      := none
@@ -280,7 +282,12 @@ def applyDelta {Γw Γo Q : Type u}
 ══════════════════════════════════════════════════════════════════════════════
 
   Overview:
-    Iterates through instances from newest (top of state stack) to oldest.
+    check_stripSeparators is the entry point for the check phase (called from
+    counter_increment_restore). It removes the none separators from input,
+    workL, workR, and output for the newest instance and pushes them to the
+    corresponding save stacks, exposing the newest instance's segment data.
+
+    check_iterateInstances then loops through instances from newest to oldest.
     For each instance:
       1. Pop its state from the state stack
       2. Peek input and workR to determine the current input bit and head symbol
@@ -289,7 +296,10 @@ def applyDelta {Γw Γo Q : Type u}
          - If output matches target: HALT (accept)
          - If mismatch: restore target and output stacks, then save instance
       5. If not halting: push ORIGINAL state back, save instance segments
-      6. Save instance = move state/input/workL/workR/output to save stacks
+      6. Save instance = move state/input/workL/workR/output to save stacks.
+         The save routines also consume the next instance's none separator
+         (if present) and push it to save, exposing the next instance's data
+         for the following iteration.
     After all instances: restore save stacks (without adding separators),
     then proceed to Phase 2 (spawn).
 
@@ -298,6 +308,27 @@ def applyDelta {Γw Γo Q : Type u}
   (from peekQ), not the delta result. The only stack that gets temporarily
   modified is target/output during comparison, which is restored on mismatch.
 -/
+
+/-- Strip the none separators from input, workL, workR, output and push them
+    to the corresponding save stacks. Called once before entering the check loop.
+    After this, the newest instance's segment data is directly exposed. -/
+def check_stripSeparators {Γw Γo Q : Type u}
+    [FinEnum Γw] [Inhabited Γo] [FinEnum Γo] [FinEnum Q] :
+    Turing.TM2.Stmt (stackAlphabet Γw Γo Q) DovetailLabel (DovetailSigma Γw Γo Q) :=
+  Turing.TM2.Stmt.peek DovetailStack.state (fun σ s => { σ with peekQ := s })
+  <| Turing.TM2.Stmt.branch (fun σ => σ.peekQ.isNone)
+    ( -- No instances yet (round 0): skip strip, go directly to spawn
+      Turing.TM2.Stmt.goto (fun _ => DovetailLabel.check_restoreAll_state) )
+    ( -- Strip separators from input, workL, workR, output, push to save
+      Turing.TM2.Stmt.pop DovetailStack.input (fun σ _ => σ)
+      <| Turing.TM2.Stmt.push DovetailStack.saveInput (fun _ => none)
+      <| Turing.TM2.Stmt.pop DovetailStack.workL (fun σ _ => σ)
+      <| Turing.TM2.Stmt.push DovetailStack.saveWorkL (fun _ => none)
+      <| Turing.TM2.Stmt.pop DovetailStack.workR (fun σ _ => σ)
+      <| Turing.TM2.Stmt.push DovetailStack.saveWorkR (fun _ => none)
+      <| Turing.TM2.Stmt.pop DovetailStack.output (fun σ _ => σ)
+      <| Turing.TM2.Stmt.push DovetailStack.saveOutput (fun _ => none)
+      <| Turing.TM2.Stmt.goto (fun _ => DovetailLabel.check_iterateInstances) )
 
 -- Peek state stack: if empty, all checked → restore and proceed to spawn phase
 def check_iterateInstances {Γw Γo Q : Type u}
@@ -309,8 +340,9 @@ def check_iterateInstances {Γw Γo Q : Type u}
     ( Turing.TM2.Stmt.pop DovetailStack.state (fun σ s => { σ with transQ := s })
       <| Turing.TM2.Stmt.goto (fun _ => DovetailLabel.check_testHalting) )
 
--- Peek input and workR to determine if this instance is halting
--- Non-destructive: pushes the ORIGINAL state back, not the delta result
+-- Peek input and workR to determine if this instance is halting.
+-- Separators have already been stripped by check_stripSeparators.
+-- Non-destructive: pushes the ORIGINAL state back, not the delta result.
 def check_testHalting {Γw Γo Q : Type u}
     [FinEnum Γw] [Inhabited Γo] [FinEnum Γo] [FinEnum Q]
     (gen : Generator Γw Γo Q) :
@@ -330,11 +362,9 @@ def check_testHalting {Γw Γo Q : Type u}
   -- apply delta to check if halting
   <| Turing.TM2.Stmt.load (fun σ => applyDelta gen σ)
   <| Turing.TM2.Stmt.branch (fun σ => σ.transHalted)
-    ( -- halting: push ORIGINAL state back, pop output none separator (save it), compare
+    ( -- halting: push ORIGINAL state back, compare output against target
       Turing.TM2.Stmt.push DovetailStack.state
         (fun σ => σ.peekQ.getD gen.init)
-      <| Turing.TM2.Stmt.pop DovetailStack.output (fun σ _ => σ)
-      <| Turing.TM2.Stmt.push DovetailStack.saveOutput (fun _ => none)
       <| Turing.TM2.Stmt.goto (fun _ => DovetailLabel.check_compareOutput) )
     ( -- not halting: push ORIGINAL state back, save segments
       Turing.TM2.Stmt.push DovetailStack.state
@@ -345,10 +375,13 @@ def check_testHalting {Γw Γo Q : Type u}
 
     Both stacks are consumed top-to-bottom simultaneously:
     • target stack: [t₀, t₁, ...] with t₀ on top
-    • output stack: [..., some o₂, some o₁, none, ...] with most recent output on top
+    • output stack: [some o_k, ..., some o₁, none, ...] with most recent output on top
 
-    The output stack has the instance's output segment on top, with symbols
-    in reverse order (most recently emitted on top), preceded by a none separator.
+    The output stack has the instance's output segment on top (separator already
+    stripped by check_stripSeparators), with symbols in reverse order (most
+    recently emitted on top). The segment ends at the next instance's none
+    separator or the bottom of the stack.
+
     Since the target is also stored with first element on top, a match occurs
     when output.reverse = target, i.e., when consuming both top-to-bottom
     yields matching elements.
@@ -425,61 +458,81 @@ def check_saveInstance_input {Γw Γo Q : Type u}
     [FinEnum Γw] [Inhabited Γo] [FinEnum Γo] [FinEnum Q] :
     Turing.TM2.Stmt (stackAlphabet Γw Γo Q) DovetailLabel (DovetailSigma Γw Γo Q) :=
   Turing.TM2.Stmt.peek DovetailStack.input (fun σ i => { σ with peekInput := i })
-  <| Turing.TM2.Stmt.branch (fun σ => σ.peekInput.isNone)
-    ( Turing.TM2.Stmt.goto (fun _ => DovetailLabel.check_saveInstance_workL) )
+  <| Turing.TM2.Stmt.branch (fun σ => match σ.peekInput with
+      | none      => true
+      | some none => true
+      | _         => false)
+    ( Turing.TM2.Stmt.branch (fun σ => match σ.peekInput with
+        | some none => true
+        | _         => false)
+      ( Turing.TM2.Stmt.pop DovetailStack.input (fun σ _ => σ)
+        <| Turing.TM2.Stmt.push DovetailStack.saveInput (fun _ => none)
+        <| Turing.TM2.Stmt.goto (fun _ => DovetailLabel.check_saveInstance_workL) )
+      ( Turing.TM2.Stmt.goto (fun _ => DovetailLabel.check_saveInstance_workL) ) )
     ( Turing.TM2.Stmt.pop DovetailStack.input (fun σ _ => σ)
       <| Turing.TM2.Stmt.push DovetailStack.saveInput
         (fun σ => σ.peekInput.getD none)
-      <| Turing.TM2.Stmt.branch (fun σ => match σ.peekInput with
-          | some none => true
-          | _         => false)
-        ( Turing.TM2.Stmt.goto (fun _ => DovetailLabel.check_saveInstance_workL) )
-        ( Turing.TM2.Stmt.goto (fun _ => DovetailLabel.check_saveInstance_input) ) )
+      <| Turing.TM2.Stmt.goto (fun _ => DovetailLabel.check_saveInstance_input) )
 
 def check_saveInstance_workL {Γw Γo Q : Type u}
     [FinEnum Γw] [Inhabited Γo] [FinEnum Γo] [FinEnum Q] :
     Turing.TM2.Stmt (stackAlphabet Γw Γo Q) DovetailLabel (DovetailSigma Γw Γo Q) :=
   Turing.TM2.Stmt.peek DovetailStack.workL (fun σ w => { σ with peekWorkL := w })
-  <| Turing.TM2.Stmt.branch (fun σ => σ.peekWorkL.isNone)
-    ( Turing.TM2.Stmt.goto (fun _ => DovetailLabel.check_saveInstance_workR) )
+  <| Turing.TM2.Stmt.branch (fun σ => match σ.peekWorkL with
+      | none      => true
+      | some none => true
+      | _         => false)
+    ( Turing.TM2.Stmt.branch (fun σ => match σ.peekWorkL with
+        | some none => true
+        | _         => false)
+      ( Turing.TM2.Stmt.pop DovetailStack.workL (fun σ _ => σ)
+        <| Turing.TM2.Stmt.push DovetailStack.saveWorkL (fun _ => none)
+        <| Turing.TM2.Stmt.goto (fun _ => DovetailLabel.check_saveInstance_workR) )
+      ( Turing.TM2.Stmt.goto (fun _ => DovetailLabel.check_saveInstance_workR) ) )
     ( Turing.TM2.Stmt.pop DovetailStack.workL (fun σ _ => σ)
       <| Turing.TM2.Stmt.push DovetailStack.saveWorkL
         (fun σ => σ.peekWorkL.getD none)
-      <| Turing.TM2.Stmt.branch (fun σ => match σ.peekWorkL with
-          | some none => true
-          | _         => false)
-        ( Turing.TM2.Stmt.goto (fun _ => DovetailLabel.check_saveInstance_workR) )
-        ( Turing.TM2.Stmt.goto (fun _ => DovetailLabel.check_saveInstance_workL) ) )
+      <| Turing.TM2.Stmt.goto (fun _ => DovetailLabel.check_saveInstance_workL) )
 
 def check_saveInstance_workR {Γw Γo Q : Type u}
     [FinEnum Γw] [Inhabited Γo] [FinEnum Γo] [FinEnum Q] :
     Turing.TM2.Stmt (stackAlphabet Γw Γo Q) DovetailLabel (DovetailSigma Γw Γo Q) :=
   Turing.TM2.Stmt.peek DovetailStack.workR (fun σ w => { σ with peekWorkR := w })
-  <| Turing.TM2.Stmt.branch (fun σ => σ.peekWorkR.isNone)
-    ( Turing.TM2.Stmt.goto (fun _ => DovetailLabel.check_saveInstance_output) )
+  <| Turing.TM2.Stmt.branch (fun σ => match σ.peekWorkR with
+      | none      => true
+      | some none => true
+      | _         => false)
+    ( Turing.TM2.Stmt.branch (fun σ => match σ.peekWorkR with
+        | some none => true
+        | _         => false)
+      ( Turing.TM2.Stmt.pop DovetailStack.workR (fun σ _ => σ)
+        <| Turing.TM2.Stmt.push DovetailStack.saveWorkR (fun _ => none)
+        <| Turing.TM2.Stmt.goto (fun _ => DovetailLabel.check_saveInstance_output) )
+      ( Turing.TM2.Stmt.goto (fun _ => DovetailLabel.check_saveInstance_output) ) )
     ( Turing.TM2.Stmt.pop DovetailStack.workR (fun σ _ => σ)
       <| Turing.TM2.Stmt.push DovetailStack.saveWorkR
         (fun σ => σ.peekWorkR.getD none)
-      <| Turing.TM2.Stmt.branch (fun σ => match σ.peekWorkR with
-          | some none => true
-          | _         => false)
-        ( Turing.TM2.Stmt.goto (fun _ => DovetailLabel.check_saveInstance_output) )
-        ( Turing.TM2.Stmt.goto (fun _ => DovetailLabel.check_saveInstance_workR) ) )
+      <| Turing.TM2.Stmt.goto (fun _ => DovetailLabel.check_saveInstance_workR) )
 
 def check_saveInstance_output {Γw Γo Q : Type u}
     [FinEnum Γw] [Inhabited Γo] [FinEnum Γo] [FinEnum Q] :
     Turing.TM2.Stmt (stackAlphabet Γw Γo Q) DovetailLabel (DovetailSigma Γw Γo Q) :=
   Turing.TM2.Stmt.peek DovetailStack.output (fun σ o => { σ with peekOut := o })
-  <| Turing.TM2.Stmt.branch (fun σ => σ.peekOut.isNone)
-    ( Turing.TM2.Stmt.goto (fun _ => DovetailLabel.check_iterateInstances) )
+  <| Turing.TM2.Stmt.branch (fun σ => match σ.peekOut with
+      | none      => true
+      | some none => true
+      | _         => false)
+    ( Turing.TM2.Stmt.branch (fun σ => match σ.peekOut with
+        | some none => true
+        | _         => false)
+      ( Turing.TM2.Stmt.pop DovetailStack.output (fun σ _ => σ)
+        <| Turing.TM2.Stmt.push DovetailStack.saveOutput (fun _ => none)
+        <| Turing.TM2.Stmt.goto (fun _ => DovetailLabel.check_iterateInstances) )
+      ( Turing.TM2.Stmt.goto (fun _ => DovetailLabel.check_iterateInstances) ) )
     ( Turing.TM2.Stmt.pop DovetailStack.output (fun σ _ => σ)
       <| Turing.TM2.Stmt.push DovetailStack.saveOutput
         (fun σ => σ.peekOut.getD none)
-      <| Turing.TM2.Stmt.branch (fun σ => match σ.peekOut with
-          | some none => true
-          | _         => false)
-        ( Turing.TM2.Stmt.goto (fun _ => DovetailLabel.check_iterateInstances) )
-        ( Turing.TM2.Stmt.goto (fun _ => DovetailLabel.check_saveInstance_output) ) )
+      <| Turing.TM2.Stmt.goto (fun _ => DovetailLabel.check_saveInstance_output) )
 
 /-
   Phase 1→2 transition: restore all segments from save stacks.
@@ -556,11 +609,15 @@ def check_restoreAll_output {Γw Γo Q : Type u}
   spawn_restoreAndPush: pop bits from saveCounter one at a time, and for each:
     • Push the bit back to counter (restoring it)
     • Push the bit to the input stack (creating the new instance's input segment)
-  When saveCounter is empty, push gen.init onto the state stack.
+  When saveCounter is empty:
+    • Push gen.init onto the state stack
+    • Push none separators onto input, workL, workR, and output
 
   After this phase, the state stack has one more entry (the new instance),
-  and the input stack has a new segment of bits on top (no none separator
-  yet — that will be added by step_restoreAll_input after the step phase).
+  and the input stack has a new segment [none, bit_k, ..., bit_0] on top
+  (none separator followed by the input bits). The workL, workR, and output
+  stacks each have a none separator on top (the new instance starts with
+  empty work tapes and no output).
 
   The counter is restored to its original value N. It will be incremented
   to N+1 in Phase 5.
@@ -586,8 +643,14 @@ def spawn_restoreAndPush {Γw Γo Q : Type u}
   Turing.TM2.Stmt.peek DovetailStack.saveCounter
     (fun σ b => { σ with peekBit := b })
   <| Turing.TM2.Stmt.branch (fun σ => σ.peekBit.isNone)
-    ( Turing.TM2.Stmt.push DovetailStack.state (fun _ => gen.init)
-      <| Turing.TM2.Stmt.goto (fun _ => DovetailLabel.step_iterateInstances) )
+    ( -- All bits restored. Push init state and none separators for the new instance,
+      -- then strip the separators (moving them to save stacks) before entering the step loop.
+      Turing.TM2.Stmt.push DovetailStack.state (fun _ => gen.init)
+      <| Turing.TM2.Stmt.push DovetailStack.input (fun _ => none)
+      <| Turing.TM2.Stmt.push DovetailStack.workL (fun _ => none)
+      <| Turing.TM2.Stmt.push DovetailStack.workR (fun _ => none)
+      <| Turing.TM2.Stmt.push DovetailStack.output (fun _ => none)
+      <| Turing.TM2.Stmt.goto (fun _ => DovetailLabel.step_stripSeparators) )
     ( Turing.TM2.Stmt.pop DovetailStack.saveCounter
         (fun σ b => { σ with peekBit := b })
       <| Turing.TM2.Stmt.push DovetailStack.counter
@@ -601,7 +664,11 @@ def spawn_restoreAndPush {Γw Γo Q : Type u}
   Phase 3: Step all instances
 ══════════════════════════════════════════════════════════════════════════════
 
-  Iterates through instances from newest to oldest. For each instance:
+  Before entering the loop, step_stripSeparators removes the none separators
+  from input, workL, workR, and output (for the newest instance) and pushes
+  them to the corresponding save stacks.
+
+  Then iterates through instances from newest to oldest. For each instance:
     1. Pop state from state stack
     2. Peek input to read current bit (non-destructive peek)
     3. Peek/pop workR to read head symbol (pop if real symbol, else use blank)
@@ -610,7 +677,9 @@ def spawn_restoreAndPush {Γw Γo Q : Type u}
     6. If running: push NEW state and written symbol, optionally push output,
        conditionally consume input bit (if direction = R),
        move work head (shuffle between workL and workR)
-    7. Save instance segments to save stacks
+    7. Save instance segments to save stacks. The save routines also consume
+       the next instance's none separator (if present) and push it to save,
+       exposing the next instance's data for the following iteration.
 
   After all instances: proceed to Phase 4 (restore).
 
@@ -618,6 +687,26 @@ def spawn_restoreAndPush {Γw Γo Q : Type u}
   It modifies the instance by applying the transition function.
   Halted instances are preserved unchanged (state and head symbol pushed back).
 -/
+
+/-- Strip the none separators from input, workL, workR, output and push them
+    to the corresponding save stacks. Called once before entering the step loop
+    (from spawn_restoreAndPush), not on every iteration. -/
+def step_stripSeparators {Γw Γo Q : Type u}
+    [FinEnum Γw] [Inhabited Γo] [FinEnum Γo] [FinEnum Q] :
+    Turing.TM2.Stmt (stackAlphabet Γw Γo Q) DovetailLabel (DovetailSigma Γw Γo Q) :=
+  -- pop none from input, push to saveInput
+  Turing.TM2.Stmt.pop DovetailStack.input (fun σ _ => σ)
+  <| Turing.TM2.Stmt.push DovetailStack.saveInput (fun _ => none)
+  -- pop none from workL, push to saveWorkL
+  <| Turing.TM2.Stmt.pop DovetailStack.workL (fun σ _ => σ)
+  <| Turing.TM2.Stmt.push DovetailStack.saveWorkL (fun _ => none)
+  -- pop none from workR, push to saveWorkR
+  <| Turing.TM2.Stmt.pop DovetailStack.workR (fun σ _ => σ)
+  <| Turing.TM2.Stmt.push DovetailStack.saveWorkR (fun _ => none)
+  -- pop none from output, push to saveOutput
+  <| Turing.TM2.Stmt.pop DovetailStack.output (fun σ _ => σ)
+  <| Turing.TM2.Stmt.push DovetailStack.saveOutput (fun _ => none)
+  <| Turing.TM2.Stmt.goto (fun _ => DovetailLabel.step_iterateInstances)
 
 def step_iterateInstances {Γw Γo Q : Type u}
     [FinEnum Γw] [Inhabited Γo] [FinEnum Γo] [FinEnum Q] :
@@ -755,61 +844,81 @@ def step_saveInstance_input {Γw Γo Q : Type u}
     [FinEnum Γw] [Inhabited Γo] [FinEnum Γo] [FinEnum Q] :
     Turing.TM2.Stmt (stackAlphabet Γw Γo Q) DovetailLabel (DovetailSigma Γw Γo Q) :=
   Turing.TM2.Stmt.peek DovetailStack.input (fun σ i => { σ with peekInput := i })
-  <| Turing.TM2.Stmt.branch (fun σ => σ.peekInput.isNone)
-    ( Turing.TM2.Stmt.goto (fun _ => DovetailLabel.step_saveInstance_workL) )
+  <| Turing.TM2.Stmt.branch (fun σ => match σ.peekInput with
+      | none      => true
+      | some none => true
+      | _         => false)
+    ( Turing.TM2.Stmt.branch (fun σ => match σ.peekInput with
+        | some none => true
+        | _         => false)
+      ( Turing.TM2.Stmt.pop DovetailStack.input (fun σ _ => σ)
+        <| Turing.TM2.Stmt.push DovetailStack.saveInput (fun _ => none)
+        <| Turing.TM2.Stmt.goto (fun _ => DovetailLabel.step_saveInstance_workL) )
+      ( Turing.TM2.Stmt.goto (fun _ => DovetailLabel.step_saveInstance_workL) ) )
     ( Turing.TM2.Stmt.pop DovetailStack.input (fun σ _ => σ)
       <| Turing.TM2.Stmt.push DovetailStack.saveInput
         (fun σ => σ.peekInput.getD none)
-      <| Turing.TM2.Stmt.branch (fun σ => match σ.peekInput with
-          | some none => true
-          | _         => false)
-        ( Turing.TM2.Stmt.goto (fun _ => DovetailLabel.step_saveInstance_workL) )
-        ( Turing.TM2.Stmt.goto (fun _ => DovetailLabel.step_saveInstance_input) ) )
+      <| Turing.TM2.Stmt.goto (fun _ => DovetailLabel.step_saveInstance_input) )
 
 def step_saveInstance_workL {Γw Γo Q : Type u}
     [FinEnum Γw] [Inhabited Γo] [FinEnum Γo] [FinEnum Q] :
     Turing.TM2.Stmt (stackAlphabet Γw Γo Q) DovetailLabel (DovetailSigma Γw Γo Q) :=
   Turing.TM2.Stmt.peek DovetailStack.workL (fun σ w => { σ with peekWorkL := w })
-  <| Turing.TM2.Stmt.branch (fun σ => σ.peekWorkL.isNone)
-    ( Turing.TM2.Stmt.goto (fun _ => DovetailLabel.step_saveInstance_workR) )
+  <| Turing.TM2.Stmt.branch (fun σ => match σ.peekWorkL with
+      | none      => true
+      | some none => true
+      | _         => false)
+    ( Turing.TM2.Stmt.branch (fun σ => match σ.peekWorkL with
+        | some none => true
+        | _         => false)
+      ( Turing.TM2.Stmt.pop DovetailStack.workL (fun σ _ => σ)
+        <| Turing.TM2.Stmt.push DovetailStack.saveWorkL (fun _ => none)
+        <| Turing.TM2.Stmt.goto (fun _ => DovetailLabel.step_saveInstance_workR) )
+      ( Turing.TM2.Stmt.goto (fun _ => DovetailLabel.step_saveInstance_workR) ) )
     ( Turing.TM2.Stmt.pop DovetailStack.workL (fun σ _ => σ)
       <| Turing.TM2.Stmt.push DovetailStack.saveWorkL
         (fun σ => σ.peekWorkL.getD none)
-      <| Turing.TM2.Stmt.branch (fun σ => match σ.peekWorkL with
-          | some none => true
-          | _         => false)
-        ( Turing.TM2.Stmt.goto (fun _ => DovetailLabel.step_saveInstance_workR) )
-        ( Turing.TM2.Stmt.goto (fun _ => DovetailLabel.step_saveInstance_workL) ) )
+      <| Turing.TM2.Stmt.goto (fun _ => DovetailLabel.step_saveInstance_workL) )
 
 def step_saveInstance_workR {Γw Γo Q : Type u}
     [FinEnum Γw] [Inhabited Γo] [FinEnum Γo] [FinEnum Q] :
     Turing.TM2.Stmt (stackAlphabet Γw Γo Q) DovetailLabel (DovetailSigma Γw Γo Q) :=
   Turing.TM2.Stmt.peek DovetailStack.workR (fun σ w => { σ with peekWorkR := w })
-  <| Turing.TM2.Stmt.branch (fun σ => σ.peekWorkR.isNone)
-    ( Turing.TM2.Stmt.goto (fun _ => DovetailLabel.step_saveInstance_output) )
+  <| Turing.TM2.Stmt.branch (fun σ => match σ.peekWorkR with
+      | none      => true
+      | some none => true
+      | _         => false)
+    ( Turing.TM2.Stmt.branch (fun σ => match σ.peekWorkR with
+        | some none => true
+        | _         => false)
+      ( Turing.TM2.Stmt.pop DovetailStack.workR (fun σ _ => σ)
+        <| Turing.TM2.Stmt.push DovetailStack.saveWorkR (fun _ => none)
+        <| Turing.TM2.Stmt.goto (fun _ => DovetailLabel.step_saveInstance_output) )
+      ( Turing.TM2.Stmt.goto (fun _ => DovetailLabel.step_saveInstance_output) ) )
     ( Turing.TM2.Stmt.pop DovetailStack.workR (fun σ _ => σ)
       <| Turing.TM2.Stmt.push DovetailStack.saveWorkR
         (fun σ => σ.peekWorkR.getD none)
-      <| Turing.TM2.Stmt.branch (fun σ => match σ.peekWorkR with
-          | some none => true
-          | _         => false)
-        ( Turing.TM2.Stmt.goto (fun _ => DovetailLabel.step_saveInstance_output) )
-        ( Turing.TM2.Stmt.goto (fun _ => DovetailLabel.step_saveInstance_workR) ) )
+      <| Turing.TM2.Stmt.goto (fun _ => DovetailLabel.step_saveInstance_workR) )
 
 def step_saveInstance_output {Γw Γo Q : Type u}
     [FinEnum Γw] [Inhabited Γo] [FinEnum Γo] [FinEnum Q] :
     Turing.TM2.Stmt (stackAlphabet Γw Γo Q) DovetailLabel (DovetailSigma Γw Γo Q) :=
   Turing.TM2.Stmt.peek DovetailStack.output (fun σ o => { σ with peekOut := o })
-  <| Turing.TM2.Stmt.branch (fun σ => σ.peekOut.isNone)
-    ( Turing.TM2.Stmt.goto (fun _ => DovetailLabel.step_iterateInstances) )
+  <| Turing.TM2.Stmt.branch (fun σ => match σ.peekOut with
+      | none      => true
+      | some none => true
+      | _         => false)
+    ( Turing.TM2.Stmt.branch (fun σ => match σ.peekOut with
+        | some none => true
+        | _         => false)
+      ( Turing.TM2.Stmt.pop DovetailStack.output (fun σ _ => σ)
+        <| Turing.TM2.Stmt.push DovetailStack.saveOutput (fun _ => none)
+        <| Turing.TM2.Stmt.goto (fun _ => DovetailLabel.step_iterateInstances) )
+      ( Turing.TM2.Stmt.goto (fun _ => DovetailLabel.step_iterateInstances) ) )
     ( Turing.TM2.Stmt.pop DovetailStack.output (fun σ _ => σ)
       <| Turing.TM2.Stmt.push DovetailStack.saveOutput
         (fun σ => σ.peekOut.getD none)
-      <| Turing.TM2.Stmt.branch (fun σ => match σ.peekOut with
-          | some none => true
-          | _         => false)
-        ( Turing.TM2.Stmt.goto (fun _ => DovetailLabel.step_iterateInstances) )
-        ( Turing.TM2.Stmt.goto (fun _ => DovetailLabel.step_saveInstance_output) ) )
+      <| Turing.TM2.Stmt.goto (fun _ => DovetailLabel.step_saveInstance_output) )
 
 /-
 ══════════════════════════════════════════════════════════════════════════════
@@ -818,13 +927,13 @@ def step_saveInstance_output {Γw Γo Q : Type u}
 
   Move all segments from save stacks back to main stacks.
 
-  Unlike check_restoreAll_*, these DO push a none separator when the
-  save stack is exhausted. This adds the separator between instances
-  that the stack format requires. Each instance's segment on the main
-  stacks is delimited by none at its bottom (closest to stack bottom).
+  The save stacks contain the instance data interleaved with none separators
+  (pushed by step_stripSeparators). The restore simply copies everything back
+  faithfully, including the separators. No extra separators are added.
 
-  After restoration, every instance has a none separator below its
-  segment on input, workL, workR, and output stacks.
+  After restoration, every instance has a none separator above its
+  segment on input, workL, workR, and output stacks — matching the
+  quiescent format [none, stuff, none, stuff, ...].
 -/
 
 def step_restoreAll_state {Γw Γo Q : Type u}
@@ -844,8 +953,7 @@ def step_restoreAll_input {Γw Γo Q : Type u}
     Turing.TM2.Stmt (stackAlphabet Γw Γo Q) DovetailLabel (DovetailSigma Γw Γo Q) :=
   Turing.TM2.Stmt.peek DovetailStack.saveInput (fun σ i => { σ with peekInput := i })
   <| Turing.TM2.Stmt.branch (fun σ => σ.peekInput.isNone)
-    ( Turing.TM2.Stmt.push DovetailStack.input (fun _ => none)
-      <| Turing.TM2.Stmt.goto (fun _ => DovetailLabel.step_restoreAll_workL) )
+    ( Turing.TM2.Stmt.goto (fun _ => DovetailLabel.step_restoreAll_workL) )
     ( Turing.TM2.Stmt.pop DovetailStack.saveInput (fun σ _ => σ)
       <| Turing.TM2.Stmt.push DovetailStack.input
         (fun σ => σ.peekInput.getD none)
@@ -856,8 +964,7 @@ def step_restoreAll_workL {Γw Γo Q : Type u}
     Turing.TM2.Stmt (stackAlphabet Γw Γo Q) DovetailLabel (DovetailSigma Γw Γo Q) :=
   Turing.TM2.Stmt.peek DovetailStack.saveWorkL (fun σ w => { σ with peekWorkL := w })
   <| Turing.TM2.Stmt.branch (fun σ => σ.peekWorkL.isNone)
-    ( Turing.TM2.Stmt.push DovetailStack.workL (fun _ => none)
-      <| Turing.TM2.Stmt.goto (fun _ => DovetailLabel.step_restoreAll_workR) )
+    ( Turing.TM2.Stmt.goto (fun _ => DovetailLabel.step_restoreAll_workR) )
     ( Turing.TM2.Stmt.pop DovetailStack.saveWorkL (fun σ _ => σ)
       <| Turing.TM2.Stmt.push DovetailStack.workL
         (fun σ => σ.peekWorkL.getD none)
@@ -868,8 +975,7 @@ def step_restoreAll_workR {Γw Γo Q : Type u}
     Turing.TM2.Stmt (stackAlphabet Γw Γo Q) DovetailLabel (DovetailSigma Γw Γo Q) :=
   Turing.TM2.Stmt.peek DovetailStack.saveWorkR (fun σ w => { σ with peekWorkR := w })
   <| Turing.TM2.Stmt.branch (fun σ => σ.peekWorkR.isNone)
-    ( Turing.TM2.Stmt.push DovetailStack.workR (fun _ => none)
-      <| Turing.TM2.Stmt.goto (fun _ => DovetailLabel.step_restoreAll_output) )
+    ( Turing.TM2.Stmt.goto (fun _ => DovetailLabel.step_restoreAll_output) )
     ( Turing.TM2.Stmt.pop DovetailStack.saveWorkR (fun σ _ => σ)
       <| Turing.TM2.Stmt.push DovetailStack.workR
         (fun σ => σ.peekWorkR.getD none)
@@ -880,8 +986,7 @@ def step_restoreAll_output {Γw Γo Q : Type u}
     Turing.TM2.Stmt (stackAlphabet Γw Γo Q) DovetailLabel (DovetailSigma Γw Γo Q) :=
   Turing.TM2.Stmt.peek DovetailStack.saveOutput (fun σ o => { σ with peekOut := o })
   <| Turing.TM2.Stmt.branch (fun σ => σ.peekOut.isNone)
-    ( Turing.TM2.Stmt.push DovetailStack.output (fun _ => none)
-      <| Turing.TM2.Stmt.goto (fun _ => DovetailLabel.counter_increment) )
+    ( Turing.TM2.Stmt.goto (fun _ => DovetailLabel.counter_increment) )
     ( Turing.TM2.Stmt.pop DovetailStack.saveOutput (fun σ _ => σ)
       <| Turing.TM2.Stmt.push DovetailStack.output
         (fun σ => σ.peekOut.getD none)
@@ -944,7 +1049,7 @@ def counter_increment_restore {Γw Γo Q : Type u}
     Turing.TM2.Stmt (stackAlphabet Γw Γo Q) DovetailLabel (DovetailSigma Γw Γo Q) :=
   Turing.TM2.Stmt.peek DovetailStack.saveCounter (fun σ b => { σ with peekBit := b })
   <| Turing.TM2.Stmt.branch (fun σ => σ.peekBit.isNone)
-    ( Turing.TM2.Stmt.goto (fun _ => DovetailLabel.check_iterateInstances) )
+    ( Turing.TM2.Stmt.goto (fun _ => DovetailLabel.check_stripSeparators) )
     ( Turing.TM2.Stmt.pop DovetailStack.saveCounter (fun σ _ => σ)
       <| Turing.TM2.Stmt.push DovetailStack.counter
           (fun σ => σ.peekBit.getD (ULift.up false))
@@ -961,6 +1066,7 @@ def dovetailMachine {Γw Γo Q : Type u}
     (gen : Generator Γw Γo Q) :
     DovetailLabel → Turing.TM2.Stmt (stackAlphabet Γw Γo Q) DovetailLabel (DovetailSigma Γw Γo Q)
   -- Phase 1: Check
+  | DovetailLabel.check_stripSeparators => check_stripSeparators
   | DovetailLabel.check_iterateInstances => check_iterateInstances
   | DovetailLabel.check_testHalting => check_testHalting gen
   | DovetailLabel.check_compareOutput => check_compareOutput
@@ -980,6 +1086,7 @@ def dovetailMachine {Γw Γo Q : Type u}
   | DovetailLabel.spawn_copyCounter => spawn_copyCounter
   | DovetailLabel.spawn_restoreAndPush => spawn_restoreAndPush gen
   -- Phase 3: Step
+  | DovetailLabel.step_stripSeparators => step_stripSeparators
   | DovetailLabel.step_iterateInstances => step_iterateInstances
   | DovetailLabel.step_peekInput => step_peekInput
   | DovetailLabel.step_peekWorkR => step_peekWorkR gen
