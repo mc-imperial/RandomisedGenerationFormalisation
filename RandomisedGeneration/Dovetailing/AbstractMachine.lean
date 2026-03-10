@@ -14,13 +14,6 @@ structure DovetailState where
   instances : List (GenConfig Γw Γo Q)
   nextInput : ℕ
 
-def stepOrHalt
-  (gen : Generator Γw Γo Q)
-  (cfg : GenConfig Γw Γo Q) : GenConfig Γw Γo Q :=
-  match step gen cfg with
-  | none => cfg
-  | some c' => c'
-
 def dovetailStep
   (gen : Generator Γw Γo Q)
   (ds : DovetailState (Γw := Γw) (Γo := Γo) (Q := Q)) :
@@ -169,48 +162,6 @@ lemma nextInput_after_steps (gen : Generator Γw Γo Q) (n : ℕ) :
   | succ n ih =>
     rw [Function.iterate_succ', Function.comp_apply, dovetailStep]
     simp [ih]
-
-def stepNHalt
-  (gen : Generator Γw Γo Q)
-  (cfg : GenConfig Γw Γo Q)
-  : ℕ → GenConfig Γw Γo Q
-  | 0 => cfg
-  | n + 1 =>
-    let c := stepNHalt gen cfg n
-    match step gen c with
-    | none => c
-    | some c' => c'
-
-@[simp]
-lemma stepNHalt_zero (gen : Generator Γw Γo Q) (cfg : GenConfig Γw Γo Q) :
-    stepNHalt gen cfg 0 = cfg := rfl
-
-@[simp]
-lemma stepNHalt_succ (gen : Generator Γw Γo Q) (cfg : GenConfig Γw Γo Q) (n : ℕ) :
-    stepNHalt gen cfg (n + 1) =
-    match step gen (stepNHalt gen cfg n) with
-    | none => stepNHalt gen cfg n
-    | some c' => c' := rfl
-
-lemma stepOrHalt_stepNHalt (gen : Generator Γw Γo Q) (cfg : GenConfig Γw Γo Q) (n : ℕ) :
-    stepOrHalt gen (stepNHalt gen cfg n) = stepNHalt gen cfg (n + 1) := by
-  simp only [stepOrHalt, stepNHalt_succ]
-
-lemma stepNHalt_fixed (gen : Generator Γw Γo Q) (cfg : GenConfig Γw Γo Q) (n : ℕ)
-    (h : IsHalting gen (stepNHalt gen cfg n)) :
-    ∀ m, n ≤ m → stepNHalt gen cfg m = stepNHalt gen cfg n := by
-  intro m hm
-  induction m with
-  | zero =>
-    have : n = 0 := by omega
-    subst this
-    rfl
-  | succ m ih =>
-    by_cases hm' : n ≤ m
-    · simp [ih hm', IsHalting] at h ⊢; simp [h]
-    · have : n = m + 1 := by omega
-      subst this
-      rfl
 
 lemma instance_config_after_steps
   (gen : Generator Γw Γo Q)
