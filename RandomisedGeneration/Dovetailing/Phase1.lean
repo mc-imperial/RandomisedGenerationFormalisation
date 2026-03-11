@@ -18,6 +18,25 @@ set_option linter.unusedSectionVars false
 variable {Γw Γo Q : Type u}
 variable [Inhabited Γo] [FinEnum Γo] [FinEnum Γw] [Inhabited Γw] [FinEnum Q]
 
+/-- Popping the leading none from the quiescent stack format gives the
+    check phase format with the topmost instance's data exposed. -/
+lemma quiescent_format_tail {α : Type*} (f : ℕ → List (Option α)) (n : ℕ) (hn : 0 < n) :
+    (((List.range n).map (fun i => [none] ++ f i)).reverse.flatten).tail =
+    f (n - 1) ++
+    ((List.range (n - 1)).map (fun i => [none] ++ f i)).reverse.flatten := by
+  rw [show n = (n - 1) + 1 by omega]
+  simp [List.range_succ, List.map_append, List.reverse_append,
+        List.flatten_cons]
+
+/-- The quiescent format for none-separated stacks starts with none when nonempty. -/
+lemma quiescent_format_head {α : Type*} (f : ℕ → List (Option α)) (n : ℕ) (hn : 0 < n) :
+    ((List.range n).map (fun i => [none] ++ f i)).reverse.flatten =
+    none :: (f (n - 1) ++
+    ((List.range (n - 1)).map (fun i => [none] ++ f i)).reverse.flatten) := by
+  rw [show n = (n - 1) + 1 by omega]
+  simp [List.range_succ, List.map_append, List.reverse_append,
+        List.flatten_cons]
+
 /-- Mid-check-phase invariant: j instances have been checked (newest j),
     with their segments moved to save stacks. The remaining (round - j)
     oldest instances remain on the main stacks.
@@ -404,20 +423,16 @@ lemma checkPhase_advance_no_match
   sorry
 
 /-- If check_compareOutput is entered with matching output on top of the stacks,
-    the TM2 halts. The output stack has the output symbols reversed
-    (last symbol on top) followed by a separator or end. -/
+    the TM2 halts. -/
 lemma check_compareOutput_halts_on_match
     (gen : Generator Γw Γo Q)
     (target : List Γo)
     (tm2cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) DovetailLabel (DovetailSigma Γw Γo Q))
     (hLabel : tm2cfg.l = some DovetailLabel.check_compareOutput)
     (hTarget : tm2cfg.stk DovetailStack.target = target)
-    -- Output stack: reversed output on top, then none or empty
     (hOutput : ∃ rest : List (Option Γo),
       tm2cfg.stk DovetailStack.output = target.reverse.map some ++ rest ∧
-      (rest = [] ∨ rest.head? = some none))
-    (hSaveTarget : tm2cfg.stk DovetailStack.saveTarget = [])
-    (hSaveOutput : tm2cfg.stk DovetailStack.saveOutput = []) :
+      (rest = [] ∨ rest.head? = some none)) :
     ∃ tm2cfg',
       tm2cfg'.l = none ∧
       Turing.Reaches (Turing.TM2.step (dovetailMachine gen)) tm2cfg tm2cfg' := by
@@ -439,58 +454,62 @@ lemma checkPhase_halt_on_match
       tm2cfg'.l = none ∧
       Turing.Reaches (Turing.TM2.step (dovetailMachine gen)) tm2cfg tm2cfg' := by
   obtain ⟨hHalt_j, hOut_j⟩ := hMatch_j
+  have hHalt_j_rearranged : IsHalting gen (instanceConfig gen (round - j - 1) round) := by
+    have : round - 1 - j = round - j - 1 := by omega
+    rw [this] at hHalt_j
+    exact hHalt_j
   let idx := round - 1 - j
   let cfg := instanceConfig gen idx round
-  -- Step 1: check_iterateInstances pops state, goes to check_testHalting
-  -- The top of state stack is (instanceConfig gen idx round).state
-  -- Step 2: check_testHalting peeks input, peeks workR, applies delta, finds halting
-  -- Step 3: pushes state back, goes to check_compareOutput
-  -- These are a bounded number of TM2 steps from tm2cfg to some tm2cfg_co
-  -- at label check_compareOutput
-  have hSteps : ∃ tm2cfg_co : Turing.TM2.Cfg (stackAlphabet Γw Γo Q)
-        DovetailLabel (DovetailSigma Γw Γo Q),
-      tm2cfg_co.l = some DovetailLabel.check_compareOutput ∧
-      tm2cfg_co.stk DovetailStack.target = target ∧
-      (∃ rest : List (Option Γo), tm2cfg_co.stk DovetailStack.output =
-        cfg.output.map some ++ rest) ∧
-      tm2cfg_co.stk DovetailStack.saveTarget = [] ∧
-      tm2cfg_co.stk DovetailStack.saveOutput = [] ∧
-      Turing.Reaches (Turing.TM2.step (dovetailMachine gen)) tm2cfg tm2cfg_co := by
+  -- Step 1: check_iterateInstances → check_testHalting (one step)
+  obtain ⟨tm2cfg₁, hLabel₁, hPeekQ₁, hState₁, hOutput₁, hInput₁, hWorkL₁, hWorkR₁,
+    hCounter₁, hTarget₁, hSaveState₁, hSaveInput₁, hSaveWorkL₁, hSaveWorkR₁,
+    hSaveOutput₁, hSaveTarget₁, hSaveCounter₁, hReach₁⟩ :=
+    checkPhase_iterate_to_testHalting gen target round j tm2cfg hInv hj
+  -- Step 2: check_testHalting detects halting, pushes state back,
+  -- goes to check_compareOutput
+  have h_inv_tm2cfg₁ : CheckPhaseInvariant gen target round j tm2cfg₁ := by
     sorry
-  obtain ⟨tm2cfg_co, hLabel_co, hTarget_co, ⟨rest, hOutput_co⟩,
-    hSaveTarget_co, hSaveOutput_co, hReach_co⟩ := hSteps
-  -- Step 4: check_compareOutput compares and halts
-  -- output on stack is cfg.output.map some ++ rest (newest output symbol on top)
-  -- target on stack is target
-  -- cfg.output.reverse = target (from hOut_j)
-  -- So the comparison succeeds
+  obtain ⟨tm2cfg₂, hLabel₂, hState₂, hOutput₂, hSaveOutput₂, hInput₂, hWorkL₂,
+    hWorkR₂, hCounter₂, hTarget₂, hSaveState₂, hSaveInput₂, hSaveWorkL₂,
+    hSaveWorkR₂, hSaveTarget₂, hSaveCounter₂, hReach₂⟩ :=
+    checkPhase_testHalting_halts gen target round j tm2cfg₁
+      h_inv_tm2cfg₁
+      hj hHalt_j_rearranged
+  -- Step 3: check_compareOutput matches and halts
   have hOutEq : cfg.output = target.reverse :=
     List.reverse_injective (by rw [List.reverse_reverse]; exact hOut_j)
-  obtain ⟨tm2cfg', hHalt', hReach'⟩ := check_compareOutput_halts_on_match gen
-    target tm2cfg_co
-    hLabel_co hTarget_co
-    ⟨rest, by rw [hOutput_co, hOutEq], sorry⟩
-    hSaveTarget_co hSaveOutput_co
-  exact ⟨tm2cfg', hHalt', Relation.ReflTransGen.trans hReach_co hReach'⟩
-
-/-- Popping the leading none from the quiescent stack format gives the
-    check phase format with the topmost instance's data exposed. -/
-lemma quiescent_format_tail {α : Type*} (f : ℕ → List (Option α)) (n : ℕ) (hn : 0 < n) :
-    (((List.range n).map (fun i => [none] ++ f i)).reverse.flatten).tail =
-    f (n - 1) ++
-    ((List.range (n - 1)).map (fun i => [none] ++ f i)).reverse.flatten := by
-  rw [show n = (n - 1) + 1 by omega]
-  simp [List.range_succ, List.map_append, List.reverse_append,
-        List.flatten_cons]
-
-/-- The quiescent format for none-separated stacks starts with none when nonempty. -/
-lemma quiescent_format_head {α : Type*} (f : ℕ → List (Option α)) (n : ℕ) (hn : 0 < n) :
-    ((List.range n).map (fun i => [none] ++ f i)).reverse.flatten =
-    none :: (f (n - 1) ++
-    ((List.range (n - 1)).map (fun i => [none] ++ f i)).reverse.flatten) := by
-  rw [show n = (n - 1) + 1 by omega]
-  simp [List.range_succ, List.map_append, List.reverse_append,
-        List.flatten_cons]
+  -- The output stack at tm2cfg₂ has cfg.output.map some on top
+  -- which equals target.reverse.map some
+  -- The rest starts with none (next instance's separator) or is empty
+  have hOutputMatch : ∃ rest : List (Option Γo),
+      tm2cfg₂.stk DovetailStack.output = target.reverse.map some ++ rest ∧
+      (rest = [] ∨ rest.head? = some none) := by
+    rw [hOutput₂]
+    have h_idx : round - 1 - j = round - j - 1 := by omega
+    refine ⟨((List.range (round - j - 1)).map (fun i =>
+      [none] ++ (instanceConfig gen i round).output.map some)).reverse.flatten, ?_, ?_⟩
+    · congr 1
+      rw [← h_idx, hOutEq]
+    · by_cases h : round - j - 1 = 0
+      · left; simp [h]
+      · right
+        have h_eq := quiescent_format_head
+          (fun i => (instanceConfig gen i round).output.map some) (round - j - 1) (by omega)
+        have : (List.map (fun i => [none] ++ List.map some (instanceConfig gen i round).output)
+            (List.range (round - j - 1))).reverse.flatten =
+          (List.map (fun i => none :: List.map some (instanceConfig gen i round).output)
+            (List.range (round - j - 1))).reverse.flatten := by
+          congr 1
+        rw [this]
+        simp only [List.nil_append, List.cons_append] at h_eq
+        rw [h_eq]
+        rfl
+  have hTarget₂' : tm2cfg₂.stk DovetailStack.target = target := by
+    rw [hTarget₂, hTarget₁, hInv.target_preserved]
+  obtain ⟨tm2cfg', hHalt', hReach'⟩ :=
+    check_compareOutput_halts_on_match gen target tm2cfg₂ hLabel₂ hTarget₂' hOutputMatch
+  exact ⟨tm2cfg', hHalt',
+    Relation.ReflTransGen.trans hReach₁ (Relation.ReflTransGen.trans hReach₂ hReach')⟩
 
 /-- When the quiescent invariant holds and there are instances (round > 0),
     check_stripSeparators takes one TM2 step to reach check_iterateInstances,
@@ -523,17 +542,65 @@ lemma check_stripSeparators_step
   rw [show l = some DovetailLabel.check_stripSeparators from hInv.label_eq]
   -- State stack is nonempty
   have hStateNe : S DovetailStack.state ≠ [] := by
-    sorry
+    have := hInv.state
+    simp only at this
+    rw [this]
+    simp [List.reverse_eq_nil_iff, List.map_eq_nil_iff]
+    omega
   obtain ⟨q, qs, hState⟩ := List.exists_cons_of_ne_nil hStateNe
   obtain ⟨hST, hSC, hSI, hSS, hSWL, hSWR, hSO⟩ := hInv.save_empty
   have hInputHead : S DovetailStack.input =
       none :: (S DovetailStack.input).tail := by
-    sorry
+    have hInputEq : S DovetailStack.input = none :: (S DovetailStack.input).tail := by
+        have h := hInv.input
+        simp only at h
+        rw [h]
+        rw [quiescent_format_head _ round hRound]
+        simp [List.tail_cons]
+    simp only at hInputEq
+    rw [hInputEq]
+    simp [List.tail_cons]
   have hOutputHead : S DovetailStack.output =
       none :: (S DovetailStack.output).tail := by
-    sorry
+    have h := hInv.output
+    simp only at h
+    rw [h]
+    rw [quiescent_format_head _ round hRound]
+    simp [List.tail_cons]
   simp only [Turing.TM2.step, dovetailMachine, check_stripSeparators, Option.some.injEq]
-  sorry
+  have hWorkRHead : S DovetailStack.workR = none :: (S DovetailStack.workR).tail := by
+    have h := hInv.workR
+    simp only at h
+    rw [h]
+    simp only [List.cons_append, List.nil_append]
+    have h_eq := quiescent_format_head
+      (fun i => [some ((instanceConfig gen i round).work (instanceConfig gen i round).workIndex)] ++
+        segWorkR (instanceConfig gen i round) (round - i)) round hRound
+    simp only [List.nil_append, List.cons_append] at h_eq
+    rw [h_eq]
+    simp [List.tail_cons]
+  have hWorkLHead : S DovetailStack.workL = none :: (S DovetailStack.workL).tail := by
+    have h := hInv.workL
+    simp only at h
+    rw [h]
+    simp only [List.cons_append, List.nil_append]
+    have h_eq := quiescent_format_head
+        (fun i => [some ((instanceConfig gen i round).work
+          (instanceConfig gen i round).workIndex)] ++
+          segWorkL (instanceConfig gen i round) (round - i)) round hRound
+    simp only [List.nil_append, List.cons_append] at h_eq
+    rw [h_eq]
+    simp [List.tail_cons]
+  simp only [Turing.TM2.stepAux, hState, List.head?_cons, Option.isNone_some, cond_false]
+  rw [hInputHead, hOutputHead, hWorkLHead, hWorkRHead]
+  simp only [List.tail_cons]
+  congr 1
+  funext k
+  cases k <;> simp only [Function.update, reduceCtorEq, ↓reduceDIte, List.cons.injEq, true_and]
+  · simp only at hSI; exact hSI
+  · simp only at hSWL; exact hSWL
+  · simp only at hSWR; exact hSWR
+  · simp only at hSO; exact hSO
 
 /-- The quiescent format for none-separated stacks starts with none when nonempty. -/
 lemma quiescent_to_checkPhase
