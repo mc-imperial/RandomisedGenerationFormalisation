@@ -568,15 +568,14 @@ lemma quiescent_to_checkPhase
     rw [hInv.input]
     exact quiescent_format_head _ round hRound
   have hWorkREq : tm2cfg.stk DovetailStack.workR =
-      none :: (let cfg := instanceConfig gen (round - 1) round
-      [some (cfg.work cfg.workIndex)] ++ segWorkR cfg (round - (round - 1)) ++
-      ((List.range (round - 1)).map (fun i =>
-        let cfg := instanceConfig gen i round
-        [none] ++ [some (cfg.work cfg.workIndex)] ++ segWorkR cfg (round - i)
-      )).reverse.flatten) := by
-    sorry
-    --rw [hInv.workR]
-    --exact quiescent_format_head _ round hRound
+        none :: (let cfg := instanceConfig gen (round - 1) round
+          [some (cfg.work cfg.workIndex)] ++ segWorkR cfg (round - (round - 1)) ++
+          ((List.range (round - 1)).map (fun i =>
+            let cfg := instanceConfig gen i round
+            [none] ++ [some (cfg.work cfg.workIndex)] ++ segWorkR cfg (round - i)
+          )).reverse.flatten) := by
+    rw [hInv.workR]
+    exact quiescent_format_head _ round hRound
   have hWorkLEq : tm2cfg.stk DovetailStack.workL =
       none :: (let cfg := instanceConfig gen (round - 1) round
       [some (cfg.work cfg.workIndex)] ++ segWorkL cfg (round - (round - 1)) ++
@@ -584,9 +583,8 @@ lemma quiescent_to_checkPhase
         let cfg := instanceConfig gen i round
         [none] ++ [some (cfg.work cfg.workIndex)] ++ segWorkL cfg (round - i)
       )).reverse.flatten) := by
-    sorry
-    --rw [hInv.workL]
-    --exact quiescent_format_head _ round hRound
+    rw [hInv.workL]
+    exact quiescent_format_head _ round hRound
   -- Simulate the TM2 step and construct the CheckPhaseInvariant
   refine ⟨{
     l := some DovetailLabel.check_iterateInstances
