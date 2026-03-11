@@ -13,6 +13,7 @@ namespace RandomisedGeneration
 universe u
 
 section Dovetailing
+set_option linter.unusedSectionVars false
 
 variable {Γw Γo Q : Type u}
 variable [Inhabited Γo] [FinEnum Γo] [FinEnum Γw] [Inhabited Γw] [FinEnum Q]
@@ -23,13 +24,11 @@ variable [Inhabited Γo] [FinEnum Γo] [FinEnum Γw] [Inhabited Γw] [FinEnum Q]
 
     The check phase processes instances from newest to oldest (top of stack).
     Before the loop, check_stripSeparators stripped the newest instance's
-    leading separator. Subsequent separators are consumed by the save routines.
-    So at check_iterateInstances, the main stacks have no leading separator:
-    the data of the next instance to check is directly on top.
+    leading separator and pushed none to each save stack. Subsequent
+    separators are consumed by the save routines and pushed to save.
 
-    After checking j instances, the main stacks hold instances 0..round-j-1
-    (without a leading separator on the topmost) and the save stacks hold
-    instances round-j..round-1 (with separators between them).
+    At check_iterateInstances, the main stacks have no leading separator:
+    the data of the next instance to check is directly on top.
 
     None of the checked instances had matching output. -/
 structure CheckPhaseInvariant
@@ -45,9 +44,6 @@ structure CheckPhaseInvariant
     ¬(IsHalting gen (instanceConfig gen i round) ∧
       (instanceConfig gen i round).output.reverse = target)
   -- ═══ Main stacks: oldest round-j instances (indices 0..round-j-1) ═══
-  -- No leading separator on the topmost instance. Separators between remaining instances.
-  -- For j < round, the format is [stuff_{round-j-1}, none, stuff_{round-j-2}, none, ..., stuff_0]
-  -- For j = round, all stacks are empty.
   state : tm2cfg.stk DovetailStack.state =
     ((List.range (round - j)).map
       (fun i => (instanceConfig gen i round).state)).reverse
@@ -61,56 +57,56 @@ structure CheckPhaseInvariant
     if round - j = 0 then []
     else
       let cfg := instanceConfig gen (round - j - 1) round
-      ((Nat.bits (round - j - 1)).drop cfg.inputIndex).map (fun b => some (ULift.up b)) ++
+      ((Nat.bits (round - j - 1)).drop cfg.inputIndex).map
+        (fun b => some (ULift.up b)) ++
       ((List.range (round - j - 1)).map (fun i =>
         let cfg := instanceConfig gen i round
         [none] ++ ((Nat.bits i).drop cfg.inputIndex).map
           (fun b => some (ULift.up b)))).reverse.flatten
-  workR_len : (splitSegments (tm2cfg.stk DovetailStack.workR)).length = round - j
-  workR : ∀ i (hi : i < round - j),
-    workRMatches gen (instanceConfig gen i round)
-      ((splitSegments (tm2cfg.stk DovetailStack.workR)).get ⟨i, by omega⟩)
-      (round - i)
-  workR_head : ∀ i (hi : i < round - j),
-    let cfg := instanceConfig gen i round
-    let seg := (splitSegments (tm2cfg.stk DovetailStack.workR)).get ⟨i, by
-      have := workR_len; omega⟩
-    seg.headI = cfg.work cfg.workIndex
-  workL_len : (splitSegments (tm2cfg.stk DovetailStack.workL)).length = round - j
-  workL : ∀ i (hi : i < round - j),
-    workLMatches gen (instanceConfig gen i round)
-      ((splitSegments (tm2cfg.stk DovetailStack.workL)).get ⟨i, by omega⟩)
-      (round - i)
-  workL_head : ∀ i (hi : i < round - j),
-    let cfg := instanceConfig gen i round
-    let seg := (splitSegments (tm2cfg.stk DovetailStack.workL)).get ⟨i, by
-      have := workL_len; omega⟩
-    seg.headI = cfg.work cfg.workIndex
-  -- ═══ Save stacks: newest j instances (indices round-j..round-1) ═══
-  -- Saved in processing order: first processed (index round-1) at bottom,
-  -- last processed (index round-j) on top. Separators between segments.
+  workR : tm2cfg.stk DovetailStack.workR =
+    if round - j = 0 then []
+    else
+      let cfg := instanceConfig gen (round - j - 1) round
+      [some (cfg.work cfg.workIndex)] ++ segWorkR cfg (round - (round - j - 1)) ++
+      ((List.range (round - j - 1)).map (fun i =>
+        let cfg := instanceConfig gen i round
+        [none] ++ [some (cfg.work cfg.workIndex)] ++ segWorkR cfg (round - i)
+      )).reverse.flatten
+  workL : tm2cfg.stk DovetailStack.workL =
+    if round - j = 0 then []
+    else
+      let cfg := instanceConfig gen (round - j - 1) round
+      [some (cfg.work cfg.workIndex)] ++ segWorkL cfg (round - (round - j - 1)) ++
+      ((List.range (round - j - 1)).map (fun i =>
+        let cfg := instanceConfig gen i round
+        [none] ++ [some (cfg.work cfg.workIndex)] ++ segWorkL cfg (round - i)
+      )).reverse.flatten
+  -- ═══ Save stacks ═══
   saveState : tm2cfg.stk DovetailStack.saveState =
-    (List.range j).map
-      (fun k => (instanceConfig gen (round - j + k) round).state)
+    ((List.range j).map
+      (fun k => (instanceConfig gen (round - 1 - k) round).state)).reverse
   saveOutput : tm2cfg.stk DovetailStack.saveOutput =
     ((List.range j).map (fun k =>
-      let i := round - j + k
-      (instanceConfig gen i round).output.map some ++ [none])).flatten
+      let i := round - 1 - k
+      (instanceConfig gen i round).output.map some ++ [none])).flatten ++ [none]
   saveInput : tm2cfg.stk DovetailStack.saveInput =
     ((List.range j).map (fun k =>
-      let i := round - j + k
+      let i := round - 1 - k
       let cfg := instanceConfig gen i round
-      ((Nat.bits i).drop cfg.inputIndex).map (fun b => some (ULift.up b)) ++ [none])).flatten
-  saveWorkR_len : (splitSegments (tm2cfg.stk DovetailStack.saveWorkR)).length = j
-  saveWorkR : ∀ k (hk : k < j),
-    workRMatches gen (instanceConfig gen (round - j + k) round)
-      ((splitSegments (tm2cfg.stk DovetailStack.saveWorkR)).get ⟨k, by omega⟩)
-      (round - (round - j + k))
-  saveWorkL_len : (splitSegments (tm2cfg.stk DovetailStack.saveWorkL)).length = j
-  saveWorkL : ∀ k (hk : k < j),
-    workLMatches gen (instanceConfig gen (round - j + k) round)
-      ((splitSegments (tm2cfg.stk DovetailStack.saveWorkL)).get ⟨k, by omega⟩)
-      (round - (round - j + k))
+      ((Nat.bits i).drop cfg.inputIndex).map
+        (fun b => some (ULift.up b)) ++ [none])).flatten ++ [none]
+  saveWorkR : tm2cfg.stk DovetailStack.saveWorkR =
+    ((List.range j).map (fun k =>
+      let i := round - 1 - k
+      let cfg := instanceConfig gen i round
+      segWorkR cfg (round - i) ++ [some (cfg.work cfg.workIndex)] ++ [none]
+    )).flatten ++ [none]
+  saveWorkL : tm2cfg.stk DovetailStack.saveWorkL =
+    ((List.range j).map (fun k =>
+      let i := round - 1 - k
+      let cfg := instanceConfig gen i round
+      segWorkL cfg (round - i) ++ [some (cfg.work cfg.workIndex)] ++ [none]
+    )).flatten ++ [none]
   -- ═══ Preserved ═══
   counter : tm2cfg.stk DovetailStack.counter = (Nat.bits round).map ULift.up
   target_preserved : tm2cfg.stk DovetailStack.target = target
@@ -477,59 +473,179 @@ lemma checkPhase_halt_on_match
     hSaveTarget_co hSaveOutput_co
   exact ⟨tm2cfg', hHalt', Relation.ReflTransGen.trans hReach_co hReach'⟩
 
--- THE FOLLOWING NEEDS WORK AND COMES FROM BEFORE WE STARTED ON STRIP
--- A QuiescentInvariant at check_iterateInstances gives a CheckPhaseInvariant at j=0.
--- lemma quiescent_to_checkPhase
---     (gen : Generator Γw Γo Q)
---     (target : List Γo)
---     (round : ℕ)
---     (tm2cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) DovetailLabel (DovetailSigma Γw Γo Q))
---     (hInv : QuiescentInvariant gen target round DovetailLabel.check_iterateInstances tm2cfg) :
---     CheckPhaseInvariant gen target round 0 tm2cfg where
---   label_eq := hInv.label_eq
---   hj := Nat.zero_le _
---   noMatch := by intro i hi; omega
---   state := by simp [hInv.state]
---   output := by simp [hInv.output]
---   input := by simp [hInv.input]
---   workR_len := by simp [hInv.workR_len]
---   workR := hInv.workR
---   workR_head := by
---     intro i hi
---     simp only [Nat.sub_zero] at hi
---     exact hInv.workR_head i hi
---   workL_len := by simp [hInv.workL_len]
---   workL := hInv.workL
---   workL_head := by
---     intro i hi
---     simp only [Nat.sub_zero] at hi
---     exact hInv.workL_head i hi
---   saveState := by
---     simp only [tsub_zero, List.range_zero, List.map_nil]
---     exact hInv.save_empty.2.2.2.1
---   saveOutput := by
---     simp only [tsub_zero, List.cons_append, List.nil_append, List.range_zero,
---       List.map_nil, List.flatten_nil]
---     exact hInv.save_empty.2.2.2.2.2.2
---   saveInput := by
---     simp only [tsub_zero, List.map_drop, List.cons_append, List.nil_append,
---       List.range_zero, List.map_nil, List.flatten_nil]
---     exact hInv.save_empty.2.2.1
---   saveWorkR_len := by
---     simp only [splitSegments, List.length_eq_zero_iff]
---     have h := hInv.save_empty.2.2.2.2.2.1
---     rw [h]
---   saveWorkR := by intro k hk; omega
---   saveWorkL_len := by
---     simp only [splitSegments, List.length_eq_zero_iff]
---     have h := hInv.save_empty.2.2.2.2.1
---     rw [h]
---   saveWorkL := by intro k hk; omega
---   counter := hInv.counter
---   target_preserved := hInv.target_preserved
---   saveTarget_empty := hInv.save_empty.1
---   saveCounter_empty := hInv.save_empty.2.1
+/-- Popping the leading none from the quiescent stack format gives the
+    check phase format with the topmost instance's data exposed. -/
+lemma quiescent_format_tail {α : Type*} (f : ℕ → List (Option α)) (n : ℕ) (hn : 0 < n) :
+    (((List.range n).map (fun i => [none] ++ f i)).reverse.flatten).tail =
+    f (n - 1) ++
+    ((List.range (n - 1)).map (fun i => [none] ++ f i)).reverse.flatten := by
+  rw [show n = (n - 1) + 1 by omega]
+  simp [List.range_succ, List.map_append, List.reverse_append,
+        List.flatten_cons]
 
+/-- The quiescent format for none-separated stacks starts with none when nonempty. -/
+lemma quiescent_format_head {α : Type*} (f : ℕ → List (Option α)) (n : ℕ) (hn : 0 < n) :
+    ((List.range n).map (fun i => [none] ++ f i)).reverse.flatten =
+    none :: (f (n - 1) ++
+    ((List.range (n - 1)).map (fun i => [none] ++ f i)).reverse.flatten) := by
+  rw [show n = (n - 1) + 1 by omega]
+  simp [List.range_succ, List.map_append, List.reverse_append,
+        List.flatten_cons]
+
+/-- When the quiescent invariant holds and there are instances (round > 0),
+    check_stripSeparators takes one TM2 step to reach check_iterateInstances,
+    popping the leading none from input/workL/workR/output and pushing none
+    to each save stack. -/
+lemma check_stripSeparators_step
+    (gen : Generator Γw Γo Q)
+    (target : List Γo)
+    (round : ℕ)
+    (tm2cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) DovetailLabel (DovetailSigma Γw Γo Q))
+    (hInv : QuiescentInvariant gen target round tm2cfg)
+    (hRound : 0 < round) :
+    Turing.TM2.step (dovetailMachine gen) tm2cfg = some
+      { l := some DovetailLabel.check_iterateInstances
+        var := { tm2cfg.var with
+          peekQ := (tm2cfg.stk DovetailStack.state).head? }
+        stk := fun k => match k with
+          | DovetailStack.input      => (tm2cfg.stk DovetailStack.input).tail
+          | DovetailStack.workL      => (tm2cfg.stk DovetailStack.workL).tail
+          | DovetailStack.workR      => (tm2cfg.stk DovetailStack.workR).tail
+          | DovetailStack.output     => (tm2cfg.stk DovetailStack.output).tail
+          | DovetailStack.saveInput  => [none]
+          | DovetailStack.saveWorkL  => [none]
+          | DovetailStack.saveWorkR  => [none]
+          | DovetailStack.saveOutput => [none]
+          | other                    => tm2cfg.stk other
+      } := by
+  cases tm2cfg with | mk l v S =>
+  simp only at hInv ⊢
+  rw [show l = some DovetailLabel.check_stripSeparators from hInv.label_eq]
+  -- State stack is nonempty
+  have hStateNe : S DovetailStack.state ≠ [] := by
+    sorry
+  obtain ⟨q, qs, hState⟩ := List.exists_cons_of_ne_nil hStateNe
+  obtain ⟨hST, hSC, hSI, hSS, hSWL, hSWR, hSO⟩ := hInv.save_empty
+  have hInputHead : S DovetailStack.input =
+      none :: (S DovetailStack.input).tail := by
+    sorry
+  have hOutputHead : S DovetailStack.output =
+      none :: (S DovetailStack.output).tail := by
+    sorry
+  simp only [Turing.TM2.step, dovetailMachine, check_stripSeparators, Option.some.injEq]
+  sorry
+
+/-- The quiescent format for none-separated stacks starts with none when nonempty. -/
+lemma quiescent_to_checkPhase
+    (gen : Generator Γw Γo Q)
+    (target : List Γo)
+    (round : ℕ)
+    (tm2cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) DovetailLabel (DovetailSigma Γw Γo Q))
+    (hInv : QuiescentInvariant gen target round tm2cfg)
+    (hRound : 0 < round) :
+    ∃ tm2cfg',
+      CheckPhaseInvariant gen target round 0 tm2cfg' ∧
+      Turing.Reaches (Turing.TM2.step (dovetailMachine gen)) tm2cfg tm2cfg' := by
+  -- State stack is non-empty
+  have hStateNe : tm2cfg.stk DovetailStack.state ≠ [] := by
+    rw [hInv.state]
+    simp [List.reverse_eq_nil_iff, List.map_eq_nil_iff]
+    omega
+  -- The quiescent stacks start with none
+  have hOutputEq : tm2cfg.stk DovetailStack.output =
+      none :: ((instanceConfig gen (round - 1) round).output.map some ++
+      ((List.range (round - 1)).map (fun i =>
+        [none] ++ (instanceConfig gen i round).output.map some)).reverse.flatten) := by
+    rw [hInv.output]
+    exact quiescent_format_head _ round hRound
+  have hInputEq : tm2cfg.stk DovetailStack.input =
+      none :: (let cfg := instanceConfig gen (round - 1) round
+      ((Nat.bits (round - 1)).drop cfg.inputIndex).map (fun b => some (ULift.up b)) ++
+      ((List.range (round - 1)).map (fun i =>
+        let cfg := instanceConfig gen i round
+        [none] ++ ((Nat.bits i).drop cfg.inputIndex).map
+          (fun b => some (ULift.up b)))).reverse.flatten) := by
+    rw [hInv.input]
+    exact quiescent_format_head _ round hRound
+  have hWorkREq : tm2cfg.stk DovetailStack.workR =
+      none :: (let cfg := instanceConfig gen (round - 1) round
+      [some (cfg.work cfg.workIndex)] ++ segWorkR cfg (round - (round - 1)) ++
+      ((List.range (round - 1)).map (fun i =>
+        let cfg := instanceConfig gen i round
+        [none] ++ [some (cfg.work cfg.workIndex)] ++ segWorkR cfg (round - i)
+      )).reverse.flatten) := by
+    sorry
+    --rw [hInv.workR]
+    --exact quiescent_format_head _ round hRound
+  have hWorkLEq : tm2cfg.stk DovetailStack.workL =
+      none :: (let cfg := instanceConfig gen (round - 1) round
+      [some (cfg.work cfg.workIndex)] ++ segWorkL cfg (round - (round - 1)) ++
+      ((List.range (round - 1)).map (fun i =>
+        let cfg := instanceConfig gen i round
+        [none] ++ [some (cfg.work cfg.workIndex)] ++ segWorkL cfg (round - i)
+      )).reverse.flatten) := by
+    sorry
+    --rw [hInv.workL]
+    --exact quiescent_format_head _ round hRound
+  -- Simulate the TM2 step and construct the CheckPhaseInvariant
+  refine ⟨{
+    l := some DovetailLabel.check_iterateInstances
+    var := { tm2cfg.var with peekQ := (tm2cfg.stk DovetailStack.state).head? }
+    stk := fun k => match k with
+      | DovetailStack.input      => (tm2cfg.stk DovetailStack.input).tail
+      | DovetailStack.workL      => (tm2cfg.stk DovetailStack.workL).tail
+      | DovetailStack.workR      => (tm2cfg.stk DovetailStack.workR).tail
+      | DovetailStack.output     => (tm2cfg.stk DovetailStack.output).tail
+      | DovetailStack.saveInput  => [none]
+      | DovetailStack.saveWorkL  => [none]
+      | DovetailStack.saveWorkR  => [none]
+      | DovetailStack.saveOutput => [none]
+      | other                    => tm2cfg.stk other
+  }, ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩, ?_⟩
+  -- label_eq
+  · rfl
+  -- hj
+  · exact Nat.zero_le _
+  -- noMatch
+  · intro i hi; omega
+  -- state
+  · simp only [Nat.sub_zero]; exact hInv.state
+  -- output
+  · simp only [Nat.sub_zero, show round ≠ 0 by omega, ↓reduceIte]
+    rw [hOutputEq]; rfl
+  -- input
+  · simp only [Nat.sub_zero, show round ≠ 0 by omega, ↓reduceIte]
+    rw [hInputEq]; rfl
+  -- workR
+  · simp only [Nat.sub_zero, show round ≠ 0 by omega, ↓reduceIte]
+    rw [hWorkREq]; rfl
+  -- workL
+  · simp only [Nat.sub_zero, show round ≠ 0 by omega, ↓reduceIte]
+    rw [hWorkLEq]; rfl
+  -- saveState
+  · simp only [List.range_zero, List.map_nil, List.reverse_nil]
+    exact hInv.save_empty.2.2.2.1
+  -- saveOutput
+  · simp [List.range_zero]
+  -- saveInput
+  · simp [List.range_zero]
+  -- saveWorkR
+  · simp [List.range_zero]
+  -- saveWorkL
+  · simp [List.range_zero]
+  -- counter
+  · exact hInv.counter
+  -- target_preserved
+  · exact hInv.target_preserved
+  -- saveTarget_empty
+  · exact hInv.save_empty.1
+  -- saveCounter_empty
+  · exact hInv.save_empty.2.1
+  -- Reaches: one TM2 step
+  · have hStep := check_stripSeparators_step gen target round tm2cfg hInv hRound
+    exact Relation.ReflTransGen.single hStep
+
+set_option linter.unusedSectionVars true
 end Dovetailing
 
 end RandomisedGeneration

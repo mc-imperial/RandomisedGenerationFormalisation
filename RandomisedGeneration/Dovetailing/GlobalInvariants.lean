@@ -8,27 +8,10 @@ namespace RandomisedGeneration
 universe u
 
 section Dovetailing
+set_option linter.unusedSectionVars false
 
 variable {Γw Γo Q : Type u}
 variable [Inhabited Γo] [FinEnum Γo] [FinEnum Γw] [Inhabited Γw] [FinEnum Q]
-
-/-- Split a none-separated stack into segments.
-    The stack has newest data on top (head of list), with the format
-    [none, stuff, none, stuff, ..., none, stuff] where none is a leading
-    separator for each segment.
-    Returns segments oldest-first (index 0 = oldest instance). -/
-def splitSegments {α : Type u} : List (Option α) → List (List α)
-  | [] => []
-  | l =>
-    let rec go (acc : List α) (rest : List (Option α)) : List (List α) :=
-      match rest with
-      | [] => [acc.reverse]
-      | none :: tl => acc.reverse :: go [] tl
-      | some x :: tl => go (x :: acc) tl
-    let segs := match l with
-      | none :: tl => go [] tl
-      | _ => go [] l
-    segs.reverse
 
 /-- The config of instance i after round rounds. -/
 def instanceConfig
@@ -57,6 +40,26 @@ def workLMatches
       seg[j] = some (cfg.work (cfg.workIndex - 1 - ↑j))
     else
       cfg.work (cfg.workIndex - 1 - ↑j) = gen.blank
+
+def segWorkR (cfg : GenConfig Γw Γo Q) (bound : ℕ) : List (Option Γw) :=
+  (List.range bound).map (fun j => some (cfg.work (cfg.workIndex + 1 + ↑j)))
+
+def segWorkL (cfg : GenConfig Γw Γo Q) (bound : ℕ) : List (Option Γw) :=
+  (List.range bound).map (fun j => some (cfg.work (cfg.workIndex - 1 - ↑j)))
+
+lemma workRMatches_segWorkR (gen : Generator Γw Γo Q)
+    (cfg : GenConfig Γw Γo Q) (bound : ℕ) :
+    workRMatches gen cfg (segWorkR cfg bound) bound := by
+  intro j hj
+  simp [segWorkR, List.length_map, List.length_range]
+  omega
+
+lemma workLMatches_segWorkL (gen : Generator Γw Γo Q)
+    (cfg : GenConfig Γw Γo Q) (bound : ℕ) :
+    workLMatches gen cfg (segWorkL cfg bound) bound := by
+  intro j hj
+  simp [segWorkL, List.length_map, List.length_range]
+  omega
 
 /-- Quiescent invariant: the TM2 stacks correctly represent the state of
     the abstract dovetail machine at the start of a round.
@@ -96,26 +99,16 @@ structure QuiescentInvariant
   output : tm2cfg.stk DovetailStack.output =
     ((List.range round).map (fun i =>
       [none] ++ (instanceConfig gen i round).output.map some)).reverse.flatten
-  workR_len : (splitSegments (tm2cfg.stk DovetailStack.workR)).length = round
-  workR : ∀ i (hi : i < round),
-    workRMatches gen (instanceConfig gen i round)
-      ((splitSegments (tm2cfg.stk DovetailStack.workR)).get ⟨i, by omega⟩)
-      (round - i)
-  workR_head : ∀ i (hi : i < round),
-    let cfg := instanceConfig gen i round
-    let seg := (splitSegments (tm2cfg.stk DovetailStack.workR)).get ⟨i, by
-      have := workR_len; omega⟩
-    seg.headI = cfg.work cfg.workIndex
-  workL_len : (splitSegments (tm2cfg.stk DovetailStack.workL)).length = round
-  workL : ∀ i (hi : i < round),
-    workLMatches gen (instanceConfig gen i round)
-      ((splitSegments (tm2cfg.stk DovetailStack.workL)).get ⟨i, by omega⟩)
-      (round - i)
-  workL_head : ∀ i (hi : i < round),
-    let cfg := instanceConfig gen i round
-    let seg := (splitSegments (tm2cfg.stk DovetailStack.workL)).get ⟨i, by
-      have := workL_len; omega⟩
-    seg.headI = cfg.work cfg.workIndex
+  workR : tm2cfg.stk DovetailStack.workR =
+    ((List.range round).map (fun i =>
+      let cfg := instanceConfig gen i round
+      [none] ++ [some (cfg.work cfg.workIndex)] ++ segWorkR cfg (round - i)
+    )).reverse.flatten
+  workL : tm2cfg.stk DovetailStack.workL =
+    ((List.range round).map (fun i =>
+      let cfg := instanceConfig gen i round
+      [none] ++ [some (cfg.work cfg.workIndex)] ++ segWorkL cfg (round - i)
+    )).reverse.flatten
   target_preserved : tm2cfg.stk DovetailStack.target = target
   save_empty :
     tm2cfg.stk DovetailStack.saveTarget = [] ∧
@@ -126,6 +119,7 @@ structure QuiescentInvariant
     tm2cfg.stk DovetailStack.saveWorkR = [] ∧
     tm2cfg.stk DovetailStack.saveOutput = []
 
+set_option linter.unusedSectionVars true
 end Dovetailing
 
 end RandomisedGeneration

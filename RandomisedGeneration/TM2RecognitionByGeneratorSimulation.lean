@@ -34,21 +34,10 @@ lemma quiescentInvariant_init
     simp [dovetailInit, Turing.TM2.init, Function.update]
   output := by
     rfl
-  workR_len := by
-    simp [splitSegments, dovetailInit, Turing.TM2.init]
   workR := by
-    intro i hi
-    omega
-  workR_head := by
-    intro i hi
-    omega
-  workL_len := by simp [splitSegments, dovetailInit, Turing.TM2.init]
+    rfl
   workL := by
-    intro i hi
-    omega
-  workL_head := by
-    intro i hi
-    omega
+    rfl
   target_preserved := by
     rfl
   save_empty := by
