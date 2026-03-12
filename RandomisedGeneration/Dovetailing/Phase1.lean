@@ -150,6 +150,7 @@ lemma checkPhase_iterate_to_testHalting
     ∃ tm2cfg',
       tm2cfg'.l = some DovetailLabel.check_testHalting ∧
       tm2cfg'.var.peekQ = some (instanceConfig gen (round - j - 1) round).state ∧
+      tm2cfg'.var.transQ = some (instanceConfig gen (round - j - 1) round).state ∧
       tm2cfg'.stk DovetailStack.state =
         ((List.range (round - j - 1)).map
           (fun i => (instanceConfig gen i round).state)).reverse ∧
@@ -188,7 +189,8 @@ lemma checkPhase_iterate_to_testHalting
     stk := Function.update tm2cfg.stk DovetailStack.state
       ((List.range (round - j - 1)).map
         (fun i => (instanceConfig gen i round).state)).reverse
-  }, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+  }, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+  · rfl
   · rfl
   · rfl
   · rfl
@@ -219,186 +221,6 @@ lemma checkPhase_advance_no_match
       CheckPhaseInvariant gen target round (j + 1) tm2cfg' ∧
       Turing.Reaches (Turing.TM2.step (dovetailMachine gen)) tm2cfg tm2cfg' := by
   sorry
-
-/-- When `CheckPhaseInvariant` holds with `j < round` and the next instance is halting,
-    the machine reaches `check_compareOutput` from `check_iterateInstances`.
-
-    This combines the step from check_iterateInstances to check_testHalting
-    (popping state) with the step from check_testHalting to check_compareOutput
-    (peeking input/workR, applying delta, detecting halt, pushing state back). -/
-lemma checkPhase_testHalting_halts
-    (gen : Generator Γw Γo Q)
-    (target : List Γo)
-    (round j : ℕ)
-    (tm2cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) DovetailLabel (DovetailSigma Γw Γo Q))
-    (hInv : CheckPhaseInvariant gen target round j tm2cfg)
-    (hj : j < round)
-    (hHalts : IsHalting gen (instanceConfig gen (round - j - 1) round)) :
-    ∃ tm2cfg',
-      tm2cfg'.l = some DovetailLabel.check_compareOutput ∧
-      tm2cfg'.stk DovetailStack.state =
-        (instanceConfig gen (round - j - 1) round).state ::
-        ((List.range (round - j - 1)).map
-          (fun i => (instanceConfig gen i round).state)).reverse ∧
-      tm2cfg'.stk DovetailStack.output =
-        (instanceConfig gen (round - j - 1) round).output.map some ++
-        ((List.range (round - j - 1)).map (fun i =>
-          [none] ++ (instanceConfig gen i round).output.map some)).reverse.flatten ∧
-      tm2cfg'.stk DovetailStack.input      = tm2cfg.stk DovetailStack.input ∧
-      tm2cfg'.stk DovetailStack.workL      = tm2cfg.stk DovetailStack.workL ∧
-      tm2cfg'.stk DovetailStack.workR      = tm2cfg.stk DovetailStack.workR ∧
-      tm2cfg'.stk DovetailStack.counter    = tm2cfg.stk DovetailStack.counter ∧
-      tm2cfg'.stk DovetailStack.target     = tm2cfg.stk DovetailStack.target ∧
-      tm2cfg'.stk DovetailStack.saveState  = tm2cfg.stk DovetailStack.saveState ∧
-      tm2cfg'.stk DovetailStack.saveInput  = tm2cfg.stk DovetailStack.saveInput ∧
-      tm2cfg'.stk DovetailStack.saveWorkL  = tm2cfg.stk DovetailStack.saveWorkL ∧
-      tm2cfg'.stk DovetailStack.saveWorkR  = tm2cfg.stk DovetailStack.saveWorkR ∧
-      tm2cfg'.stk DovetailStack.saveOutput = tm2cfg.stk DovetailStack.saveOutput ∧
-      tm2cfg'.stk DovetailStack.saveTarget = tm2cfg.stk DovetailStack.saveTarget ∧
-      tm2cfg'.stk DovetailStack.saveCounter = tm2cfg.stk DovetailStack.saveCounter ∧
-      Turing.Reaches (Turing.TM2.step (dovetailMachine gen)) tm2cfg tm2cfg' := by
-  -- Step 1: check_iterateInstances → check_testHalting
-  obtain ⟨tm2cfg₁, hLabel₁, hPeekQ₁, hState₁, hOutput₁, hInput₁, hWorkL₁, hWorkR₁,
-    hCounter₁, hTarget₁, hSaveState₁, hSaveInput₁, hSaveWorkL₁, hSaveWorkR₁,
-    hSaveOutput₁, hSaveTarget₁, hSaveCounter₁, hReach₁⟩ :=
-    checkPhase_iterate_to_testHalting gen target round j tm2cfg hInv hj
-  -- Step 2: check_testHalting → check_compareOutput
-  -- At tm2cfg₁, the input and workR stacks are exposed (separators stripped).
-  -- Peeking input gives the actual bit, peeking workR gives the actual head symbol.
-  -- applyDelta detects halting, pushes original state back, goes to check_compareOutput.
-  sorry -- This lemma statement should be good, but this proof may be rubbish now
-  -- The proof below may be partially usable if so.
-
-  -- -- Unfold IsHalting to get gen.δ = none
-  -- unfold IsHalting step at hHalts
-  -- -- Let inst = instanceConfig gen (round - j - 1) round for brevity
-  -- set inst := instanceConfig gen (round - j - 1) round with hinst
-  -- -- Get the top-of-stack facts from hInv
-  -- have hNonempty : round - j ≠ 0 := by omega
-  -- have hTop : tm2cfg.stk DovetailStack.state =
-  --     inst.state :: ((List.range (round - j - 1)).map
-  --       (fun i => (instanceConfig gen i round).state)).reverse := by
-  --   rw [hInv.state]
-  --   rw [show round - j = (round - j - 1) + 1 by omega]
-  --   simp [List.range_succ, List.map_append, List.reverse_append]
-  --   rfl
-  -- have hOutputTop : tm2cfg.stk DovetailStack.output =
-  --     [none] ++ inst.output.map some ++
-  --     ((List.range (round - j - 1)).map (fun i =>
-  --       [none] ++ (instanceConfig gen i round).output.map some)).reverse.flatten := by
-  --   rw [hInv.output]
-  --   rw [show round - j = (round - j - 1) + 1 by omega]
-  --   simp [List.range_succ, List.map_append, List.reverse_append]
-  --   rfl
-  -- have hInputTop : (tm2cfg.stk DovetailStack.input).head? =
-  --     some (some (ULift.up (inst.input inst.inputIndex))) := by
-  --   rw [hInv.input]
-  --   rw [show round - j = (round - j - 1) + 1 by omega]
-  --   simp [List.range_succ, List.map_append, List.reverse_append,
-  --         instanceConfig, Nat.bits]
-  --   sorry -- needs careful unfolding of instanceConfig input encoding
-  -- have hWorkRTop : (tm2cfg.stk DovetailStack.workR).head? =
-  --     some (some (inst.work inst.workIndex)) := by
-  --   sorry -- needs splitSegments lemma for workR
-  -- -- Construct tm2cfg'
-  -- refine ⟨{
-  --   l   := some DovetailLabel.check_compareOutput
-  --   var := { tm2cfg.var with
-  --     peekQ     := some inst.state
-  --     transQ    := some inst.state
-  --     inputBit  := ULift.up (inst.input inst.inputIndex)
-  --     peekInput := some (some (ULift.up (inst.input inst.inputIndex)))
-  --     transW    := some (inst.work inst.workIndex)
-  --     peekWorkR := some (some (inst.work inst.workIndex))
-  --     transHalted := true
-  --     transIDir := InputTapeDirection.N
-  --     transWDir := WorkTapeDirection.N
-  --     transOut  := none }
-  --   stk := Function.update
-  --             (Function.update
-  --               (Function.update tm2cfg.stk
-  --                 DovetailStack.state
-  --                 (inst.state :: ((List.range (round - j - 1)).map
-  --                   (fun i => (instanceConfig gen i round).state)).reverse))
-  --               DovetailStack.output
-  --               (inst.output.map some ++
-  --               ((List.range (round - j - 1)).map (fun i =>
-  --                 [none] ++ (instanceConfig gen i round).output.map some)).reverse.flatten))
-  --             DovetailStack.saveOutput
-  --             (none :: tm2cfg.stk DovetailStack.saveOutput)
-  -- }, rfl, rfl, rfl, rfl, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
-  -- -- preserved stacks (refine_1 through refine_11)
-  -- · simp only [Function.update, reduceCtorEq, ↓reduceDIte]
-  -- · simp only [Function.update, reduceCtorEq, ↓reduceDIte]
-  -- · simp only [Function.update, reduceCtorEq, ↓reduceDIte]
-  -- · simp only [Function.update, reduceCtorEq, ↓reduceDIte]
-  -- · simp only [Function.update, reduceCtorEq, ↓reduceDIte]
-  -- · simp only [Function.update, reduceCtorEq, ↓reduceDIte]
-  -- · simp only [Function.update, reduceCtorEq, ↓reduceDIte]
-  -- · simp only [Function.update, reduceCtorEq, ↓reduceDIte]
-  -- · simp only [Function.update, reduceCtorEq, ↓reduceDIte]
-  -- · simp only [Function.update, reduceCtorEq, ↓reduceDIte]
-  -- · simp only [Function.update, reduceCtorEq, ↓reduceDIte]
-  -- · -- Define the intermediate cfg after check_iterateInstances → check_testHalting
-  --   set tm2cfg_mid : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) DovetailLabel (DovetailSigma Γw Γo Q) :=
-  --     { l   := some DovetailLabel.check_testHalting
-  --       var := { tm2cfg.var with
-  --         peekQ  := some inst.state
-  --         transQ := some inst.state }
-  --       stk := Function.update tm2cfg.stk DovetailStack.state
-  --         ((List.range (round - j - 1)).map
-  --           (fun i => (instanceConfig gen i round).state)).reverse }
-  --   apply Relation.ReflTransGen.trans (b := tm2cfg_mid)
-  --   · -- Step 1: check_iterateInstances → check_testHalting
-  --     apply Relation.ReflTransGen.single
-  --     rw [Turing.TM2.step.eq_def]
-  --     simp only [dovetailMachine]
-  --     obtain ⟨l, var, stk⟩ := tm2cfg
-  --     cases hInv.label_eq
-  --     simp only [Turing.TM2.stepAux, check_iterateInstances]
-  --     have hTop' : stk DovetailStack.state =
-  --         inst.state :: (List.map (fun i => (instanceConfig gen i round).state)
-  --           (List.range (round - j - 1))).reverse := hTop
-  --     simp only [hTop', List.head?_cons, Option.isNone_some, cond_false, List.tail_cons,
-  --       Option.mem_def, tm2cfg_mid]
-  --   · -- Step 2: check_testHalting → check_compareOutput
-  --     apply Relation.ReflTransGen.single
-  --     rw [Turing.TM2.step.eq_def]
-  --     simp only [dovetailMachine, Turing.TM2.stepAux, check_testHalting, tm2cfg_mid]
-  --     have hInputTop' : (Function.update tm2cfg.stk DovetailStack.state
-  --         ((List.range (round - j - 1)).map
-  --           (fun i => (instanceConfig gen i round).state)).reverse
-  --         DovetailStack.input).head? =
-  --         some (some { down := inst.input inst.inputIndex }) := by
-  --       simp [Function.update, reduceCtorEq, hInputTop]
-  --     have hWorkRTop' : (Function.update tm2cfg.stk DovetailStack.state
-  --         ((List.range (round - j - 1)).map
-  --           (fun i => (instanceConfig gen i round).state)).reverse
-  --         DovetailStack.workR).head? =
-  --         some (some (inst.work inst.workIndex)) := by
-  --       simp [Function.update, reduceCtorEq, hWorkRTop]
-  --     rw [hInputTop', hWorkRTop']
-  --     simp only [applyDelta, Option.getD_some]
-  --     have hDelta : gen.δ inst.state (inst.input inst.inputIndex)
-  --         (inst.work inst.workIndex) = none := by
-  --       revert hHalts
-  --       intro h
-  --       split at h <;> simp_all
-  --     rw [hDelta]
-  --     simp only [cond_true, Option.mem_def]
-  --     have hOutputTop' : (Function.update tm2cfg.stk DovetailStack.state
-  --         ((List.range (round - j - 1)).map
-  --           (fun i => (instanceConfig gen i round).state)).reverse
-  --         DovetailStack.output) =
-  --         [none] ++ List.map some inst.output ++
-  --         (List.map (fun i => [none] ++ List.map some (instanceConfig gen i round).output)
-  --           (List.range (round - j - 1))).reverse.flatten := by
-  --       simp [Function.update, reduceCtorEq, hOutputTop]
-  --     simp only [Option.getD_some]
-  --     simp only [Option.some.injEq, Turing.TM2.Cfg.mk.injEq]
-  --     refine ⟨trivial, trivial, ?_⟩
-  --     funext k
-  --     cases k <;> simp [Function.update, reduceCtorEq, hOutputTop, List.tail_cons]
 
 /-- When `check_testHalting` fires and the instance is not halting, the machine reaches
     `check_saveInstance_state`. The state is pushed back unchanged. -/
@@ -496,7 +318,7 @@ private lemma check_compareOutput_loop
       congr 1
       congr 1
       ext k
-      cases k <;> simp [Function.update, reduceCtorEq, hOutput, hTarget, List.tail_cons]
+      cases k <;> simp [Function.update, reduceCtorEq, hOutput, List.tail_cons]
     -- Apply ih to the resulting config
     have hTarget' : stk' DovetailStack.target = ts := by
       simp [stk', Function.update, reduceCtorEq]
@@ -507,7 +329,8 @@ private lemma check_compareOutput_loop
         var := { v with peekTarget := some t, peekOut := some (some t) },
         stk := stk' }
       rfl hTarget' hOutput'
-    exact ⟨tm2cfg', hHalt', Relation.ReflTransGen.head (by rw [Option.mem_def]; exact hStep) hReach'⟩
+    exact ⟨tm2cfg', hHalt', Relation.ReflTransGen.head
+      (by rw [Option.mem_def]; exact hStep) hReach'⟩
 
 /-- If check_compareOutput is entered with matching output on top of the stacks,
     the TM2 halts. -/
@@ -525,6 +348,93 @@ lemma check_compareOutput_halts_on_match
       Turing.Reaches (Turing.TM2.step (dovetailMachine gen)) tm2cfg tm2cfg' := by
   obtain ⟨rest, hOut, hRest⟩ := hOutput
   exact check_compareOutput_loop gen target rest hRest tm2cfg hLabel hTarget hOut
+
+/-- When `CheckPhaseInvariant` holds with `j < round` and the next instance is halting,
+    the machine reaches `check_compareOutput` from `check_iterateInstances`.
+
+    This combines the step from check_iterateInstances to check_testHalting
+    (popping state) with the step from check_testHalting to check_compareOutput
+    (peeking input/workR, applying delta, detecting halt, pushing state back). -/
+lemma checkPhase_testHalting_halts
+    (gen : Generator Γw Γo Q)
+    (target : List Γo)
+    (round j : ℕ)
+    (tm2cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) DovetailLabel (DovetailSigma Γw Γo Q))
+    (hInv : CheckPhaseInvariant gen target round j tm2cfg)
+    (hj : j < round)
+    (hHalts : IsHalting gen (instanceConfig gen (round - j - 1) round)) :
+    ∃ tm2cfg',
+      tm2cfg'.l = some DovetailLabel.check_compareOutput ∧
+      tm2cfg'.stk DovetailStack.state =
+        (instanceConfig gen (round - j - 1) round).state ::
+        ((List.range (round - j - 1)).map
+          (fun i => (instanceConfig gen i round).state)).reverse ∧
+      tm2cfg'.stk DovetailStack.output =
+        (instanceConfig gen (round - j - 1) round).output.map some ++
+        ((List.range (round - j - 1)).map (fun i =>
+          [none] ++ (instanceConfig gen i round).output.map some)).reverse.flatten ∧
+      tm2cfg'.stk DovetailStack.input      = tm2cfg.stk DovetailStack.input ∧
+      tm2cfg'.stk DovetailStack.workL      = tm2cfg.stk DovetailStack.workL ∧
+      tm2cfg'.stk DovetailStack.workR      = tm2cfg.stk DovetailStack.workR ∧
+      tm2cfg'.stk DovetailStack.counter    = tm2cfg.stk DovetailStack.counter ∧
+      tm2cfg'.stk DovetailStack.target     = tm2cfg.stk DovetailStack.target ∧
+      tm2cfg'.stk DovetailStack.saveState  = tm2cfg.stk DovetailStack.saveState ∧
+      tm2cfg'.stk DovetailStack.saveInput  = tm2cfg.stk DovetailStack.saveInput ∧
+      tm2cfg'.stk DovetailStack.saveWorkL  = tm2cfg.stk DovetailStack.saveWorkL ∧
+      tm2cfg'.stk DovetailStack.saveWorkR  = tm2cfg.stk DovetailStack.saveWorkR ∧
+      tm2cfg'.stk DovetailStack.saveOutput = tm2cfg.stk DovetailStack.saveOutput ∧
+      tm2cfg'.stk DovetailStack.saveTarget = tm2cfg.stk DovetailStack.saveTarget ∧
+      tm2cfg'.stk DovetailStack.saveCounter = tm2cfg.stk DovetailStack.saveCounter ∧
+      Turing.Reaches (Turing.TM2.step (dovetailMachine gen)) tm2cfg tm2cfg' := by
+  -- Step 1: check_iterateInstances → check_testHalting
+  obtain ⟨tm2cfg₁, hLabel₁, hPeekQ₁, hTransQ₁, hState₁, hOutput₁, hInput₁, hWorkL₁, hWorkR₁,
+    hCounter₁, hTarget₁, hSaveState₁, hSaveInput₁, hSaveWorkL₁, hSaveWorkR₁,
+    hSaveOutput₁, hSaveTarget₁, hSaveCounter₁, hReach₁⟩ :=
+    checkPhase_iterate_to_testHalting gen target round j tm2cfg hInv hj
+  set inst := instanceConfig gen (round - j - 1) round with hinst
+  have hDelta : gen.δ inst.state (inst.input inst.inputIndex)
+      (inst.work inst.workIndex) = none := by
+    unfold IsHalting step at hHalts; revert hHalts; intro h; split at h <;> simp_all
+  have hInputBit : (match (tm2cfg₁.stk DovetailStack.input).head? with
+      | some (some b) => b
+      | _ => ULift.up false).down = inst.input inst.inputIndex := by
+    sorry
+  have hWorkHead : (match (tm2cfg₁.stk DovetailStack.workR).head? with
+      | some (some x) => some x
+      | _ => some gen.blank) = some (inst.work inst.workIndex) := by
+    sorry
+  -- Step 2: compute what check_testHalting produces
+  have hStep2 : ∃ tm2cfg₂,
+      Turing.TM2.step (dovetailMachine gen) tm2cfg₁ = some tm2cfg₂ ∧
+      tm2cfg₂.l = some DovetailLabel.check_compareOutput ∧
+      tm2cfg₂.stk DovetailStack.state =
+        inst.state :: ((List.range (round - j - 1)).map
+          (fun i => (instanceConfig gen i round).state)).reverse ∧
+      (∀ k, k ≠ DovetailStack.state →
+        tm2cfg₂.stk k = tm2cfg₁.stk k) := by
+    sorry
+  obtain ⟨tm2cfg₂, hStep₂, hLabel₂, hState₂, hOther₂⟩ := hStep2
+  refine ⟨tm2cfg₂, hLabel₂, hState₂, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+  -- output
+  · rw [hOther₂ _ (by decide), hOutput₁, hInv.output]
+    simp only [show round - j ≠ 0 from by omega, ↓reduceIte]
+    rfl
+  -- preserved stacks (all go through hOther₂ then the chain back to tm2cfg)
+  · rw [hOther₂ _ (by decide)]; exact hInput₁
+  · rw [hOther₂ _ (by decide)]; exact hWorkL₁
+  · rw [hOther₂ _ (by decide)]; exact hWorkR₁
+  · rw [hOther₂ _ (by decide)]; exact hCounter₁
+  · rw [hOther₂ _ (by decide)]; exact hTarget₁
+  · rw [hOther₂ _ (by decide)]; exact hSaveState₁
+  · rw [hOther₂ _ (by decide)]; exact hSaveInput₁
+  · rw [hOther₂ _ (by decide)]; exact hSaveWorkL₁
+  · rw [hOther₂ _ (by decide)]; exact hSaveWorkR₁
+  · rw [hOther₂ _ (by decide)]; exact hSaveOutput₁
+  · rw [hOther₂ _ (by decide)]; exact hSaveTarget₁
+  · rw [hOther₂ _ (by decide)]; exact hSaveCounter₁
+  -- Reaches
+  · exact Relation.ReflTransGen.trans hReach₁
+      (Relation.ReflTransGen.single (by rw [Option.mem_def]; exact hStep₂))
 
 /-- From check_iterateInstances with j instances already processed, if instance j matches,
     the TM2 reaches a halted config. -/
