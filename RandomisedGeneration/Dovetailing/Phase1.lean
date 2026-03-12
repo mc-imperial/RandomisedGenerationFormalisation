@@ -433,6 +433,82 @@ lemma checkPhase_testHalting_not_halts
       Turing.Reaches (Turing.TM2.step (dovetailMachine gen)) tm2cfg tm2cfg' := by
   sorry -- Unclear whether this lemma is good as stated.
 
+/-- Helper: the check_compareOutput loop terminates with a halt when
+    the remaining target and output match element by element. -/
+private lemma check_compareOutput_loop
+    (gen : Generator Γw Γo Q)
+    (ts : List Γo)
+    (rest : List (Option Γo))
+    (hRest : rest = [] ∨ rest.head? = some none)
+    (tm2cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) DovetailLabel (DovetailSigma Γw Γo Q))
+    (hLabel : tm2cfg.l = some DovetailLabel.check_compareOutput)
+    (hTarget : tm2cfg.stk DovetailStack.target = ts)
+    (hOutput : tm2cfg.stk DovetailStack.output = ts.map some ++ rest) :
+    ∃ tm2cfg',
+      tm2cfg'.l = none ∧
+      Turing.Reaches (Turing.TM2.step (dovetailMachine gen)) tm2cfg tm2cfg' := by
+  induction ts generalizing tm2cfg with
+  | nil =>
+    simp only [List.map_nil, List.nil_append] at hOutput
+    obtain ⟨l, v, stk⟩ := tm2cfg
+    simp only at hTarget hOutput hLabel
+    subst hLabel
+    rcases hRest with rfl | hRest
+    · -- rest = [], output stack is empty
+      refine ⟨{
+        l := none,
+        var := { v with peekTarget := none, peekOut := none },
+        stk := stk }, rfl, Relation.ReflTransGen.single ?_⟩
+      rw [Option.mem_def, Turing.TM2.step]
+      simp only [dovetailMachine, check_compareOutput, Turing.TM2.stepAux,
+        hTarget, hOutput, List.head?_nil, Option.isNone_none, cond_true]
+    · -- rest starts with none
+      refine ⟨{ l := none, var := { v with peekTarget := none, peekOut := some none }, stk := stk },
+        rfl, Relation.ReflTransGen.single ?_⟩
+      rw [Option.mem_def, Turing.TM2.step]
+      simp only [dovetailMachine, check_compareOutput, Turing.TM2.stepAux,
+        hTarget, List.head?_nil, Option.isNone_none, cond_true, hOutput, hRest]
+  | cons t ts ih =>
+    obtain ⟨l, v, stk⟩ := tm2cfg
+    simp only at hLabel hTarget hOutput
+    subst hLabel
+    simp only [List.map_cons, List.cons_append] at hOutput
+    -- Construct the intermediate config after one TM2 step
+    let stk' := Function.update
+      (Function.update
+        (Function.update
+          (Function.update stk
+            DovetailStack.target ts)
+          DovetailStack.output (ts.map some ++ rest))
+        DovetailStack.saveTarget (t :: stk DovetailStack.saveTarget))
+      DovetailStack.saveOutput (some t :: stk DovetailStack.saveOutput)
+    have hStep : Turing.TM2.step (dovetailMachine gen)
+        { l := some DovetailLabel.check_compareOutput, var := v, stk := stk } =
+      some {
+        l := some DovetailLabel.check_compareOutput,
+        var := { v with peekTarget := some t, peekOut := some (some t) },
+        stk := stk' } := by
+      rw [Turing.TM2.step]
+      simp only [dovetailMachine, check_compareOutput, Turing.TM2.stepAux,
+        hTarget, hOutput, List.head?_cons, Option.isNone_some, cond_false,
+        decide_true, stk']
+      simp only [cond_true, Option.getD_some, List.tail_cons]
+      congr 1
+      congr 1
+      ext k
+      cases k <;> simp [Function.update, reduceCtorEq, hOutput, hTarget, List.tail_cons]
+    -- Apply ih to the resulting config
+    have hTarget' : stk' DovetailStack.target = ts := by
+      simp [stk', Function.update, reduceCtorEq]
+    have hOutput' : stk' DovetailStack.output = ts.map some ++ rest := by
+      simp [stk', Function.update, reduceCtorEq]
+    obtain ⟨tm2cfg', hHalt', hReach'⟩ := ih
+      { l := some DovetailLabel.check_compareOutput,
+        var := { v with peekTarget := some t, peekOut := some (some t) },
+        stk := stk' }
+      rfl hTarget' hOutput'
+    exact ⟨tm2cfg', hHalt', Relation.ReflTransGen.head (by rw [Option.mem_def]; exact hStep) hReach'⟩
+
 /-- If check_compareOutput is entered with matching output on top of the stacks,
     the TM2 halts. -/
 lemma check_compareOutput_halts_on_match
@@ -447,7 +523,8 @@ lemma check_compareOutput_halts_on_match
     ∃ tm2cfg',
       tm2cfg'.l = none ∧
       Turing.Reaches (Turing.TM2.step (dovetailMachine gen)) tm2cfg tm2cfg' := by
-  sorry
+  obtain ⟨rest, hOut, hRest⟩ := hOutput
+  exact check_compareOutput_loop gen target rest hRest tm2cfg hLabel hTarget hOut
 
 /-- From check_iterateInstances with j instances already processed, if instance j matches,
     the TM2 reaches a halted config. -/
