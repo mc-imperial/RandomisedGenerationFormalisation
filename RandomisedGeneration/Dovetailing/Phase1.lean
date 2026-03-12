@@ -61,7 +61,7 @@ structure CheckPhaseInvariant
   hj : j ≤ round
   noMatch : ∀ i, round - j ≤ i → i < round →
     ¬(IsHalting gen (instanceConfig gen i round) ∧
-      (instanceConfig gen i round).output.reverse = target)
+      (instanceConfig gen i round).output = target)
   -- ═══ Main stacks: oldest round-j instances (indices 0..round-j-1) ═══
   state : tm2cfg.stk DovetailStack.state =
     ((List.range (round - j)).map
@@ -442,7 +442,7 @@ lemma check_compareOutput_halts_on_match
     (hLabel : tm2cfg.l = some DovetailLabel.check_compareOutput)
     (hTarget : tm2cfg.stk DovetailStack.target = target)
     (hOutput : ∃ rest : List (Option Γo),
-      tm2cfg.stk DovetailStack.output = target.reverse.map some ++ rest ∧
+      tm2cfg.stk DovetailStack.output = target.map some ++ rest ∧
       (rest = [] ∨ rest.head? = some none)) :
     ∃ tm2cfg',
       tm2cfg'.l = none ∧
@@ -460,7 +460,7 @@ lemma checkPhase_halt_on_match
     (hInv : CheckPhaseInvariant gen target round j tm2cfg)
     (hj : j < round)
     (hMatch_j : IsHalting gen (instanceConfig gen (round - 1 - j) round) ∧
-      (instanceConfig gen (round - 1 - j) round).output.reverse = target) :
+      (instanceConfig gen (round - 1 - j) round).output = target) :
     ∃ tm2cfg',
       tm2cfg'.l = none ∧
       Turing.Reaches (Turing.TM2.step (dovetailMachine gen)) tm2cfg tm2cfg' := by
@@ -478,17 +478,16 @@ lemma checkPhase_halt_on_match
     hSaveWorkR₂, hSaveOutput₂, hSaveTarget₂, hSaveCounter₂, hReach₂⟩ :=
     checkPhase_testHalting_halts gen target round j tm2cfg hInv hj  h_halting
   -- Step 3: check_compareOutput matches and halts
-  have hOutEq : cfg.output = target.reverse :=
-    List.reverse_injective (by rw [List.reverse_reverse]; exact hOut_j)
   have h_idx : round - 1 - j = round - j - 1 := by omega
   have hOutputMatch : ∃ rest : List (Option Γo),
-      tm2cfg₂.stk DovetailStack.output = target.reverse.map some ++ rest ∧
+      tm2cfg₂.stk DovetailStack.output = target.map some ++ rest ∧
       (rest = [] ∨ rest.head? = some none) := by
-    rw [hOutput₂]
     refine ⟨((List.range (round - j - 1)).map (fun i =>
       [none] ++ (instanceConfig gen i round).output.map some)).reverse.flatten, ?_, ?_⟩
-    · congr 1
-      rw [← h_idx, hOutEq]
+    · rw [hOutput₂]
+      congr 1
+      rw [← h_idx]
+      exact congr_arg (List.map some) hOut_j
     · by_cases h : round - j - 1 = 0
       · left; simp [h]
       · right
