@@ -203,9 +203,29 @@ lemma checkPhase_iterate_to_testHalting
     simp only [List.head?_cons, Option.isNone_some, cond_false, List.tail_cons]
     simp only [Option.mem_def]
 
-/-- When `check_testHalting` fires and the instance is halting, the machine reaches
-    `check_compareOutput`. The state is pushed back, the output `none` separator is
-    popped, and `none` is pushed to `saveOutput`. -/
+/-- From check_iterateInstances with j instances already processed and no match among them,
+    processing one more non-matching instance advances to j+1. -/
+lemma checkPhase_advance_no_match
+    (gen : Generator Γw Γo Q)
+    (target : List Γo)
+    (round : ℕ)
+    (j : ℕ)
+    (tm2cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) DovetailLabel (DovetailSigma Γw Γo Q))
+    (hInv : CheckPhaseInvariant gen target round j tm2cfg)
+    (hj : j < round)
+    (hNoMatch_j : ¬(IsHalting gen (instanceConfig gen (round - 1 - j) round) ∧
+      (instanceConfig gen (round - 1 - j) round).output.reverse = target)) :
+    ∃ tm2cfg',
+      CheckPhaseInvariant gen target round (j + 1) tm2cfg' ∧
+      Turing.Reaches (Turing.TM2.step (dovetailMachine gen)) tm2cfg tm2cfg' := by
+  sorry
+
+/-- When `CheckPhaseInvariant` holds with `j < round` and the next instance is halting,
+    the machine reaches `check_compareOutput` from `check_iterateInstances`.
+
+    This combines the step from check_iterateInstances to check_testHalting
+    (popping state) with the step from check_testHalting to check_compareOutput
+    (peeking input/workR, applying delta, detecting halt, pushing state back). -/
 lemma checkPhase_testHalting_halts
     (gen : Generator Γw Γo Q)
     (target : List Γo)
@@ -224,8 +244,6 @@ lemma checkPhase_testHalting_halts
         (instanceConfig gen (round - j - 1) round).output.map some ++
         ((List.range (round - j - 1)).map (fun i =>
           [none] ++ (instanceConfig gen i round).output.map some)).reverse.flatten ∧
-      tm2cfg'.stk DovetailStack.saveOutput =
-        none :: tm2cfg.stk DovetailStack.saveOutput ∧
       tm2cfg'.stk DovetailStack.input      = tm2cfg.stk DovetailStack.input ∧
       tm2cfg'.stk DovetailStack.workL      = tm2cfg.stk DovetailStack.workL ∧
       tm2cfg'.stk DovetailStack.workR      = tm2cfg.stk DovetailStack.workR ∧
@@ -235,10 +253,20 @@ lemma checkPhase_testHalting_halts
       tm2cfg'.stk DovetailStack.saveInput  = tm2cfg.stk DovetailStack.saveInput ∧
       tm2cfg'.stk DovetailStack.saveWorkL  = tm2cfg.stk DovetailStack.saveWorkL ∧
       tm2cfg'.stk DovetailStack.saveWorkR  = tm2cfg.stk DovetailStack.saveWorkR ∧
+      tm2cfg'.stk DovetailStack.saveOutput = tm2cfg.stk DovetailStack.saveOutput ∧
       tm2cfg'.stk DovetailStack.saveTarget = tm2cfg.stk DovetailStack.saveTarget ∧
       tm2cfg'.stk DovetailStack.saveCounter = tm2cfg.stk DovetailStack.saveCounter ∧
       Turing.Reaches (Turing.TM2.step (dovetailMachine gen)) tm2cfg tm2cfg' := by
-  sorry -- Check that this lemma statement is actually good.
+  -- Step 1: check_iterateInstances → check_testHalting
+  obtain ⟨tm2cfg₁, hLabel₁, hPeekQ₁, hState₁, hOutput₁, hInput₁, hWorkL₁, hWorkR₁,
+    hCounter₁, hTarget₁, hSaveState₁, hSaveInput₁, hSaveWorkL₁, hSaveWorkR₁,
+    hSaveOutput₁, hSaveTarget₁, hSaveCounter₁, hReach₁⟩ :=
+    checkPhase_iterate_to_testHalting gen target round j tm2cfg hInv hj
+  -- Step 2: check_testHalting → check_compareOutput
+  -- At tm2cfg₁, the input and workR stacks are exposed (separators stripped).
+  -- Peeking input gives the actual bit, peeking workR gives the actual head symbol.
+  -- applyDelta detects halting, pushes original state back, goes to check_compareOutput.
+  sorry -- This lemma statement should be good, but this proof may be rubbish now
   -- The proof below may be partially usable if so.
 
   -- -- Unfold IsHalting to get gen.δ = none
@@ -405,23 +433,6 @@ lemma checkPhase_testHalting_not_halts
       Turing.Reaches (Turing.TM2.step (dovetailMachine gen)) tm2cfg tm2cfg' := by
   sorry -- Unclear whether this lemma is good as stated.
 
-/-- From check_iterateInstances with j instances already processed and no match among them,
-    processing one more non-matching instance advances to j+1. -/
-lemma checkPhase_advance_no_match
-    (gen : Generator Γw Γo Q)
-    (target : List Γo)
-    (round : ℕ)
-    (j : ℕ)
-    (tm2cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) DovetailLabel (DovetailSigma Γw Γo Q))
-    (hInv : CheckPhaseInvariant gen target round j tm2cfg)
-    (hj : j < round)
-    (hNoMatch_j : ¬(IsHalting gen (instanceConfig gen (round - 1 - j) round) ∧
-      (instanceConfig gen (round - 1 - j) round).output.reverse = target)) :
-    ∃ tm2cfg',
-      CheckPhaseInvariant gen target round (j + 1) tm2cfg' ∧
-      Turing.Reaches (Turing.TM2.step (dovetailMachine gen)) tm2cfg tm2cfg' := by
-  sorry
-
 /-- If check_compareOutput is entered with matching output on top of the stacks,
     the TM2 halts. -/
 lemma check_compareOutput_halts_on_match
@@ -454,38 +465,26 @@ lemma checkPhase_halt_on_match
       tm2cfg'.l = none ∧
       Turing.Reaches (Turing.TM2.step (dovetailMachine gen)) tm2cfg tm2cfg' := by
   obtain ⟨hHalt_j, hOut_j⟩ := hMatch_j
-  have hHalt_j_rearranged : IsHalting gen (instanceConfig gen (round - j - 1) round) := by
+  let idx := round - 1 - j
+  let cfg := instanceConfig gen idx round
+  -- Steps 1-2: check_iterateInstances → check_testHalting → check_compareOutput
+  -- checkPhase_testHalting_halts takes the CheckPhaseInvariant directly
+  have h_halting : IsHalting gen (instanceConfig gen (round - j - 1) round) := by
     have : round - 1 - j = round - j - 1 := by omega
     rw [this] at hHalt_j
     exact hHalt_j
-  let idx := round - 1 - j
-  let cfg := instanceConfig gen idx round
-  -- Step 1: check_iterateInstances → check_testHalting (one step)
-  obtain ⟨tm2cfg₁, hLabel₁, hPeekQ₁, hState₁, hOutput₁, hInput₁, hWorkL₁, hWorkR₁,
-    hCounter₁, hTarget₁, hSaveState₁, hSaveInput₁, hSaveWorkL₁, hSaveWorkR₁,
-    hSaveOutput₁, hSaveTarget₁, hSaveCounter₁, hReach₁⟩ :=
-    checkPhase_iterate_to_testHalting gen target round j tm2cfg hInv hj
-  -- Step 2: check_testHalting detects halting, pushes state back,
-  -- goes to check_compareOutput
-  have h_inv_tm2cfg₁ : CheckPhaseInvariant gen target round j tm2cfg₁ := by
-    sorry
-  obtain ⟨tm2cfg₂, hLabel₂, hState₂, hOutput₂, hSaveOutput₂, hInput₂, hWorkL₂,
+  obtain ⟨tm2cfg₂, hLabel₂, hState₂, hOutput₂, hInput₂, hWorkL₂,
     hWorkR₂, hCounter₂, hTarget₂, hSaveState₂, hSaveInput₂, hSaveWorkL₂,
-    hSaveWorkR₂, hSaveTarget₂, hSaveCounter₂, hReach₂⟩ :=
-    checkPhase_testHalting_halts gen target round j tm2cfg₁
-      h_inv_tm2cfg₁
-      hj hHalt_j_rearranged
+    hSaveWorkR₂, hSaveOutput₂, hSaveTarget₂, hSaveCounter₂, hReach₂⟩ :=
+    checkPhase_testHalting_halts gen target round j tm2cfg hInv hj  h_halting
   -- Step 3: check_compareOutput matches and halts
   have hOutEq : cfg.output = target.reverse :=
     List.reverse_injective (by rw [List.reverse_reverse]; exact hOut_j)
-  -- The output stack at tm2cfg₂ has cfg.output.map some on top
-  -- which equals target.reverse.map some
-  -- The rest starts with none (next instance's separator) or is empty
+  have h_idx : round - 1 - j = round - j - 1 := by omega
   have hOutputMatch : ∃ rest : List (Option Γo),
       tm2cfg₂.stk DovetailStack.output = target.reverse.map some ++ rest ∧
       (rest = [] ∨ rest.head? = some none) := by
     rw [hOutput₂]
-    have h_idx : round - 1 - j = round - j - 1 := by omega
     refine ⟨((List.range (round - j - 1)).map (fun i =>
       [none] ++ (instanceConfig gen i round).output.map some)).reverse.flatten, ?_, ?_⟩
     · congr 1
@@ -505,11 +504,10 @@ lemma checkPhase_halt_on_match
         rw [h_eq]
         rfl
   have hTarget₂' : tm2cfg₂.stk DovetailStack.target = target := by
-    rw [hTarget₂, hTarget₁, hInv.target_preserved]
+    rw [hTarget₂, hInv.target_preserved]
   obtain ⟨tm2cfg', hHalt', hReach'⟩ :=
     check_compareOutput_halts_on_match gen target tm2cfg₂ hLabel₂ hTarget₂' hOutputMatch
-  exact ⟨tm2cfg', hHalt',
-    Relation.ReflTransGen.trans hReach₁ (Relation.ReflTransGen.trans hReach₂ hReach')⟩
+  exact ⟨tm2cfg', hHalt', Relation.ReflTransGen.trans hReach₂ hReach'⟩
 
 /-- When the quiescent invariant holds and there are instances (round > 0),
     check_stripSeparators takes one TM2 step to reach check_iterateInstances,
