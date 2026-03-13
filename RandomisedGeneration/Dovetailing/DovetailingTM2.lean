@@ -177,19 +177,19 @@ structure DovetailSigma (Γw Γo Q : Type u)
   transHalted : Bool                -- true iff gen.δ returned none
 
   -- ── Current input bit (set by step_peekInput / check_testHalting) ─────
-  inputBit    : ULift.{u} Bool     -- the bit value (false if input stack empty/separator)
+  inputBit    : Bool                -- the bit value (false if input stack empty/separator)
 
   -- ── Scratch space for peek/pop results ────────────────────────────────
-  peekQ       : Option Q                        -- peeked/popped state
-  peekBit     : Option (ULift.{u} Bool)         -- peeked counter/saveCounter bit
-  peekInput   : Option (Option (ULift.{u} Bool)) -- peeked input element
-  peekWorkL   : Option (Option Γw)              -- peeked workL element
-  peekWorkR   : Option (Option Γw)              -- peeked workR element
-  peekOut     : Option (Option Γo)              -- peeked output/saveOutput element
-  peekTarget  : Option Γo                       -- peeked target element
+  peekQ       : Option Q             -- peeked/popped state
+  peekBit     : Option Bool          -- peeked counter/saveCounter bit
+  peekInput   : Option (Option Bool) -- peeked input element
+  peekWorkL   : Option (Option Γw)   -- peeked workL element
+  peekWorkR   : Option (Option Γw)   -- peeked workR element
+  peekOut     : Option (Option Γo)   -- peeked output/saveOutput element
+  peekTarget  : Option Γo            -- peeked target element
 
   -- ── Binary counter scratch ────────────────────────────────────────────
-  carry       : Option (ULift.{u} Bool)         -- carry bit for increment
+  carry       : Option Bool          -- carry bit for increment
 set_option linter.style.whitespace true
 set_option linter.style.longLine true
 
@@ -202,7 +202,7 @@ instance : Inhabited (DovetailSigma Γw Γo Q) :=
      transWDir   := WorkTapeDirection.N
      transOut    := none
      transHalted := false
-     inputBit    := ULift.up false
+     inputBit    := false
      peekQ       := none
      peekBit     := none
      peekInput   := none
@@ -222,10 +222,10 @@ instance [Fintype Γw] [Fintype Γo] [Fintype Q] [DecidableEq Γw] [DecidableEq 
     Fintype (DovetailSigma Γw Γo Q) :=
   Fintype.ofEquiv
     (Option Q × Option Γw × InputTapeDirection × WorkTapeDirection ×
-     Option (Option Γo) × Bool × ULift.{u} Bool × Option Q ×
-     Option (ULift.{u} Bool) × Option (Option (ULift.{u} Bool)) ×
+     Option (Option Γo) × Bool × Bool × Option Q ×
+     Option Bool × Option (Option Bool) ×
      Option (Option Γw) × Option (Option Γw) ×
-     Option (Option Γo) × Option Γo × Option (ULift.{u} Bool))
+     Option (Option Γo) × Option Γo × Option Bool)
     { toFun := fun ⟨a, b, c, d, e, f, g, h, i, j, k, l, m, n, o⟩ =>
         { transQ := a, transW := b, transIDir := c, transWDir := d,
           transOut := e, transHalted := f, inputBit := g, peekQ := h,
@@ -259,7 +259,7 @@ def applyDelta {Γw Γo Q : Type u}
     (σ : DovetailSigma Γw Γo Q) : DovetailSigma Γw Γo Q :=
   match σ.transW with
   | some w =>
-      match gen.δ (σ.transQ.getD gen.init) σ.inputBit.down w with
+      match gen.δ (σ.transQ.getD gen.init) σ.inputBit w with
       | none =>
           { σ with
             transIDir   := InputTapeDirection.N
@@ -350,9 +350,9 @@ def check_testHalting {Γw Γo Q : Type u}
   -- peek input to get the current bit (non-destructive)
   Turing.TM2.Stmt.peek DovetailStack.input (fun σ i => { σ with
     inputBit  := match i with
-                 | some (some b) => b
-                 | _             => ULift.up false
-    peekInput := i })
+                 | some (some b) => ULift.down b
+                 | _             => false
+    peekInput := i.map (·.map ULift.down) })
   -- peek workR to get the head symbol (non-destructive)
   <| Turing.TM2.Stmt.peek DovetailStack.workR (fun σ w => { σ with
     transW    := match w with
@@ -457,7 +457,8 @@ def check_saveInstance_state {Γw Γo Q : Type u}
 def check_saveInstance_input {Γw Γo Q : Type u}
     [FinEnum Γw] [Inhabited Γo] [FinEnum Γo] [FinEnum Q] :
     Turing.TM2.Stmt (stackAlphabet Γw Γo Q) DovetailLabel (DovetailSigma Γw Γo Q) :=
-  Turing.TM2.Stmt.peek DovetailStack.input (fun σ i => { σ with peekInput := i })
+  Turing.TM2.Stmt.peek DovetailStack.input (fun σ i =>
+    { σ with peekInput := i.map (·.map ULift.down) })
   <| Turing.TM2.Stmt.branch (fun σ => match σ.peekInput with
       | none      => true
       | some none => true
@@ -471,7 +472,7 @@ def check_saveInstance_input {Γw Γo Q : Type u}
       ( Turing.TM2.Stmt.goto (fun _ => DovetailLabel.check_saveInstance_workL) ) )
     ( Turing.TM2.Stmt.pop DovetailStack.input (fun σ _ => σ)
       <| Turing.TM2.Stmt.push DovetailStack.saveInput
-        (fun σ => σ.peekInput.getD none)
+        (fun σ => (σ.peekInput.getD none).map ULift.up)
       <| Turing.TM2.Stmt.goto (fun _ => DovetailLabel.check_saveInstance_input) )
 
 def check_saveInstance_workL {Γw Γo Q : Type u}
@@ -557,12 +558,13 @@ def check_restoreAll_state {Γw Γo Q : Type u}
 def check_restoreAll_input {Γw Γo Q : Type u}
     [FinEnum Γw] [Inhabited Γo] [FinEnum Γo] [FinEnum Q] :
     Turing.TM2.Stmt (stackAlphabet Γw Γo Q) DovetailLabel (DovetailSigma Γw Γo Q) :=
-  Turing.TM2.Stmt.peek DovetailStack.saveInput (fun σ i => { σ with peekInput := i })
+  Turing.TM2.Stmt.peek DovetailStack.saveInput (fun σ i =>
+    { σ with peekInput := i.map (·.map ULift.down) })
   <| Turing.TM2.Stmt.branch (fun σ => σ.peekInput.isNone)
     ( Turing.TM2.Stmt.goto (fun _ => DovetailLabel.check_restoreAll_workL) )
     ( Turing.TM2.Stmt.pop DovetailStack.saveInput (fun σ _ => σ)
       <| Turing.TM2.Stmt.push DovetailStack.input
-        (fun σ => σ.peekInput.getD none)
+        (fun σ => (σ.peekInput.getD none).map ULift.up)
       <| Turing.TM2.Stmt.goto (fun _ => DovetailLabel.check_restoreAll_input) )
 
 def check_restoreAll_workL {Γw Γo Q : Type u}
@@ -627,13 +629,13 @@ def spawn_copyCounter {Γw Γo Q : Type u}
     [FinEnum Γw] [Inhabited Γo] [FinEnum Γo] [FinEnum Q] :
     Turing.TM2.Stmt (stackAlphabet Γw Γo Q) DovetailLabel (DovetailSigma Γw Γo Q) :=
   Turing.TM2.Stmt.peek DovetailStack.counter
-    (fun σ b => { σ with peekBit := b })
+    (fun σ b => { σ with peekBit := b.map ULift.down })
   <| Turing.TM2.Stmt.branch (fun σ => σ.peekBit.isNone)
     ( Turing.TM2.Stmt.goto (fun _ => DovetailLabel.spawn_restoreAndPush) )
     ( Turing.TM2.Stmt.pop DovetailStack.counter
-        (fun σ b => { σ with peekBit := b })
+        (fun σ b => { σ with peekBit := b.map ULift.down })
       <| Turing.TM2.Stmt.push DovetailStack.saveCounter
-        (fun σ => σ.peekBit.getD (ULift.up false))
+        (fun σ => ULift.up (σ.peekBit.getD false))
       <| Turing.TM2.Stmt.goto (fun _ => DovetailLabel.spawn_copyCounter) )
 
 def spawn_restoreAndPush {Γw Γo Q : Type u}
@@ -641,7 +643,7 @@ def spawn_restoreAndPush {Γw Γo Q : Type u}
     (gen : Generator Γw Γo Q) :
     Turing.TM2.Stmt (stackAlphabet Γw Γo Q) DovetailLabel (DovetailSigma Γw Γo Q) :=
   Turing.TM2.Stmt.peek DovetailStack.saveCounter
-    (fun σ b => { σ with peekBit := b })
+    (fun σ b => { σ with peekBit := b.map ULift.down })
   <| Turing.TM2.Stmt.branch (fun σ => σ.peekBit.isNone)
     ( -- All bits restored. Push init state and none separators for the new instance,
       -- then strip the separators (moving them to save stacks) before entering the step loop.
@@ -652,11 +654,11 @@ def spawn_restoreAndPush {Γw Γo Q : Type u}
       <| Turing.TM2.Stmt.push DovetailStack.output (fun _ => none)
       <| Turing.TM2.Stmt.goto (fun _ => DovetailLabel.step_stripSeparators) )
     ( Turing.TM2.Stmt.pop DovetailStack.saveCounter
-        (fun σ b => { σ with peekBit := b })
+        (fun σ b => { σ with peekBit := b.map ULift.down })
       <| Turing.TM2.Stmt.push DovetailStack.counter
-        (fun σ => σ.peekBit.getD (ULift.up false))
+        (fun σ => ULift.up (σ.peekBit.getD false))
       <| Turing.TM2.Stmt.push DovetailStack.input
-        (fun σ => σ.peekBit)
+        (fun σ => σ.peekBit.map ULift.up)
       <| Turing.TM2.Stmt.goto (fun _ => DovetailLabel.spawn_restoreAndPush) )
 
 /-
@@ -722,9 +724,9 @@ def step_peekInput {Γw Γo Q : Type u}
     Turing.TM2.Stmt (stackAlphabet Γw Γo Q) DovetailLabel (DovetailSigma Γw Γo Q) :=
   Turing.TM2.Stmt.peek DovetailStack.input (fun σ i => { σ with
     inputBit  := match i with
-                 | some (some b) => b
-                 | _             => ULift.up false
-    peekInput := i })
+                 | some (some b) => b.down
+                 | _             => false
+    peekInput := i.map (·.map ULift.down) })
   <| Turing.TM2.Stmt.goto (fun _ => DovetailLabel.step_peekWorkR)
 
 def step_peekWorkR {Γw Γo Q : Type u}
@@ -843,7 +845,8 @@ def step_saveInstance_state {Γw Γo Q : Type u}
 def step_saveInstance_input {Γw Γo Q : Type u}
     [FinEnum Γw] [Inhabited Γo] [FinEnum Γo] [FinEnum Q] :
     Turing.TM2.Stmt (stackAlphabet Γw Γo Q) DovetailLabel (DovetailSigma Γw Γo Q) :=
-  Turing.TM2.Stmt.peek DovetailStack.input (fun σ i => { σ with peekInput := i })
+  Turing.TM2.Stmt.peek DovetailStack.input (fun σ i =>
+    { σ with peekInput := i.map (·.map ULift.down) })
   <| Turing.TM2.Stmt.branch (fun σ => match σ.peekInput with
       | none      => true
       | some none => true
@@ -857,7 +860,7 @@ def step_saveInstance_input {Γw Γo Q : Type u}
       ( Turing.TM2.Stmt.goto (fun _ => DovetailLabel.step_saveInstance_workL) ) )
     ( Turing.TM2.Stmt.pop DovetailStack.input (fun σ _ => σ)
       <| Turing.TM2.Stmt.push DovetailStack.saveInput
-        (fun σ => σ.peekInput.getD none)
+        (fun σ => (σ.peekInput.getD none).map ULift.up)
       <| Turing.TM2.Stmt.goto (fun _ => DovetailLabel.step_saveInstance_input) )
 
 def step_saveInstance_workL {Γw Γo Q : Type u}
@@ -951,12 +954,13 @@ def step_restoreAll_state {Γw Γo Q : Type u}
 def step_restoreAll_input {Γw Γo Q : Type u}
     [FinEnum Γw] [Inhabited Γo] [FinEnum Γo] [FinEnum Q] :
     Turing.TM2.Stmt (stackAlphabet Γw Γo Q) DovetailLabel (DovetailSigma Γw Γo Q) :=
-  Turing.TM2.Stmt.peek DovetailStack.saveInput (fun σ i => { σ with peekInput := i })
+  Turing.TM2.Stmt.peek DovetailStack.saveInput (fun σ i =>
+    { σ with peekInput := i.map (·.map ULift.down) })
   <| Turing.TM2.Stmt.branch (fun σ => σ.peekInput.isNone)
     ( Turing.TM2.Stmt.goto (fun _ => DovetailLabel.step_restoreAll_workL) )
     ( Turing.TM2.Stmt.pop DovetailStack.saveInput (fun σ _ => σ)
       <| Turing.TM2.Stmt.push DovetailStack.input
-        (fun σ => σ.peekInput.getD none)
+        (fun σ => (σ.peekInput.getD none).map ULift.up)
       <| Turing.TM2.Stmt.goto (fun _ => DovetailLabel.step_restoreAll_input) )
 
 def step_restoreAll_workL {Γw Γo Q : Type u}
@@ -1017,42 +1021,40 @@ def step_restoreAll_output {Γw Γo Q : Type u}
 def counter_increment {Γw Γo Q : Type u}
     [FinEnum Γw] [Inhabited Γo] [FinEnum Γo] [FinEnum Q] :
     Turing.TM2.Stmt (stackAlphabet Γw Γo Q) DovetailLabel (DovetailSigma Γw Γo Q) :=
-  Turing.TM2.Stmt.load (fun σ => { σ with carry := some (ULift.up true) })
+  Turing.TM2.Stmt.load (fun σ => { σ with carry := some true })
   <| Turing.TM2.Stmt.goto (fun _ => DovetailLabel.counter_increment_loop)
 
 def counter_increment_loop {Γw Γo Q : Type u}
     [FinEnum Γw] [Inhabited Γo] [FinEnum Γo] [FinEnum Q] :
     Turing.TM2.Stmt (stackAlphabet Γw Γo Q) DovetailLabel (DovetailSigma Γw Γo Q) :=
-  Turing.TM2.Stmt.peek DovetailStack.counter (fun σ b => { σ with peekBit := b })
+  Turing.TM2.Stmt.peek DovetailStack.counter (fun σ b => { σ with peekBit := b.map ULift.down })
   <| Turing.TM2.Stmt.branch (fun σ => σ.peekBit.isNone)
-    ( Turing.TM2.Stmt.branch (fun σ => match σ.carry with
-          | some b => ULift.down b
-          | none   => false)
+    ( Turing.TM2.Stmt.branch (fun σ => σ.carry.getD false)
         ( Turing.TM2.Stmt.push DovetailStack.counter (fun _ => ULift.up true)
           <| Turing.TM2.Stmt.goto (fun _ => DovetailLabel.counter_increment_restore) )
         ( Turing.TM2.Stmt.goto (fun _ => DovetailLabel.counter_increment_restore) ) )
     ( Turing.TM2.Stmt.pop DovetailStack.counter (fun σ _ => σ)
       <| Turing.TM2.Stmt.load (fun σ =>
-          let bit      := (σ.peekBit.getD (ULift.up false)).down
-          let carry    := (σ.carry.getD (ULift.up false)).down
+          let bit      := σ.peekBit.getD false
+          let carry    := σ.carry.getD false
           let newBit   := Bool.xor bit carry
           let newCarry := Bool.and bit carry
           { σ with
-            peekBit := some (ULift.up newBit)
-            carry   := some (ULift.up newCarry) })
+            peekBit := some newBit
+            carry   := some newCarry })
       <| Turing.TM2.Stmt.push DovetailStack.saveCounter
-          (fun σ => σ.peekBit.getD (ULift.up false))
+          (fun σ => ULift.up (σ.peekBit.getD false))
       <| Turing.TM2.Stmt.goto (fun _ => DovetailLabel.counter_increment_loop) )
 
 def counter_increment_restore {Γw Γo Q : Type u}
     [FinEnum Γw] [Inhabited Γo] [FinEnum Γo] [FinEnum Q] :
     Turing.TM2.Stmt (stackAlphabet Γw Γo Q) DovetailLabel (DovetailSigma Γw Γo Q) :=
-  Turing.TM2.Stmt.peek DovetailStack.saveCounter (fun σ b => { σ with peekBit := b })
+  Turing.TM2.Stmt.peek DovetailStack.saveCounter (fun σ b => { σ with peekBit := b.map ULift.down })
   <| Turing.TM2.Stmt.branch (fun σ => σ.peekBit.isNone)
     ( Turing.TM2.Stmt.goto (fun _ => DovetailLabel.check_stripSeparators) )
     ( Turing.TM2.Stmt.pop DovetailStack.saveCounter (fun σ _ => σ)
       <| Turing.TM2.Stmt.push DovetailStack.counter
-          (fun σ => σ.peekBit.getD (ULift.up false))
+          (fun σ => ULift.up (σ.peekBit.getD false))
       <| Turing.TM2.Stmt.goto (fun _ => DovetailLabel.counter_increment_restore) )
 
 /-
