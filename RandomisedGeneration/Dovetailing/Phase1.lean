@@ -18,6 +18,24 @@ set_option linter.unusedSectionVars false
 variable {Γw Γo Q : Type u}
 variable [Inhabited Γo] [FinEnum Γo] [FinEnum Γw] [Inhabited Γw] [FinEnum Q]
 
+lemma Nat.testBit_eq_bits_getD (n i : ℕ) :
+    n.testBit i = (n.bits[i]?).getD false := by
+  induction n using Nat.binaryRec generalizing i with
+  | zero => simp [Nat.zero_bits]
+  | bit b n h =>
+    by_cases hn : n = 0 ∧ b = false
+    · obtain ⟨rfl, rfl⟩ := hn
+      simp [Nat.zero_bits]
+    · push_neg at hn
+      have hbn : n = 0 → b = true := by
+        intro h0; cases b <;> simp_all
+      rw [Nat.bits_append_bit _ _ hbn]
+      cases i with
+      | zero =>
+        simp
+      | succ i =>
+        simp [Nat.testBit_bit_succ, h]
+
 /-- Popping the leading none from the quiescent stack format gives the
     check phase format with the topmost instance's data exposed. -/
 lemma quiescent_format_tail {α : Type*} (f : ℕ → List (Option α)) (n : ℕ) (hn : 0 < n) :
@@ -222,8 +240,26 @@ lemma checkPhase_advance_no_match
       Turing.Reaches (Turing.TM2.step (dovetailMachine gen)) tm2cfg tm2cfg' := by
   sorry
 
-/-- When `check_testHalting` fires and the instance is not halting, the machine reaches
-    `check_saveInstance_state`. The state is pushed back unchanged. -/
+lemma instanceConfig_input (gen : Generator Γw Γo Q) (i round : ℕ) :
+    (instanceConfig gen i round).input = Nat.testBit i := by
+  unfold instanceConfig
+  induction (round - i) with
+  | zero => simp [stepNHalt, initConfig]
+  | succ n ih =>
+    simp only [stepNHalt]
+    cases h : step gen (stepNHalt gen (initConfig gen (Nat.testBit i)) n) with
+    | none => simp only; exact ih
+    | some c => simp only; exact step_preserves_input h ▸ ih
+
+/-- When `CheckPhaseInvariant` holds with `j < round` and the next instance is NOT halting,
+    the machine reaches `check_saveInstance_state` from `check_iterateInstances`.
+
+    This combines the step from check_iterateInstances to check_testHalting
+    (popping state) with the step from check_testHalting to check_saveInstance_state
+    (peeking input/workR, applying delta, detecting non-halt, pushing original state back).
+
+    All stacks are preserved: check_testHalting peeks input and workR non-destructively,
+    and pushes back the original state (from peekQ). -/
 lemma checkPhase_testHalting_not_halts
     (gen : Generator Γw Γo Q)
     (target : List Γo)
@@ -238,7 +274,6 @@ lemma checkPhase_testHalting_not_halts
         (instanceConfig gen (round - j - 1) round).state ::
         ((List.range (round - j - 1)).map
           (fun i => (instanceConfig gen i round).state)).reverse ∧
-      -- all stacks preserved
       tm2cfg'.stk DovetailStack.output     = tm2cfg.stk DovetailStack.output ∧
       tm2cfg'.stk DovetailStack.input      = tm2cfg.stk DovetailStack.input ∧
       tm2cfg'.stk DovetailStack.workL      = tm2cfg.stk DovetailStack.workL ∧
@@ -253,7 +288,218 @@ lemma checkPhase_testHalting_not_halts
       tm2cfg'.stk DovetailStack.saveTarget = tm2cfg.stk DovetailStack.saveTarget ∧
       tm2cfg'.stk DovetailStack.saveCounter = tm2cfg.stk DovetailStack.saveCounter ∧
       Turing.Reaches (Turing.TM2.step (dovetailMachine gen)) tm2cfg tm2cfg' := by
-  sorry -- Unclear whether this lemma is good as stated.
+  -- Step 1: check_iterateInstances → check_testHalting
+  obtain ⟨tm2cfg₁, hLabel₁, hPeekQ₁, hTransQ₁, hState₁, hOutput₁, hInput₁, hWorkL₁, hWorkR₁,
+    hCounter₁, hTarget₁, hSaveState₁, hSaveInput₁, hSaveWorkL₁, hSaveWorkR₁,
+    hSaveOutput₁, hSaveTarget₁, hSaveCounter₁, hReach₁⟩ :=
+    checkPhase_iterate_to_testHalting gen target round j tm2cfg hInv hj
+  set inst := instanceConfig gen (round - j - 1) round with hinst
+  have hNotHalt : ∃ q' w' o id wd,
+      gen.δ inst.state (inst.input inst.inputIndex) (inst.work inst.workIndex) =
+        some (q', w', o, id, wd) := by
+    unfold IsHalting step at hNotHalts
+    by_contra h
+    push_neg at h
+    apply hNotHalts
+    cases hδ : gen.δ inst.state (inst.input inst.inputIndex) (inst.work inst.workIndex) with
+    | none =>
+      rfl
+    | some val =>
+      exact absurd hδ (h val.1 val.2.1 val.2.2.1 val.2.2.2.1 val.2.2.2.2)
+  obtain ⟨q', w', o, id, wd, hDelta⟩ := hNotHalt
+  have hInputBit : (match (tm2cfg₁.stk DovetailStack.input).head? with
+      | some (some b) => b.down
+      | _ => false) = inst.input inst.inputIndex := by
+    rw [hInput₁]
+    have hInput := hInv.input
+    have hne : round - j ≠ 0 := by omega
+    simp only [hne, ↓reduceIte] at hInput
+    rw [hInput]
+    have hInstInput : inst.input = Nat.testBit (round - j - 1) :=
+      instanceConfig_input gen (round - j - 1) round
+    rw [hInstInput]
+    -- Case split on whether there are remaining bits
+    cases hBits : ((Nat.bits (round - j - 1)).drop inst.inputIndex) with
+    | nil =>
+      simp only [List.map_nil, List.nil_append]
+      -- inputIndex ≥ length of bits, so testBit = false
+      have hIdx : inst.inputIndex ≥ (Nat.bits (round - j - 1)).length := by
+        by_contra h
+        push_neg at h
+        exact absurd (List.drop_eq_nil_iff.mp hBits) (by omega)
+      symm
+      rw [Nat.testBit_eq_bits_getD, List.getElem?_eq_none (by omega)]
+      simp only [Option.getD_none]
+      -- Now goal: (match head? of rest with ...) = false
+      -- rest is either [] or starts with none
+      by_cases h : round - j - 1 = 0
+      · simp [h, List.range_zero]
+      · have hRest := quiescent_format_head
+          (fun i => let cfg := instanceConfig gen i round
+            ((Nat.bits i).drop cfg.inputIndex).map (fun b => some (ULift.up.{u} b)))
+          (round - j - 1) (by omega)
+        simp only [List.nil_append, List.cons_append] at hRest
+        have hHead := congr_arg List.head? hRest
+        simp only [List.head?_cons] at hHead
+        simp
+        simp only [List.map_drop] at hHead ⊢
+        simp [hHead]
+    | cons b bs =>
+      simp only [List.map_cons, List.cons_append, List.head?_cons]
+      -- b is the inputIndex-th bit
+      have hGet : (Nat.bits (round - j - 1))[inst.inputIndex]? = some b := by
+        rw [← List.head?_drop, hBits]
+        simp
+      symm
+      rw [Nat.testBit_eq_bits_getD, hGet]
+      simp
+  have hWorkHead : (match (tm2cfg₁.stk DovetailStack.workR).head? with
+      | some (some x) => some x
+      | _ => some gen.blank) = some (inst.work inst.workIndex) := by
+    rw [hWorkR₁]
+    have hWorkR := hInv.workR
+    have hne : round - j ≠ 0 := by omega
+    simp only [hne, ↓reduceIte] at hWorkR
+    rw [hWorkR]
+    simp
+    rfl
+  -- Step 2: check_testHalting → check_saveInstance_state (not halting branch)
+  have hStep2 : ∃ tm2cfg₂,
+      Turing.TM2.step (dovetailMachine gen) tm2cfg₁ = some tm2cfg₂ ∧
+      tm2cfg₂.l = some DovetailLabel.check_saveInstance_state ∧
+      tm2cfg₂.stk DovetailStack.state =
+        inst.state :: ((List.range (round - j - 1)).map
+          (fun i => (instanceConfig gen i round).state)).reverse ∧
+      (∀ k, k ≠ DovetailStack.state →
+        tm2cfg₂.stk k = tm2cfg₁.stk k) := by
+    obtain ⟨l₁, v₁, stk₁⟩ := tm2cfg₁
+    simp only at hLabel₁ hPeekQ₁ hTransQ₁ hState₁ hWorkHead hInputBit ⊢
+    subst hLabel₁
+    rw [Turing.TM2.step, dovetailMachine, check_testHalting]
+    simp only [Turing.TM2.stepAux]
+    unfold applyDelta
+    cases hW : (stk₁ DovetailStack.workR).head? with
+    | none =>
+      cases hI : (stk₁ DovetailStack.input).head? with
+      | none =>
+        simp only [hW, hI] at hWorkHead hInputBit ⊢
+        have hWorkHead' : gen.blank = inst.work inst.workIndex :=
+          Option.some.inj hWorkHead
+        have hDelta' : gen.δ (v₁.transQ.getD gen.init) false gen.blank =
+            some (q', w', o, id, wd) := by
+          rw [hTransQ₁, Option.getD_some, hInputBit, hWorkHead']; exact hDelta
+        rw [hDelta', cond_false]
+        refine ⟨_, rfl, rfl, ?_, ?_⟩
+        · simp only [Function.update, ↓reduceDIte, hPeekQ₁, Option.getD_some, hState₁]
+        · intro k hk; simp only [Function.update]; split <;> [exact absurd ‹_› hk; rfl]
+      | some ob => cases ob with
+        | none =>
+          simp only [hW, hI] at hWorkHead hInputBit ⊢
+          have hWorkHead' : gen.blank = inst.work inst.workIndex :=
+            Option.some.inj hWorkHead
+          have hDelta' : gen.δ (v₁.transQ.getD gen.init) false gen.blank =
+              some (q', w', o, id, wd) := by
+            rw [hTransQ₁, Option.getD_some, hInputBit, hWorkHead']; exact hDelta
+          rw [hDelta', cond_false]
+          refine ⟨_, rfl, rfl, ?_, ?_⟩
+          · simp only [Function.update, ↓reduceDIte, hPeekQ₁, Option.getD_some, hState₁]
+          · intro k hk; simp only [Function.update]; split <;> [exact absurd ‹_› hk; rfl]
+        | some b =>
+          simp only [hW, hI] at hWorkHead hInputBit ⊢
+          have hWorkHead' : gen.blank = inst.work inst.workIndex :=
+            Option.some.inj hWorkHead
+          have hDelta' : gen.δ (v₁.transQ.getD gen.init) b.down gen.blank =
+              some (q', w', o, id, wd) := by
+            rw [hTransQ₁, Option.getD_some, hInputBit, hWorkHead']; exact hDelta
+          rw [hDelta', cond_false]
+          refine ⟨_, rfl, rfl, ?_, ?_⟩
+          · simp only [Function.update, ↓reduceDIte, hPeekQ₁, Option.getD_some, hState₁]
+          · intro k hk; simp only [Function.update]; split <;> [exact absurd ‹_› hk; rfl]
+    | some ow => cases ow with
+      | none =>
+        cases hI : (stk₁ DovetailStack.input).head? with
+        | none =>
+          simp only [hW, hI] at hWorkHead hInputBit ⊢
+          have hWorkHead' : gen.blank = inst.work inst.workIndex :=
+            Option.some.inj hWorkHead
+          have hDelta' : gen.δ (v₁.transQ.getD gen.init) false gen.blank =
+              some (q', w', o, id, wd) := by
+            rw [hTransQ₁, Option.getD_some, hInputBit, hWorkHead']; exact hDelta
+          rw [hDelta', cond_false]
+          refine ⟨_, rfl, rfl, ?_, ?_⟩
+          · simp only [Function.update, ↓reduceDIte, hPeekQ₁, Option.getD_some, hState₁]
+          · intro k hk; simp only [Function.update]; split <;> [exact absurd ‹_› hk; rfl]
+        | some ob => cases ob with
+          | none =>
+            simp only [hW, hI] at hWorkHead hInputBit ⊢
+            have hWorkHead' : gen.blank = inst.work inst.workIndex :=
+              Option.some.inj hWorkHead
+            have hDelta' : gen.δ (v₁.transQ.getD gen.init) false gen.blank =
+                some (q', w', o, id, wd) := by
+              rw [hTransQ₁, Option.getD_some, hInputBit, hWorkHead']; exact hDelta
+            rw [hDelta', cond_false]
+            refine ⟨_, rfl, rfl, ?_, ?_⟩
+            · simp only [Function.update, ↓reduceDIte, hPeekQ₁, Option.getD_some, hState₁]
+            · intro k hk; simp only [Function.update]; split <;> [exact absurd ‹_› hk; rfl]
+          | some b =>
+            simp only [hW, hI] at hWorkHead hInputBit ⊢
+            have hWorkHead' : gen.blank = inst.work inst.workIndex :=
+              Option.some.inj hWorkHead
+            have hDelta' : gen.δ (v₁.transQ.getD gen.init) b.down gen.blank =
+                some (q', w', o, id, wd) := by
+              rw [hTransQ₁, Option.getD_some, hInputBit, hWorkHead']; exact hDelta
+            rw [hDelta', cond_false]
+            refine ⟨_, rfl, rfl, ?_, ?_⟩
+            · simp only [Function.update, ↓reduceDIte, hPeekQ₁, Option.getD_some, hState₁]
+            · intro k hk; simp only [Function.update]; split <;> [exact absurd ‹_› hk; rfl]
+      | some w =>
+        cases hI : (stk₁ DovetailStack.input).head? with
+        | none =>
+          simp only [hW, hI, Option.some.injEq] at hWorkHead hInputBit ⊢
+          have hDelta' : gen.δ (v₁.transQ.getD gen.init) false w =
+              some (q', w', o, id, wd) := by
+            rw [hTransQ₁, Option.getD_some, hInputBit, hWorkHead]; exact hDelta
+          rw [hDelta', cond_false]
+          refine ⟨_, rfl, rfl, ?_, ?_⟩
+          · simp only [Function.update, ↓reduceDIte, hPeekQ₁, Option.getD_some, hState₁]
+          · intro k hk; simp only [Function.update]; split <;> [exact absurd ‹_› hk; rfl]
+        | some ob => cases ob with
+          | none =>
+            simp only [hW, hI, Option.some.injEq] at hWorkHead hInputBit ⊢
+            have hDelta' : gen.δ (v₁.transQ.getD gen.init) false w =
+                some (q', w', o, id, wd) := by
+              rw [hTransQ₁, Option.getD_some, hInputBit, hWorkHead]; exact hDelta
+            rw [hDelta', cond_false]
+            refine ⟨_, rfl, rfl, ?_, ?_⟩
+            · simp only [Function.update, ↓reduceDIte, hPeekQ₁, Option.getD_some, hState₁]
+            · intro k hk; simp only [Function.update]; split <;> [exact absurd ‹_› hk; rfl]
+          | some b =>
+            simp only [hW, hI, Option.some.injEq] at hWorkHead hInputBit ⊢
+            have hDelta' : gen.δ (v₁.transQ.getD gen.init) b.down w =
+                some (q', w', o, id, wd) := by
+              rw [hTransQ₁, Option.getD_some, hInputBit, hWorkHead]; exact hDelta
+            rw [hDelta', cond_false]
+            refine ⟨_, rfl, rfl, ?_, ?_⟩
+            · simp only [Function.update, ↓reduceDIte, hPeekQ₁, Option.getD_some, hState₁]
+            · intro k hk; simp only [Function.update]; split <;> [exact absurd ‹_› hk; rfl]
+  -- Assemble the final result
+  obtain ⟨tm2cfg₂, hStep₂, hLabel₂, hState₂, hOther₂⟩ := hStep2
+  refine ⟨tm2cfg₂, hLabel₂, hState₂, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+  · rw [hOther₂ _ (by decide)]; exact hOutput₁
+  · rw [hOther₂ _ (by decide)]; exact hInput₁
+  · rw [hOther₂ _ (by decide)]; exact hWorkL₁
+  · rw [hOther₂ _ (by decide)]; exact hWorkR₁
+  · rw [hOther₂ _ (by decide)]; exact hCounter₁
+  · rw [hOther₂ _ (by decide)]; exact hTarget₁
+  · rw [hOther₂ _ (by decide)]; exact hSaveState₁
+  · rw [hOther₂ _ (by decide)]; exact hSaveOutput₁
+  · rw [hOther₂ _ (by decide)]; exact hSaveInput₁
+  · rw [hOther₂ _ (by decide)]; exact hSaveWorkL₁
+  · rw [hOther₂ _ (by decide)]; exact hSaveWorkR₁
+  · rw [hOther₂ _ (by decide)]; exact hSaveTarget₁
+  · rw [hOther₂ _ (by decide)]; exact hSaveCounter₁
+  · exact Relation.ReflTransGen.trans hReach₁
+      (Relation.ReflTransGen.single (by rw [Option.mem_def]; exact hStep₂))
 
 /-- Helper: the check_compareOutput loop terminates with a halt when
     the remaining target and output match element by element. -/
@@ -349,24 +595,6 @@ lemma check_compareOutput_halts_on_match
   obtain ⟨rest, hOut, hRest⟩ := hOutput
   exact check_compareOutput_loop gen target rest hRest tm2cfg hLabel hTarget hOut
 
-lemma Nat.testBit_eq_bits_getD (n i : ℕ) :
-    n.testBit i = (n.bits[i]?).getD false := by
-  induction n using Nat.binaryRec generalizing i with
-  | zero => simp [Nat.zero_bits]
-  | bit b n h =>
-    by_cases hn : n = 0 ∧ b = false
-    · obtain ⟨rfl, rfl⟩ := hn
-      simp [Nat.zero_bits]
-    · push_neg at hn
-      have hbn : n = 0 → b = true := by
-        intro h0; cases b <;> simp_all
-      rw [Nat.bits_append_bit _ _ hbn]
-      cases i with
-      | zero =>
-        simp
-      | succ i =>
-        simp [Nat.testBit_bit_succ, h]
-
 /-- When `CheckPhaseInvariant` holds with `j < round` and the next instance is halting,
     the machine reaches `check_compareOutput` from `check_iterateInstances`.
 
@@ -422,16 +650,8 @@ lemma checkPhase_testHalting_halts
     simp only [hne, ↓reduceIte] at hInput
     rw [hInput]
     -- Establish that inst.input = Nat.testBit (round - j - 1)
-    have hInstInput : inst.input = Nat.testBit (round - j - 1) := by
-      unfold instanceConfig at hinst
-      rw [hinst]
-      induction (round - (round - j - 1)) with
-      | zero => simp [stepNHalt, initConfig]
-      | succ n ih =>
-        simp only [stepNHalt]
-        cases h : step gen (stepNHalt gen (initConfig gen (Nat.testBit (round - j - 1))) n) with
-        | none => simp only; exact ih
-        | some c => simp only; exact step_preserves_input h ▸ ih
+    have hInstInput : inst.input = Nat.testBit (round - j - 1) :=
+      instanceConfig_input gen (round - j - 1) round
     rw [hInstInput]
     -- Case split on whether there are remaining bits
     cases hBits : ((Nat.bits (round - j - 1)).drop inst.inputIndex) with
@@ -576,7 +796,6 @@ lemma checkPhase_testHalting_halts
             refine ⟨_, rfl, rfl, ?_, ?_⟩
             · simp only [Function.update, ↓reduceDIte, hPeekQ₁, Option.getD_some, hState₁]
             · intro k hk; simp only [Function.update]; split <;> [exact absurd ‹_› hk; rfl]
-
   obtain ⟨tm2cfg₂, hStep₂, hLabel₂, hState₂, hOther₂⟩ := hStep2
   refine ⟨tm2cfg₂, hLabel₂, hState₂, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
   -- output
