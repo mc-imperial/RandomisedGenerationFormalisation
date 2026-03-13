@@ -351,7 +351,21 @@ lemma check_compareOutput_halts_on_match
 
 lemma Nat.testBit_eq_bits_getD (n i : ℕ) :
     n.testBit i = (n.bits[i]?).getD false := by
-  sorry
+  induction n using Nat.binaryRec generalizing i with
+  | zero => simp [Nat.zero_bits]
+  | bit b n h =>
+    by_cases hn : n = 0 ∧ b = false
+    · obtain ⟨rfl, rfl⟩ := hn
+      simp [Nat.zero_bits]
+    · push_neg at hn
+      have hbn : n = 0 → b = true := by
+        intro h0; cases b <;> simp_all
+      rw [Nat.bits_append_bit _ _ hbn]
+      cases i with
+      | zero =>
+        simp
+      | succ i =>
+        simp [Nat.testBit_bit_succ, h]
 
 /-- When `CheckPhaseInvariant` holds with `j < round` and the next instance is halting,
     the machine reaches `check_compareOutput` from `check_iterateInstances`.
