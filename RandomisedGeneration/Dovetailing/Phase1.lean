@@ -349,6 +349,10 @@ lemma check_compareOutput_halts_on_match
   obtain ⟨rest, hOut, hRest⟩ := hOutput
   exact check_compareOutput_loop gen target rest hRest tm2cfg hLabel hTarget hOut
 
+lemma Nat.testBit_eq_bits_getD (n i : ℕ) :
+    n.testBit i = (n.bits[i]?).getD false := by
+  sorry
+
 /-- When `CheckPhaseInvariant` holds with `j < round` and the next instance is halting,
     the machine reaches `check_compareOutput` from `check_iterateInstances`.
 
@@ -395,10 +399,62 @@ lemma checkPhase_testHalting_halts
   have hDelta : gen.δ inst.state (inst.input inst.inputIndex)
       (inst.work inst.workIndex) = none := by
     unfold IsHalting step at hHalts; revert hHalts; intro h; split at h <;> simp_all
+
   have hInputBit : (match (tm2cfg₁.stk DovetailStack.input).head? with
       | some (some b) => b.down
       | _ => false) = inst.input inst.inputIndex := by
-    sorry
+    rw [hInput₁]
+    have hInput := hInv.input
+    have hne : round - j ≠ 0 := by omega
+    simp only [hne, ↓reduceIte] at hInput
+    rw [hInput]
+    -- Establish that inst.input = Nat.testBit (round - j - 1)
+    have hInstInput : inst.input = Nat.testBit (round - j - 1) := by
+      unfold instanceConfig at hinst
+      rw [hinst]
+      induction (round - (round - j - 1)) with
+      | zero => simp [stepNHalt, initConfig]
+      | succ n ih =>
+        simp only [stepNHalt]
+        cases h : step gen (stepNHalt gen (initConfig gen (Nat.testBit (round - j - 1))) n) with
+        | none => simp only; exact ih
+        | some c => simp only; exact step_preserves_input h ▸ ih
+    rw [hInstInput]
+    -- Case split on whether there are remaining bits
+    cases hBits : ((Nat.bits (round - j - 1)).drop inst.inputIndex) with
+    | nil =>
+      simp only [List.map_nil, List.nil_append]
+      -- inputIndex ≥ length of bits, so testBit = false
+      have hIdx : inst.inputIndex ≥ (Nat.bits (round - j - 1)).length := by
+        by_contra h
+        push_neg at h
+        exact absurd (List.drop_eq_nil_iff.mp hBits) (by omega)
+      symm
+      rw [Nat.testBit_eq_bits_getD, List.getElem?_eq_none (by omega)]
+      simp only [Option.getD_none]
+      -- Now goal: (match head? of rest with ...) = false
+      -- rest is either [] or starts with none
+      by_cases h : round - j - 1 = 0
+      · simp [h, List.range_zero]
+      · have hRest := quiescent_format_head
+          (fun i => let cfg := instanceConfig gen i round
+            ((Nat.bits i).drop cfg.inputIndex).map (fun b => some (ULift.up.{u} b)))
+          (round - j - 1) (by omega)
+        simp only [List.nil_append, List.cons_append] at hRest
+        have hHead := congr_arg List.head? hRest
+        simp only [List.head?_cons] at hHead
+        simp
+        simp only [List.map_drop] at hHead ⊢
+        simp [hHead]
+    | cons b bs =>
+      simp only [List.map_cons, List.cons_append, List.head?_cons]
+      -- b is the inputIndex-th bit
+      have hGet : (Nat.bits (round - j - 1))[inst.inputIndex]? = some b := by
+        rw [← List.head?_drop, hBits]
+        simp
+      symm
+      rw [Nat.testBit_eq_bits_getD, hGet]
+      simp
   have hWorkHead : (match (tm2cfg₁.stk DovetailStack.workR).head? with
       | some (some x) => some x
       | _ => some gen.blank) = some (inst.work inst.workIndex) := by
