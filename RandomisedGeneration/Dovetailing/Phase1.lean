@@ -399,7 +399,6 @@ lemma checkPhase_testHalting_halts
   have hDelta : gen.δ inst.state (inst.input inst.inputIndex)
       (inst.work inst.workIndex) = none := by
     unfold IsHalting step at hHalts; revert hHalts; intro h; split at h <;> simp_all
-
   have hInputBit : (match (tm2cfg₁.stk DovetailStack.input).head? with
       | some (some b) => b.down
       | _ => false) = inst.input inst.inputIndex := by
@@ -458,7 +457,13 @@ lemma checkPhase_testHalting_halts
   have hWorkHead : (match (tm2cfg₁.stk DovetailStack.workR).head? with
       | some (some x) => some x
       | _ => some gen.blank) = some (inst.work inst.workIndex) := by
-    sorry
+    rw [hWorkR₁]
+    have hWorkR := hInv.workR
+    have hne : round - j ≠ 0 := by omega
+    simp only [hne, ↓reduceIte] at hWorkR
+    rw [hWorkR]
+    simp only [List.cons_append, List.head?_cons]
+    rfl
   -- Step 2: compute what check_testHalting produces
   have hStep2 : ∃ tm2cfg₂,
       Turing.TM2.step (dovetailMachine gen) tm2cfg₁ = some tm2cfg₂ ∧
