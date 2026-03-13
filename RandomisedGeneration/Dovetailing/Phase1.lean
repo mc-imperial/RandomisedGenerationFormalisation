@@ -396,8 +396,8 @@ lemma checkPhase_testHalting_halts
       (inst.work inst.workIndex) = none := by
     unfold IsHalting step at hHalts; revert hHalts; intro h; split at h <;> simp_all
   have hInputBit : (match (tm2cfg₁.stk DovetailStack.input).head? with
-      | some (some b) => b
-      | _ => ULift.up false).down = inst.input inst.inputIndex := by
+      | some (some b) => b.down
+      | _ => false) = inst.input inst.inputIndex := by
     sorry
   have hWorkHead : (match (tm2cfg₁.stk DovetailStack.workR).head? with
       | some (some x) => some x
@@ -412,7 +412,96 @@ lemma checkPhase_testHalting_halts
           (fun i => (instanceConfig gen i round).state)).reverse ∧
       (∀ k, k ≠ DovetailStack.state →
         tm2cfg₂.stk k = tm2cfg₁.stk k) := by
-    sorry
+    obtain ⟨l₁, v₁, stk₁⟩ := tm2cfg₁
+    simp only at hLabel₁ hPeekQ₁ hTransQ₁ hState₁ hWorkHead hInputBit ⊢
+    subst hLabel₁
+    rw [Turing.TM2.step, dovetailMachine, check_testHalting]
+    simp only [Turing.TM2.stepAux]
+    unfold applyDelta
+    cases hW : (stk₁ DovetailStack.workR).head? with
+    | none =>
+      cases hI : (stk₁ DovetailStack.input).head? with
+      | none =>
+        simp only [hW, hI] at hWorkHead hInputBit ⊢
+        have hDelta' : gen.δ (v₁.transQ.getD gen.init) false gen.blank = none := by
+          rw [hTransQ₁, Option.getD_some, hInputBit, Option.some.inj hWorkHead]; exact hDelta
+        rw [hDelta', cond_true]
+        refine ⟨_, rfl, rfl, ?_, ?_⟩
+        · simp only [Function.update, ↓reduceDIte, hPeekQ₁, Option.getD_some, hState₁]
+        · intro k hk; simp only [Function.update]; split <;> [exact absurd ‹_› hk; rfl]
+      | some ob => cases ob with
+        | none =>
+          simp only [hW, hI] at hWorkHead hInputBit ⊢
+          have hDelta' : gen.δ (v₁.transQ.getD gen.init) false gen.blank = none := by
+            rw [hTransQ₁, Option.getD_some, hInputBit, Option.some.inj hWorkHead]; exact hDelta
+          rw [hDelta', cond_true]
+          refine ⟨_, rfl, rfl, ?_, ?_⟩
+          · simp only [Function.update, ↓reduceDIte, hPeekQ₁, Option.getD_some, hState₁]
+          · intro k hk; simp only [Function.update]; split <;> [exact absurd ‹_› hk; rfl]
+        | some b =>
+          simp only [hW, hI] at hWorkHead hInputBit ⊢
+          have hDelta' : gen.δ (v₁.transQ.getD gen.init) b.down gen.blank = none := by
+            rw [hTransQ₁, Option.getD_some, hInputBit, Option.some.inj hWorkHead]; exact hDelta
+          rw [hDelta', cond_true]
+          refine ⟨_, rfl, rfl, ?_, ?_⟩
+          · simp only [Function.update, ↓reduceDIte, hPeekQ₁, Option.getD_some, hState₁]
+          · intro k hk; simp only [Function.update]; split <;> [exact absurd ‹_› hk; rfl]
+    | some ow => cases ow with
+      | none =>
+        cases hI : (stk₁ DovetailStack.input).head? with
+        | none =>
+          simp only [hW, hI] at hWorkHead hInputBit ⊢
+          have hDelta' : gen.δ (v₁.transQ.getD gen.init) false gen.blank = none := by
+            rw [hTransQ₁, Option.getD_some, hInputBit, Option.some.inj hWorkHead]; exact hDelta
+          rw [hDelta', cond_true]
+          refine ⟨_, rfl, rfl, ?_, ?_⟩
+          · simp only [Function.update, ↓reduceDIte, hPeekQ₁, Option.getD_some, hState₁]
+          · intro k hk; simp only [Function.update]; split <;> [exact absurd ‹_› hk; rfl]
+        | some ob => cases ob with
+          | none =>
+            simp only [hW, hI] at hWorkHead hInputBit ⊢
+            have hDelta' : gen.δ (v₁.transQ.getD gen.init) false gen.blank = none := by
+              rw [hTransQ₁, Option.getD_some, hInputBit, Option.some.inj hWorkHead]; exact hDelta
+            rw [hDelta', cond_true]
+            refine ⟨_, rfl, rfl, ?_, ?_⟩
+            · simp only [Function.update, ↓reduceDIte, hPeekQ₁, Option.getD_some, hState₁]
+            · intro k hk; simp only [Function.update]; split <;> [exact absurd ‹_› hk; rfl]
+          | some b =>
+            simp only [hW, hI] at hWorkHead hInputBit ⊢
+            have hDelta' : gen.δ (v₁.transQ.getD gen.init) b.down gen.blank = none := by
+              rw [hTransQ₁, Option.getD_some, hInputBit, Option.some.inj hWorkHead]; exact hDelta
+            rw [hDelta', cond_true]
+            refine ⟨_, rfl, rfl, ?_, ?_⟩
+            · simp only [Function.update, ↓reduceDIte, hPeekQ₁, Option.getD_some, hState₁]
+            · intro k hk; simp only [Function.update]; split <;> [exact absurd ‹_› hk; rfl]
+      | some w =>
+        cases hI : (stk₁ DovetailStack.input).head? with
+        | none =>
+          simp only [hW, hI, Option.some.injEq] at hWorkHead hInputBit ⊢
+          have hDelta' : gen.δ (v₁.transQ.getD gen.init) false w = none := by
+            rw [hTransQ₁, Option.getD_some, hInputBit, hWorkHead]; exact hDelta
+          rw [hDelta', cond_true]
+          refine ⟨_, rfl, rfl, ?_, ?_⟩
+          · simp only [Function.update, ↓reduceDIte, hPeekQ₁, Option.getD_some, hState₁]
+          · intro k hk; simp only [Function.update]; split <;> [exact absurd ‹_› hk; rfl]
+        | some ob => cases ob with
+          | none =>
+            simp only [hW, hI, Option.some.injEq] at hWorkHead hInputBit ⊢
+            have hDelta' : gen.δ (v₁.transQ.getD gen.init) false w = none := by
+              rw [hTransQ₁, Option.getD_some, hInputBit, hWorkHead]; exact hDelta
+            rw [hDelta', cond_true]
+            refine ⟨_, rfl, rfl, ?_, ?_⟩
+            · simp only [Function.update, ↓reduceDIte, hPeekQ₁, Option.getD_some, hState₁]
+            · intro k hk; simp only [Function.update]; split <;> [exact absurd ‹_› hk; rfl]
+          | some b =>
+            simp only [hW, hI, Option.some.injEq] at hWorkHead hInputBit ⊢
+            have hDelta' : gen.δ (v₁.transQ.getD gen.init) b.down w = none := by
+              rw [hTransQ₁, Option.getD_some, hInputBit, hWorkHead]; exact hDelta
+            rw [hDelta', cond_true]
+            refine ⟨_, rfl, rfl, ?_, ?_⟩
+            · simp only [Function.update, ↓reduceDIte, hPeekQ₁, Option.getD_some, hState₁]
+            · intro k hk; simp only [Function.update]; split <;> [exact absurd ‹_› hk; rfl]
+
   obtain ⟨tm2cfg₂, hStep₂, hLabel₂, hState₂, hOther₂⟩ := hStep2
   refine ⟨tm2cfg₂, hLabel₂, hState₂, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
   -- output
