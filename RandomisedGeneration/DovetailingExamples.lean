@@ -182,9 +182,9 @@ def bugExposingGenerator : Generator (Fin 1) (Fin 2) (Fin 1) where
       some (0, 0, some 1, InputTapeDirection.R, WorkTapeDirection.N)
       -- on false: output a 1, advance input, continue
 
-#eval IO.println (runTraceStr bugExposingGenerator [] 500)
+--#eval IO.println (runTraceStr bugExposingGenerator [] 500)
 
-#eval IO.println (runTraceStrRoundStarts bugExposingGenerator [3, 2, 1, 0] 500)
+--#eval IO.println (runTraceStrRoundStarts bugExposingGenerator [3, 2, 1, 0] 500)
 
 end DovetailingExamples
 
