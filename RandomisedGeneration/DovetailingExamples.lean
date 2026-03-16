@@ -186,6 +186,17 @@ def bugExposingGenerator : Generator (Fin 1) (Fin 2) (Fin 1) where
 
 --#eval IO.println (runTraceStrRoundStarts bugExposingGenerator [3, 2, 1, 0] 500)
 
+def bugExposingGenerator2 : Generator (Fin 1) (Fin 2) (Fin 1) where
+  init  := 0
+  blank := 0
+  δ := fun _q b _w =>
+    if b then
+      none  -- halt on true
+    else
+      some (0, 0, some 1, InputTapeDirection.R, WorkTapeDirection.N)
+
+#eval IO.println (runTraceStrRoundStarts bugExposingGenerator [1, 1] 500)
+
 end DovetailingExamples
 
 end RandomisedGeneration

@@ -223,8 +223,6 @@ lemma checkPhase_iterate_to_testHalting
     simp only [List.head?_cons, Option.isNone_some, cond_false, List.tail_cons]
     simp only [Option.mem_def]
 
-/-- From check_iterateInstances with j instances already processed and no match among them,
-    processing one more non-matching instance advances to j+1. -/
 lemma checkPhase_advance_no_match
     (gen : Generator Γw Γo Q)
     (target : List Γo)
@@ -233,12 +231,72 @@ lemma checkPhase_advance_no_match
     (tm2cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) DovetailLabel (DovetailSigma Γw Γo Q))
     (hInv : CheckPhaseInvariant gen target round j tm2cfg)
     (hj : j < round)
-    (hNoMatch_j : ¬(IsHalting gen (instanceConfig gen (round - 1 - j) round) ∧
-      (instanceConfig gen (round - 1 - j) round).output.reverse = target)) :
+    (hNoMatch_j : ¬(IsHalting gen (instanceConfig gen (round - j - 1) round) ∧
+      (instanceConfig gen (round - j - 1) round).output = target)) :
     ∃ tm2cfg',
       CheckPhaseInvariant gen target round (j + 1) tm2cfg' ∧
       Turing.Reaches (Turing.TM2.step (dovetailMachine gen)) tm2cfg tm2cfg' := by
-  sorry
+  have hne : round - j ≠ 0 := by omega
+  by_cases hHalt : IsHalting gen (instanceConfig gen (round - j - 1) round)
+  · -- Halting but no match
+    have hOutNe : (instanceConfig gen (round - j - 1) round).output ≠ target := by
+      intro h; exact hNoMatch_j ⟨hHalt, h⟩
+    -- Step 1: → check_compareOutput
+    obtain ⟨tm2cfg₁, hLabel₁, hState₁, hOutput₁, hInput₁, hWorkL₁, hWorkR₁,
+      hCounter₁, hTarget₁, hSaveState₁, hSaveInput₁, hSaveWorkL₁, hSaveWorkR₁,
+      hSaveOutput₁, hSaveTarget₁, hSaveCounter₁, hReach₁⟩ :=
+      checkPhase_testHalting_halts gen target round j tm2cfg hInv hj hHalt
+    -- Step 2: compareOutput mismatch → check_saveInstance_state
+    obtain ⟨tm2cfg₂, hLabel₂, hTarget₂, hOutput₂, hSaveTarget₂, hSaveOutput₂,
+      hState₂, hInput₂, hWorkL₂, hWorkR₂, hCounter₂, hSaveState₂,
+      hSaveInput₂, hSaveWorkL₂, hSaveWorkR₂, hSaveCounter₂, hReach₂⟩ :=
+      checkPhase_compareOutput_mismatch gen target round j tm2cfg₁
+        hLabel₁ hTarget₁ hOutput₁ hSaveTarget₁ hSaveOutput₁ hOutNe hj
+    -- Step 3: saveInstance → check_iterateInstances at j+1
+    obtain ⟨tm2cfg₃, hInv₃, hReach₃⟩ :=
+      checkPhase_saveInstance gen target round j tm2cfg₂
+        hLabel₂
+        (by rw [hState₂, hState₁])
+        (by rw [hOutput₂, hOutput₁, hInv.output])
+        (by rw [hInput₂, hInput₁, hInv.input])
+        (by rw [hWorkR₂, hWorkR₁, hInv.workR])
+        (by rw [hWorkL₂, hWorkL₁, hInv.workL])
+        (by rw [hSaveState₂, hSaveState₁, hInv.saveState])
+        (by rw [hSaveOutput₂, hSaveOutput₁, hInv.saveOutput])
+        (by rw [hSaveInput₂, hSaveInput₁, hInv.saveInput])
+        (by rw [hSaveWorkR₂, hSaveWorkR₁, hInv.saveWorkR])
+        (by rw [hSaveWorkL₂, hSaveWorkL₁, hInv.saveWorkL])
+        (by rw [hCounter₂, hCounter₁, hInv.counter])
+        (by rw [hTarget₂])
+        (by rw [hSaveTarget₂])
+        (by rw [hSaveCounter₂, hSaveCounter₁, hInv.saveCounter_empty])
+        hInv.noMatch hNoMatch_j hj
+    exact ⟨tm2cfg₃, hInv₃, Relation.ReflTransGen.trans hReach₁
+      (Relation.ReflTransGen.trans hReach₂ hReach₃)⟩
+  · -- Not halting: directly to check_saveInstance_state
+    obtain ⟨tm2cfg₁, hLabel₁, hState₁, hOutput₁, hInput₁, hWorkL₁, hWorkR₁,
+      hCounter₁, hTarget₁, hSaveState₁, hSaveOutput₁, hSaveInput₁, hSaveWorkL₁,
+      hSaveWorkR₁, hSaveTarget₁, hSaveCounter₁, hReach₁⟩ :=
+      checkPhase_testHalting_not_halts gen target round j tm2cfg hInv hj hHalt
+    obtain ⟨tm2cfg₂, hInv₂, hReach₂⟩ :=
+      checkPhase_saveInstance gen target round j tm2cfg₁
+        hLabel₁
+        (by rw [hState₁])
+        (by rw [hOutput₁, hInv.output])
+        (by rw [hInput₁, hInv.input])
+        (by rw [hWorkR₁, hInv.workR])
+        (by rw [hWorkL₁, hInv.workL])
+        (by rw [hSaveState₁, hInv.saveState])
+        (by rw [hSaveOutput₁, hInv.saveOutput])
+        (by rw [hSaveInput₁, hInv.saveInput])
+        (by rw [hSaveWorkR₁, hInv.saveWorkR])
+        (by rw [hSaveWorkL₁, hInv.saveWorkL])
+        (by rw [hCounter₁, hInv.counter])
+        (by rw [hTarget₁, hInv.target_preserved])
+        (by rw [hSaveTarget₁, hInv.saveTarget_empty])
+        (by rw [hSaveCounter₁, hInv.saveCounter_empty])
+        hInv.noMatch hNoMatch_j hj
+    exact ⟨tm2cfg₂, hInv₂, Relation.ReflTransGen.trans hReach₁ hReach₂⟩
 
 lemma instanceConfig_input (gen : Generator Γw Γo Q) (i round : ℕ) :
     (instanceConfig gen i round).input = Nat.testBit i := by
@@ -1076,6 +1134,96 @@ lemma quiescent_to_checkPhase
   -- Reaches: one TM2 step
   · have hStep := check_stripSeparators_step gen target round tm2cfg hInv hRound
     exact Relation.ReflTransGen.single hStep
+
+/-- Invariant at the start of the check→spawn restore phase.
+    All instance segments have been moved to save stacks by the check phase.
+    The restore will move them back to main stacks. -/
+structure CheckRestoreInvariant
+    (gen : Generator Γw Γo Q)
+    (target : List Γo)
+    (round : ℕ)
+    (tm2cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) DovetailLabel (DovetailSigma Γw Γo Q))
+    : Prop where
+  label_eq : tm2cfg.l = some DovetailLabel.check_restoreAll_state
+  noMatch : ∀ i, i < round →
+    ¬(IsHalting gen (instanceConfig gen i round) ∧
+      (instanceConfig gen i round).output = target)
+  -- Main stacks empty
+  state : tm2cfg.stk DovetailStack.state = []
+  output : tm2cfg.stk DovetailStack.output = []
+  input : tm2cfg.stk DovetailStack.input = []
+  workR : tm2cfg.stk DovetailStack.workR = []
+  workL : tm2cfg.stk DovetailStack.workL = []
+  -- Save stacks contain all instances' data
+  saveState : tm2cfg.stk DovetailStack.saveState =
+    ((List.range round).map
+      (fun k => (instanceConfig gen (round - 1 - k) round).state)).reverse
+  saveOutput : tm2cfg.stk DovetailStack.saveOutput =
+    ((List.range round).map (fun k =>
+      let i := round - 1 - k
+      (instanceConfig gen i round).output.map some ++ [none])).flatten ++ [none]
+  saveInput : tm2cfg.stk DovetailStack.saveInput =
+    ((List.range round).map (fun k =>
+      let i := round - 1 - k
+      let cfg := instanceConfig gen i round
+      ((Nat.bits i).drop cfg.inputIndex).map
+        (fun b => some (ULift.up b)) ++ [none])).flatten ++ [none]
+  saveWorkR : tm2cfg.stk DovetailStack.saveWorkR =
+    ((List.range round).map (fun k =>
+      let i := round - 1 - k
+      let cfg := instanceConfig gen i round
+      segWorkR cfg (round - i) ++ [some (cfg.work cfg.workIndex)] ++ [none]
+    )).flatten ++ [none]
+  saveWorkL : tm2cfg.stk DovetailStack.saveWorkL =
+    ((List.range round).map (fun k =>
+      let i := round - 1 - k
+      let cfg := instanceConfig gen i round
+      segWorkL cfg (round - i) ++ [some (cfg.work cfg.workIndex)] ++ [none]
+    )).flatten ++ [none]
+  -- Preserved
+  counter : tm2cfg.stk DovetailStack.counter = (Nat.bits round).map ULift.up
+  target_preserved : tm2cfg.stk DovetailStack.target = target
+  saveTarget_empty : tm2cfg.stk DovetailStack.saveTarget = []
+  saveCounter_empty : tm2cfg.stk DovetailStack.saveCounter = []
+
+/-- When CheckPhaseInvariant holds with j = round (all instances checked, none matched),
+    check_iterateInstances sees an empty state stack and takes one step to
+    check_restoreAll_state, yielding a CheckRestoreInvariant. -/
+lemma checkPhase_complete_to_restore
+    (gen : Generator Γw Γo Q)
+    (target : List Γo)
+    (round : ℕ)
+    (tm2cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) DovetailLabel (DovetailSigma Γw Γo Q))
+    (hInv : CheckPhaseInvariant gen target round round tm2cfg) :
+    ∃ tm2cfg',
+      CheckRestoreInvariant gen target round tm2cfg' ∧
+      Turing.Reaches (Turing.TM2.step (dovetailMachine gen)) tm2cfg tm2cfg' := by
+  -- State stack is empty since round - round = 0
+  have hState : tm2cfg.stk DovetailStack.state = [] := by
+    rw [hInv.state]; simp
+  -- One TM2 step: check_iterateInstances peeks empty state, gotos check_restoreAll_state
+  refine ⟨{ l := some DovetailLabel.check_restoreAll_state,
+             var := { tm2cfg.var with peekQ := none },
+             stk := tm2cfg.stk },
+    ⟨rfl, ?_, hState, ?_, ?_, ?_, ?_,
+     hInv.saveState, hInv.saveOutput, hInv.saveInput, hInv.saveWorkR, hInv.saveWorkL,
+     hInv.counter, hInv.target_preserved, hInv.saveTarget_empty, hInv.saveCounter_empty⟩, ?_⟩
+  -- noMatch
+  · intro i hi
+    exact hInv.noMatch i (by omega) (by omega)
+  -- Main stacks empty (from CheckPhaseInvariant with round - round = 0)
+  · rw [hInv.output]; simp
+  · rw [hInv.input]; simp
+  · rw [hInv.workR]; simp
+  · rw [hInv.workL]; simp
+  -- Reaches: one step
+  · apply Relation.ReflTransGen.single
+    rw [Option.mem_def, Turing.TM2.step.eq_def]
+    cases tm2cfg with | mk l v S =>
+    simp only at hInv hState ⊢
+    rw [show l = some DovetailLabel.check_iterateInstances from hInv.label_eq]
+    simp only [dovetailMachine, check_iterateInstances, Turing.TM2.stepAux,
+      hState, List.head?_nil, Option.isNone_none, cond_true]
 
 set_option linter.unusedSectionVars true
 end Dovetailing

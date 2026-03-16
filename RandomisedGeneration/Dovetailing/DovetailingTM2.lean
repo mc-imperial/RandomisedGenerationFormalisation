@@ -437,7 +437,10 @@ def check_compareOutput_restoreOutput {Γw Γo Q : Type u}
     [FinEnum Γw] [Inhabited Γo] [FinEnum Γo] [FinEnum Q] :
     Turing.TM2.Stmt (stackAlphabet Γw Γo Q) DovetailLabel (DovetailSigma Γw Γo Q) :=
   Turing.TM2.Stmt.peek DovetailStack.saveOutput (fun σ o => { σ with peekOut := o })
-  <| Turing.TM2.Stmt.branch (fun σ => σ.peekOut.isNone)
+  <| Turing.TM2.Stmt.branch (fun σ => match σ.peekOut with
+      | none      => true   -- empty stack (round 0 edge case)
+      | some none => true   -- hit separator from prior saved data
+      | _         => false)
     ( Turing.TM2.Stmt.goto (fun _ => DovetailLabel.check_saveInstance_state) )
     ( Turing.TM2.Stmt.pop DovetailStack.saveOutput (fun σ _ => σ)
       <| Turing.TM2.Stmt.push DovetailStack.output
