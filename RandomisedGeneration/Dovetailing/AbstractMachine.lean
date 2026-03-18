@@ -186,47 +186,6 @@ lemma instance_config_after_steps
       simp only [List.getElem?_cons_zero, Option.map_some]
       simp [stepOrHalt]
 
-lemma stepNHalt_step (gen : Generator Γw Γo Q) (cfg cfg' : GenConfig Γw Γo Q) (n : ℕ)
-    (hstep : step gen cfg = some cfg') :
-    stepNHalt gen cfg (n + 1) = stepNHalt gen cfg' n := by
-  induction n with
-  | zero => simp [stepNHalt, hstep]
-  | succ n ih =>
-    simp [stepNHalt_succ]
-    simp [← ih]
-
-lemma stepNHalt_eq_of_stepN (gen : Generator Γw Γo Q) (cfg c : GenConfig Γw Γo Q) (n : ℕ)
-    (h : stepN gen (some cfg) n = some c) :
-    stepNHalt gen cfg n = c := by
-  induction n generalizing cfg with
-  | zero => simp only [stepN_zero, Option.some.injEq] at h; exact h
-  | succ n ih =>
-    rw [stepN_succ_front] at h
-    cases hstep : step gen cfg with
-    | none => simp [hstep, stepN_none] at h
-    | some cfg' =>
-      simp only [Option.bind_some, hstep] at h
-      rw [stepNHalt_step gen cfg cfg' n hstep]
-      exact ih cfg' h
-
-lemma stepNHalt_Computes (gen : Generator Γw Γo Q) (cfg : GenConfig Γw Γo Q) (n : ℕ)
-    (h : IsHalting gen (stepNHalt gen cfg n)) :
-    Computes gen cfg (stepNHalt gen cfg n).output := by
-  induction n generalizing cfg with
-  | zero =>
-    simp only [stepNHalt_zero] at h ⊢
-    exact Computes.halt cfg h
-  | succ n ih =>
-    cases hstep : step gen cfg with
-    | none =>
-      have : stepNHalt gen cfg (n + 1) = cfg :=
-        stepNHalt_fixed gen cfg 0 (by simp [IsHalting, hstep]) (n + 1) (by omega)
-      rw [this]
-      exact Computes.halt cfg hstep
-    | some cfg' =>
-      rw [stepNHalt_step gen cfg cfg' n hstep] at h ⊢
-      exact Computes.step cfg cfg' _ hstep (ih cfg' h)
-
 theorem DovetailRecognises_iff_Computes
   (gen : Generator Γw Γo Q)
   (w : List Γo) :

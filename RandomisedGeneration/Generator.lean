@@ -486,7 +486,7 @@ lemma reachable_input_eq {Γw Γo Q : Type u}
         exact h_input
   exact this n (initConfig gen f) cfg (by simp [initConfig]) h_steps
 
-private lemma sum_if_two_pow_lt (f : ℕ → Bool) : ∀ k,
+lemma sum_if_two_pow_lt (f : ℕ → Bool) : ∀ k,
     (∑ j ∈ Finset.range k, if f j then 2^j else 0) < 2^k
   | 0 => by simp
   | k+1 => by
@@ -827,5 +827,52 @@ lemma restrictToSupport_Computes {Γw Γo Q : Type u}
     have ⟨cfgS', h_stepS, h_eq'⟩ :=
       restrictToSupport_step_of_step gen S hS cfgS cfg' (by rw [h_eq]; exact h_step)
     exact Computes.step _ _ _ h_stepS (ih cfgS' h_eq')
+
+lemma stepNHalt_step {Γw Γo Q : Type u}
+    [FinEnum Γw] [Inhabited Γo] [FinEnum Γo]
+    (gen : Generator Γw Γo Q) (cfg cfg' : GenConfig Γw Γo Q) (n : ℕ)
+    (hstep : step gen cfg = some cfg') :
+    stepNHalt gen cfg (n + 1) = stepNHalt gen cfg' n := by
+  induction n with
+  | zero => simp [stepNHalt, hstep]
+  | succ n ih =>
+    simp [stepNHalt_succ]
+    simp [← ih]
+
+lemma stepNHalt_eq_of_stepN {Γw Γo Q : Type u}
+    [FinEnum Γw] [Inhabited Γo] [FinEnum Γo]
+    (gen : Generator Γw Γo Q) (cfg c : GenConfig Γw Γo Q) (n : ℕ)
+    (h : stepN gen (some cfg) n = some c) :
+    stepNHalt gen cfg n = c := by
+  induction n generalizing cfg with
+  | zero => simp only [stepN_zero, Option.some.injEq] at h; exact h
+  | succ n ih =>
+    rw [stepN_succ_front] at h
+    cases hstep : step gen cfg with
+    | none => simp [hstep, stepN_none] at h
+    | some cfg' =>
+      simp only [Option.bind_some, hstep] at h
+      rw [stepNHalt_step gen cfg cfg' n hstep]
+      exact ih cfg' h
+
+lemma stepNHalt_Computes {Γw Γo Q : Type u}
+    [FinEnum Γw] [Inhabited Γo] [FinEnum Γo]
+    (gen : Generator Γw Γo Q) (cfg : GenConfig Γw Γo Q) (n : ℕ)
+    (h : IsHalting gen (stepNHalt gen cfg n)) :
+    Computes gen cfg (stepNHalt gen cfg n).output := by
+  induction n generalizing cfg with
+  | zero =>
+    simp only [stepNHalt_zero] at h ⊢
+    exact Computes.halt cfg h
+  | succ n ih =>
+    cases hstep : step gen cfg with
+    | none =>
+      have : stepNHalt gen cfg (n + 1) = cfg :=
+        stepNHalt_fixed gen cfg 0 (by simp [IsHalting, hstep]) (n + 1) (by omega)
+      rw [this]
+      exact Computes.halt cfg hstep
+    | some cfg' =>
+      rw [stepNHalt_step gen cfg cfg' n hstep] at h ⊢
+      exact Computes.step cfg cfg' _ hstep (ih cfg' h)
 
 end RandomisedGeneration
