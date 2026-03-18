@@ -1,3 +1,4 @@
 import RandomisedGeneration.RecursivelyEnumerableEqualsGenerable
 import RandomisedGeneration.GeneratorExamples
-import RandomisedGeneration.DovetailingExamples
+import RandomisedGeneration.GreedyEnum.GreedyEnumExamples
+import RandomisedGeneration.Dovetailing.DovetailingExamples

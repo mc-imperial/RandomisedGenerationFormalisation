@@ -1,0 +1,523 @@
+import Mathlib
+import Mathlib.Computability.TuringMachine
+import RandomisedGeneration.Generator
+
+namespace RandomisedGeneration
+
+universe u
+
+namespace GreedyEnum
+
+variable {Γw Γo Q : Type u}
+variable [Inhabited Γo] [FinEnum Γo] [FinEnum Γw] [Inhabited Γw] [FinEnum Q]
+
+/-- The stacks used by the greedy gen TM2 machine.
+
+    Stack layout at quiescent points (start of each round):
+
+    ── Main stacks ──
+    • target:  [t₀, t₁, ..., tₖ]  — the word to recognise, first symbol on top.
+               Unchanged throughout execution.
+    • counter: [b₀, b₁, ..., bₘ]  — binary representation of the next input number
+               to spawn (LSB on top, no leading falses). [] represents 0.
+    • input:   [b₁, b₂, ...]  — the remaining unread input bits.
+               Bits are the binary digits of the instance's input number;
+               consumed bits have been popped.
+    • workL:   [w₁, w₂, ...]  — the work tape cells to the left of the head
+               (closest to head first).
+    • workR:   Same structure as workL but for cells to the right of the head.
+    • output:  [o₁, o₂, ...]  — the output symbols produced so far (most recent on top).
+
+    ── Save stacks ──
+    Mirror the corresponding main stacks. Used during the check phase and step phase
+    to temporarily hold instance data while iterating through instances.
+    Empty at quiescent points. -/
+inductive GreedyGenStack : Type u
+  | target
+  | counter
+  | input
+  | workL
+  | workR
+  | output
+  | saveTarget
+  | saveCounter
+
+deriving instance DecidableEq for GreedyGenStack
+deriving instance Fintype for GreedyGenStack
+deriving instance Inhabited for GreedyGenStack
+
+/-- The type of elements stored on each stack. --/
+def stackAlphabet (Γw Γo Q : Type u)
+    [Fintype Γw] [Inhabited Γo] [FinEnum Γo] [FinEnum Q] :
+    GreedyGenStack → Type u
+  | GreedyGenStack.target      => Γo
+  | GreedyGenStack.counter     => ULift.{u} Bool
+  | GreedyGenStack.input       => ULift.{u} Bool
+  | GreedyGenStack.workL       => Γw
+  | GreedyGenStack.workR       => Γw
+  | GreedyGenStack.output      => Γo
+  | GreedyGenStack.saveTarget  => Γo
+  | GreedyGenStack.saveCounter => ULift.{u} Bool
+
+-- Labels for the greedy gen TM2 machine, corresponding to subroutine entry points.
+inductive GreedyGenLabel : Type u
+  -- Setup
+  | copyCounter                     -- pop counter bits to saveCounter
+  | copyCounter_restore             -- restore counter + push bits to input
+  | initRun                         -- set transQ := gen.init, transW := gen.blank
+  -- Run loop
+  | runStep                         -- pop input, peek workR, applyDelta, branch
+  | runStep_apply                   -- update workR/workL per direction, push output
+  | runStep_moveHead
+  -- Check output
+  | checkOutput                     -- pop output + pop target, compare
+  | checkOutput_restoreTarget       -- restore target from saveTarget after mismatch/match
+  -- Teardown
+  | clearInput                      -- pop all remaining input bits
+  | clearWorkL                      -- pop all workL
+  | clearWorkR                      -- pop all workR
+  | clearOutput                     -- pop all output
+  -- Counter
+  | counter_increment
+  | counter_increment_loop
+  | counter_increment_restore
+deriving DecidableEq, Fintype
+
+set_option linter.style.whitespace false
+set_option linter.style.longLine false
+structure GreedyGenSigma (Γw Γo Q : Type u)
+    [FinEnum Γw] [Inhabited Γo] [FinEnum Γo] [FinEnum Q] where
+  transQ      : Option Q
+  transW      : Γw
+  transWDir   : WorkTapeDirection
+  transOut    : Option Γo
+  transHalted : Bool
+  inputBit    : Bool
+  carry       : Option Bool
+  peekBit     : Option Bool       -- counter increment scratch
+  peekTarget  : Option Γo         -- for output comparison
+  peekOut     : Option Γo         -- for output comparison
+set_option linter.style.whitespace true
+set_option linter.style.longLine true
+
+instance : Inhabited GreedyGenLabel := ⟨GreedyGenLabel.copyCounter⟩
+
+instance : Inhabited (GreedyGenSigma Γw Γo Q) :=
+  ⟨{ transQ      := none
+     transW      := default
+     transWDir   := WorkTapeDirection.N
+     transOut    := none
+     transHalted := false
+     inputBit    := false
+     carry       := none
+     peekBit     := none
+     peekTarget  := none
+     peekOut     := none }⟩
+
+instance : Fintype (ULift.{u} Bool) :=
+  Fintype.ofEquiv Bool ⟨ULift.up, ULift.down, fun _ => rfl, fun _ => rfl⟩
+
+instance : DecidableEq (ULift.{u} Bool) :=
+  fun a b => decidable_of_iff (a.down = b.down) (by cases a; cases b; simp [ULift.ext_iff])
+
+instance [Fintype Γw] [Fintype Γo] [Fintype Q] [DecidableEq Γw] [DecidableEq Γo] [DecidableEq Q] :
+    Fintype (GreedyGenSigma Γw Γo Q) :=
+  Fintype.ofEquiv
+    (Option Q × Γw × WorkTapeDirection × Option Γo × Bool × Bool ×
+     Option Bool × Option Bool × Option Γo × Option Γo)
+    { toFun := fun ⟨a, b, c, d, e, f, g, h, i, j⟩ =>
+        { transQ := a, transW := b, transWDir := c, transOut := d,
+          transHalted := e, inputBit := f, carry := g,
+          peekBit := h, peekTarget := i, peekOut := j }
+      invFun := fun σ =>
+        (σ.transQ, σ.transW, σ.transWDir, σ.transOut,
+         σ.transHalted, σ.inputBit, σ.carry,
+         σ.peekBit, σ.peekTarget, σ.peekOut)
+      left_inv := fun _ => rfl
+      right_inv := fun _ => rfl }
+
+def greedyGenInit (target : List Γo) :
+    Turing.TM2.Cfg (stackAlphabet Γw Γo Q) GreedyGenLabel (GreedyGenSigma Γw Γo Q) :=
+  Turing.TM2.init GreedyGenStack.target target
+
+/-- Apply the generator's transition function to the current instance.
+    Reads transQ (current state), inputBit (current input), and transW (head symbol).
+    On halt (δ returns none): sets transHalted := true, direction to N, no output.
+    On step (δ returns some): updates transQ, transW, transOut, transWDir,
+    transHalted := false. The input direction is ignored (greedy always advances). -/
+def applyDelta
+    (gen : Generator Γw Γo Q)
+    (σ : GreedyGenSigma Γw Γo Q) : GreedyGenSigma Γw Γo Q :=
+    match gen.δ (σ.transQ.getD gen.init) σ.inputBit σ.transW with
+    | none =>
+        { σ with
+          transWDir   := WorkTapeDirection.N
+          transOut    := none
+          transHalted := true }
+    | some (q', w', o, _, wd) =>
+        { σ with
+          transQ      := some q'
+          transW      := w'
+          transOut    := o
+          transWDir   := wd
+          transHalted := false }
+
+/-
+══════════════════════════════════════════════════════════════════════════════
+  Greedy Enumeration TM2 — Procedures
+══════════════════════════════════════════════════════════════════════════════
+
+  Single-instance greedy enumeration. For each bitstring (enumerated by a
+  binary counter), run the generator for len steps (one bit per step since
+  greedy), check output on halt, then advance to the next bitstring.
+
+  Stacks (no separators — single instance at a time):
+    target : Γo, counter : ULift Bool, input : ULift Bool,
+    workL : Γw, workR : Γw, output : Γo,
+    saveTarget : Γo, saveCounter : ULift Bool
+
+  Convention: workR top = head cell under the read/write head.
+              workL top = cell immediately to the left of head.
+
+  Register file (GreedyGenSigma):
+    transQ, transW, transWDir, transOut, transHalted — from applyDelta
+    inputBit    — current input bit
+    carry       — counter increment scratch
+    peekBit     — scratch: peeked bit / boolean flag
+    peekTarget  — peeked target symbol (for output comparison)
+    peekOut     — peeked output symbol (for output comparison)
+══════════════════════════════════════════════════════════════════════════════
+-/
+
+-- Labels (add runStep_moveHead to the existing enum)
+-- Assumed labels:
+--   copyCounter, copyCounter_restore, initRun,
+--   runStep, runStep_apply, runStep_moveHead,
+--   checkOutput, checkOutput_restoreTarget,
+--   clearWorkL, clearWorkR, clearOutput,
+--   counter_increment, counter_increment_loop, counter_increment_restore
+
+/-
+══════════════════════════════════════════════════════════════════════════════
+  Setup: Copy counter → input, initialise generator
+══════════════════════════════════════════════════════════════════════════════
+-/
+
+/-- Pop all counter bits to saveCounter. -/
+def copyCounter :
+    Turing.TM2.Stmt (stackAlphabet Γw Γo Q) GreedyGenLabel (GreedyGenSigma Γw Γo Q) :=
+  Turing.TM2.Stmt.peek GreedyGenStack.counter (fun σ b =>
+    { σ with peekBit := b.map ULift.down })
+  <| Turing.TM2.Stmt.branch (fun σ => σ.peekBit.isNone)
+    ( Turing.TM2.Stmt.goto (fun _ => GreedyGenLabel.copyCounter_restore) )
+    ( Turing.TM2.Stmt.pop GreedyGenStack.counter (fun σ _ => σ)
+      <| Turing.TM2.Stmt.push GreedyGenStack.saveCounter
+          (fun σ => ULift.up (σ.peekBit.getD false))
+      <| Turing.TM2.Stmt.goto (fun _ => GreedyGenLabel.copyCounter) )
+
+/-- Pop saveCounter back to counter AND input simultaneously. -/
+def copyCounter_restore :
+    Turing.TM2.Stmt (stackAlphabet Γw Γo Q) GreedyGenLabel (GreedyGenSigma Γw Γo Q) :=
+  Turing.TM2.Stmt.peek GreedyGenStack.saveCounter (fun σ b =>
+    { σ with peekBit := b.map ULift.down })
+  <| Turing.TM2.Stmt.branch (fun σ => σ.peekBit.isNone)
+    ( Turing.TM2.Stmt.goto (fun _ => GreedyGenLabel.initRun) )
+    ( Turing.TM2.Stmt.pop GreedyGenStack.saveCounter (fun σ _ => σ)
+      <| Turing.TM2.Stmt.push GreedyGenStack.counter
+          (fun σ => ULift.up (σ.peekBit.getD false))
+      <| Turing.TM2.Stmt.push GreedyGenStack.input
+          (fun σ => ULift.up (σ.peekBit.getD false))
+      <| Turing.TM2.Stmt.goto (fun _ => GreedyGenLabel.copyCounter_restore) )
+
+/-- Set transQ := gen.init, transW := gen.blank, enter step loop. -/
+def initRun (gen : Generator Γw Γo Q) :
+    Turing.TM2.Stmt (stackAlphabet Γw Γo Q) GreedyGenLabel (GreedyGenSigma Γw Γo Q) :=
+  Turing.TM2.Stmt.load (fun σ =>
+    { σ with transQ := some gen.init, transW := gen.blank })
+  <| Turing.TM2.Stmt.goto (fun _ => GreedyGenLabel.runStep)
+
+/-
+══════════════════════════════════════════════════════════════════════════════
+  Run loop
+══════════════════════════════════════════════════════════════════════════════
+-/
+
+/-- Main step loop. Peek input:
+    • Empty → steps exhausted, teardown.
+    • Non-empty → pop bit, peek/pop workR head, apply delta, branch. -/
+def runStep (gen : Generator Γw Γo Q) :
+    Turing.TM2.Stmt (stackAlphabet Γw Γo Q) GreedyGenLabel (GreedyGenSigma Γw Γo Q) :=
+  -- Peek input
+  Turing.TM2.Stmt.peek GreedyGenStack.input (fun σ b => { σ with
+    inputBit := match b with | some b => b.down | none => false
+    -- Stash "had input" in peekBit: some true = had bit, some false = empty
+    peekBit  := some b.isSome })
+  <| Turing.TM2.Stmt.branch (fun σ => σ.peekBit == some false)
+    ( -- Input empty → teardown (clear remaining stacks)
+      Turing.TM2.Stmt.goto (fun _ => GreedyGenLabel.clearWorkL) )
+    ( -- Pop the input bit (greedy: always consume one bit per step)
+      Turing.TM2.Stmt.pop GreedyGenStack.input (fun σ _ => σ)
+      -- Peek workR to get head symbol, set transW
+      <| Turing.TM2.Stmt.peek GreedyGenStack.workR (fun σ w => { σ with
+          transW := w.getD gen.blank
+          -- Stash "workR had data" in peekBit
+          peekBit := some w.isSome })
+      -- If workR had a symbol, pop it (will be replaced by applyDelta result)
+      <| Turing.TM2.Stmt.branch (fun σ => σ.peekBit == some true)
+        ( Turing.TM2.Stmt.pop GreedyGenStack.workR (fun σ _ => σ)
+          <| Turing.TM2.Stmt.load (fun σ => applyDelta gen σ)
+          <| Turing.TM2.Stmt.branch (fun σ => σ.transHalted)
+            ( Turing.TM2.Stmt.goto (fun _ => GreedyGenLabel.checkOutput) )
+            ( Turing.TM2.Stmt.goto (fun _ => GreedyGenLabel.runStep_apply) ) )
+        ( -- workR was empty, transW = gen.blank, no need to pop
+          Turing.TM2.Stmt.load (fun σ => applyDelta gen σ)
+          <| Turing.TM2.Stmt.branch (fun σ => σ.transHalted)
+            ( Turing.TM2.Stmt.goto (fun _ => GreedyGenLabel.checkOutput) )
+            ( Turing.TM2.Stmt.goto (fun _ => GreedyGenLabel.runStep_apply) ) ) )
+
+/-- Apply transition: push new head to workR, optionally emit output,
+    then move work tape head. -/
+def runStep_apply :
+    Turing.TM2.Stmt (stackAlphabet Γw Γo Q) GreedyGenLabel (GreedyGenSigma Γw Γo Q) :=
+  -- Push new head symbol (transW as set by applyDelta)
+  Turing.TM2.Stmt.push GreedyGenStack.workR (fun σ => σ.transW)
+  -- Emit output if present
+  <| Turing.TM2.Stmt.branch (fun σ => σ.transOut.isSome)
+    ( Turing.TM2.Stmt.push GreedyGenStack.output
+        (fun σ => σ.transOut.getD default)
+      <| Turing.TM2.Stmt.goto (fun _ => GreedyGenLabel.runStep_moveHead) )
+    ( Turing.TM2.Stmt.goto (fun _ => GreedyGenLabel.runStep_moveHead) )
+
+/-- Move work tape head according to transWDir, then loop to runStep.
+
+    After runStep_apply, workR = [transW, old_r1, old_r2, ...].
+    workL is unchanged from before the step.
+
+    Move N: no change. Head stays at workR top = transW.
+    Move L: new head = workL top (or blank if empty).
+            Pop workL, push onto workR. workR = [l1, transW, r1, ...].
+    Move R: transW moves to the left of the new head.
+            Pop workR (= transW), push to workL.
+            If workR now empty, push gen.blank (new head on blank cell). -/
+def runStep_moveHead (gen : Generator Γw Γo Q) :
+    Turing.TM2.Stmt (stackAlphabet Γw Γo Q) GreedyGenLabel (GreedyGenSigma Γw Γo Q) :=
+  Turing.TM2.Stmt.branch
+    (fun σ => match σ.transWDir with | WorkTapeDirection.L => true | _ => false)
+    ( -- Move L: pop workL → push to workR (becomes new head)
+      Turing.TM2.Stmt.peek GreedyGenStack.workL (fun σ w => { σ with
+        transW := w.getD gen.blank  -- reuse transW as temp for the popped cell
+        peekBit := some w.isSome })
+      <| Turing.TM2.Stmt.branch (fun σ => σ.peekBit == some true)
+        ( Turing.TM2.Stmt.pop GreedyGenStack.workL (fun σ _ => σ)
+          <| Turing.TM2.Stmt.push GreedyGenStack.workR (fun σ => σ.transW)
+          <| Turing.TM2.Stmt.goto (fun _ => GreedyGenLabel.runStep) )
+        ( -- workL empty: push blank as new head
+          Turing.TM2.Stmt.push GreedyGenStack.workR (fun _ => gen.blank)
+          <| Turing.TM2.Stmt.goto (fun _ => GreedyGenLabel.runStep) ) )
+    ( Turing.TM2.Stmt.branch
+      (fun σ => match σ.transWDir with | WorkTapeDirection.R => true | _ => false)
+      ( -- Move R: pop workR (= transW, the cell we just wrote), push to workL.
+        -- Next workR top becomes new head. If workR empty after pop, push blank.
+        Turing.TM2.Stmt.pop GreedyGenStack.workR (fun σ w => { σ with transW := w.getD gen.blank })
+        <| Turing.TM2.Stmt.push GreedyGenStack.workL (fun σ => σ.transW)
+        <| Turing.TM2.Stmt.peek GreedyGenStack.workR (fun σ w => { σ with
+            peekBit := some w.isSome })
+        <| Turing.TM2.Stmt.branch (fun σ => σ.peekBit == some false)
+          ( -- workR empty after pop: push blank as new head
+            Turing.TM2.Stmt.push GreedyGenStack.workR (fun _ => gen.blank)
+            <| Turing.TM2.Stmt.goto (fun _ => GreedyGenLabel.runStep) )
+          ( Turing.TM2.Stmt.goto (fun _ => GreedyGenLabel.runStep) ) )
+      ( -- Move N: no movement
+        Turing.TM2.Stmt.goto (fun _ => GreedyGenLabel.runStep) ) )
+
+/-
+══════════════════════════════════════════════════════════════════════════════
+  Check output: compare output stack against target
+══════════════════════════════════════════════════════════════════════════════
+
+  Both stacks have first symbol on top. The output stack has symbols in
+  emission order (most recent on top), while the target has first symbol
+  on top. For a greedy generator that always appends to output, the output
+  stack in reverse is the produced word. The target is stored first-on-top.
+
+  We compare element by element, consuming both. Consumed target elements
+  are saved to saveTarget for restoration on mismatch.
+
+  Match (both exhausted simultaneously): halt (accept).
+  Mismatch or length difference: restore target, go to teardown.
+-/
+
+/-- Compare output vs target element by element. -/
+def checkOutput :
+    Turing.TM2.Stmt (stackAlphabet Γw Γo Q) GreedyGenLabel (GreedyGenSigma Γw Γo Q) :=
+  -- Peek both stacks
+  Turing.TM2.Stmt.peek GreedyGenStack.target (fun σ t =>
+    { σ with peekTarget := t })
+  <| Turing.TM2.Stmt.peek GreedyGenStack.output (fun σ o =>
+    { σ with peekOut := o })
+  <| Turing.TM2.Stmt.branch (fun σ => σ.peekTarget.isNone && σ.peekOut.isNone)
+    ( -- Both exhausted: match! Halt.
+      Turing.TM2.Stmt.halt )
+    ( Turing.TM2.Stmt.branch (fun σ => σ.peekTarget.isNone || σ.peekOut.isNone)
+      ( -- One exhausted but not both: length mismatch → restore target
+        Turing.TM2.Stmt.goto (fun _ => GreedyGenLabel.checkOutput_restoreTarget) )
+      ( -- Both have elements: compare
+        Turing.TM2.Stmt.branch (fun σ => match σ.peekTarget, σ.peekOut with
+            | some t, some o => decide (t = o)
+            | _, _ => false)
+          ( -- Match: pop both, save target element, continue comparing
+            Turing.TM2.Stmt.pop GreedyGenStack.target (fun σ _ => σ)
+            <| Turing.TM2.Stmt.pop GreedyGenStack.output (fun σ _ => σ)
+            <| Turing.TM2.Stmt.push GreedyGenStack.saveTarget
+                (fun σ => σ.peekTarget.getD default)
+            <| Turing.TM2.Stmt.goto (fun _ => GreedyGenLabel.checkOutput) )
+          ( -- Mismatch: restore target
+            Turing.TM2.Stmt.goto
+              (fun _ => GreedyGenLabel.checkOutput_restoreTarget) ) ) )
+
+/-- Restore target from saveTarget, then proceed to teardown.
+    Also restores any remaining output symbols we popped
+    (but since we're about to clear output anyway, we skip that). -/
+def checkOutput_restoreTarget :
+    Turing.TM2.Stmt (stackAlphabet Γw Γo Q) GreedyGenLabel (GreedyGenSigma Γw Γo Q) :=
+  Turing.TM2.Stmt.peek GreedyGenStack.saveTarget (fun σ t =>
+    { σ with peekTarget := t })
+  <| Turing.TM2.Stmt.branch (fun σ => σ.peekTarget.isNone)
+    ( -- All restored → teardown
+      Turing.TM2.Stmt.goto (fun _ => GreedyGenLabel.clearInput) )
+    ( Turing.TM2.Stmt.pop GreedyGenStack.saveTarget (fun σ _ => σ)
+      <| Turing.TM2.Stmt.push GreedyGenStack.target
+          (fun σ => σ.peekTarget.getD default)
+      <| Turing.TM2.Stmt.goto
+          (fun _ => GreedyGenLabel.checkOutput_restoreTarget) )
+
+/-
+══════════════════════════════════════════════════════════════════════════════
+  Teardown: clear instance stacks, increment counter, loop
+══════════════════════════════════════════════════════════════════════════════
+-/
+
+/-- Clear remaining input bits (may already be empty). -/
+def clearInput :
+    Turing.TM2.Stmt (stackAlphabet Γw Γo Q) GreedyGenLabel (GreedyGenSigma Γw Γo Q) :=
+  Turing.TM2.Stmt.peek GreedyGenStack.input (fun σ b =>
+    { σ with peekBit := b.map ULift.down })
+  <| Turing.TM2.Stmt.branch (fun σ => σ.peekBit.isNone)
+    ( Turing.TM2.Stmt.goto (fun _ => GreedyGenLabel.clearWorkL) )
+    ( Turing.TM2.Stmt.pop GreedyGenStack.input (fun σ _ => σ)
+      <| Turing.TM2.Stmt.goto (fun _ => GreedyGenLabel.clearInput) )
+
+/-- Clear workL stack. -/
+def clearWorkL :
+    Turing.TM2.Stmt (stackAlphabet Γw Γo Q) GreedyGenLabel (GreedyGenSigma Γw Γo Q) :=
+  Turing.TM2.Stmt.peek GreedyGenStack.workL (fun σ w =>
+    { σ with peekBit := some w.isSome })
+  <| Turing.TM2.Stmt.branch (fun σ => σ.peekBit == some false)
+    ( Turing.TM2.Stmt.goto (fun _ => GreedyGenLabel.clearWorkR) )
+    ( Turing.TM2.Stmt.pop GreedyGenStack.workL (fun σ _ => σ)
+      <| Turing.TM2.Stmt.goto (fun _ => GreedyGenLabel.clearWorkL) )
+
+/-- Clear workR stack. -/
+def clearWorkR :
+    Turing.TM2.Stmt (stackAlphabet Γw Γo Q) GreedyGenLabel (GreedyGenSigma Γw Γo Q) :=
+  Turing.TM2.Stmt.peek GreedyGenStack.workR (fun σ w =>
+    { σ with peekBit := some w.isSome })
+  <| Turing.TM2.Stmt.branch (fun σ => σ.peekBit == some false)
+    ( Turing.TM2.Stmt.goto (fun _ => GreedyGenLabel.clearOutput) )
+    ( Turing.TM2.Stmt.pop GreedyGenStack.workR (fun σ _ => σ)
+      <| Turing.TM2.Stmt.goto (fun _ => GreedyGenLabel.clearWorkR) )
+
+/-- Clear output stack. -/
+def clearOutput :
+    Turing.TM2.Stmt (stackAlphabet Γw Γo Q) GreedyGenLabel (GreedyGenSigma Γw Γo Q) :=
+  Turing.TM2.Stmt.peek GreedyGenStack.output (fun σ o =>
+    { σ with peekOut := o })
+  <| Turing.TM2.Stmt.branch (fun σ => σ.peekOut.isNone)
+    ( Turing.TM2.Stmt.goto (fun _ => GreedyGenLabel.counter_increment) )
+    ( Turing.TM2.Stmt.pop GreedyGenStack.output (fun σ _ => σ)
+      <| Turing.TM2.Stmt.goto (fun _ => GreedyGenLabel.clearOutput) )
+
+/-
+══════════════════════════════════════════════════════════════════════════════
+  Counter increment (adapted from old dovetailing code)
+══════════════════════════════════════════════════════════════════════════════
+
+  Binary increment with carry. Counter stores LSB on top, no leading falses.
+  After increment, goes to copyCounter to start the next bitstring.
+-/
+
+/-- Set carry := true, enter increment loop. -/
+def counter_increment :
+    Turing.TM2.Stmt (stackAlphabet Γw Γo Q) GreedyGenLabel (GreedyGenSigma Γw Γo Q) :=
+  Turing.TM2.Stmt.load (fun σ => { σ with carry := some true })
+  <| Turing.TM2.Stmt.goto (fun _ => GreedyGenLabel.counter_increment_loop)
+
+/-- Process one counter bit: XOR with carry for new bit, AND for new carry.
+    Pop from counter, push result to saveCounter. -/
+def counter_increment_loop :
+    Turing.TM2.Stmt (stackAlphabet Γw Γo Q) GreedyGenLabel (GreedyGenSigma Γw Γo Q) :=
+  Turing.TM2.Stmt.peek GreedyGenStack.counter (fun σ b =>
+    { σ with peekBit := b.map ULift.down })
+  <| Turing.TM2.Stmt.branch (fun σ => σ.peekBit.isNone)
+    ( -- Counter empty: if carry set, push 1; then restore
+      Turing.TM2.Stmt.branch (fun σ => σ.carry.getD false)
+        ( Turing.TM2.Stmt.push GreedyGenStack.saveCounter
+            (fun _ => ULift.up true)
+          <| Turing.TM2.Stmt.goto
+              (fun _ => GreedyGenLabel.counter_increment_restore) )
+        ( Turing.TM2.Stmt.goto
+            (fun _ => GreedyGenLabel.counter_increment_restore) ) )
+    ( Turing.TM2.Stmt.pop GreedyGenStack.counter (fun σ _ => σ)
+      <| Turing.TM2.Stmt.load (fun σ =>
+          let bit      := σ.peekBit.getD false
+          let carry    := σ.carry.getD false
+          let newBit   := Bool.xor bit carry
+          let newCarry := bit && carry
+          { σ with peekBit := some newBit, carry := some newCarry })
+      <| Turing.TM2.Stmt.push GreedyGenStack.saveCounter
+          (fun σ => ULift.up (σ.peekBit.getD false))
+      <| Turing.TM2.Stmt.goto
+          (fun _ => GreedyGenLabel.counter_increment_loop) )
+
+/-- Restore counter from saveCounter, then start next round. -/
+def counter_increment_restore :
+    Turing.TM2.Stmt (stackAlphabet Γw Γo Q) GreedyGenLabel (GreedyGenSigma Γw Γo Q) :=
+  Turing.TM2.Stmt.peek GreedyGenStack.saveCounter (fun σ b =>
+    { σ with peekBit := b.map ULift.down })
+  <| Turing.TM2.Stmt.branch (fun σ => σ.peekBit.isNone)
+    ( -- Done restoring → start next bitstring
+      Turing.TM2.Stmt.goto (fun _ => GreedyGenLabel.copyCounter) )
+    ( Turing.TM2.Stmt.pop GreedyGenStack.saveCounter (fun σ _ => σ)
+      <| Turing.TM2.Stmt.push GreedyGenStack.counter
+          (fun σ => ULift.up (σ.peekBit.getD false))
+      <| Turing.TM2.Stmt.goto
+          (fun _ => GreedyGenLabel.counter_increment_restore) )
+
+/-
+══════════════════════════════════════════════════════════════════════════════
+  Machine definition
+══════════════════════════════════════════════════════════════════════════════
+-/
+
+def greedyGenMachine (gen : Generator Γw Γo Q) :
+    GreedyGenLabel →
+    Turing.TM2.Stmt (stackAlphabet Γw Γo Q) GreedyGenLabel (GreedyGenSigma Γw Γo Q)
+  | GreedyGenLabel.copyCounter              => copyCounter
+  | GreedyGenLabel.copyCounter_restore      => copyCounter_restore
+  | GreedyGenLabel.initRun                  => initRun gen
+  | GreedyGenLabel.runStep                  => runStep gen
+  | GreedyGenLabel.runStep_apply            => runStep_apply
+  | GreedyGenLabel.runStep_moveHead         => runStep_moveHead gen
+  | GreedyGenLabel.checkOutput              => checkOutput
+  | GreedyGenLabel.checkOutput_restoreTarget => checkOutput_restoreTarget
+  | GreedyGenLabel.clearInput               => clearInput
+  | GreedyGenLabel.clearWorkL               => clearWorkL
+  | GreedyGenLabel.clearWorkR               => clearWorkR
+  | GreedyGenLabel.clearOutput              => clearOutput
+  | GreedyGenLabel.counter_increment        => counter_increment
+  | GreedyGenLabel.counter_increment_loop   => counter_increment_loop
+  | GreedyGenLabel.counter_increment_restore => counter_increment_restore
+
+end GreedyEnum
+
+end RandomisedGeneration
