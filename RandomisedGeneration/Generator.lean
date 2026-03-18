@@ -46,6 +46,12 @@ where
   -- - A value indicating the direction in which the working tape head should move
   δ : Q -> Bool -> Γw → Option (Q × Γw × Option Γo × InputTapeDirection × WorkTapeDirection)
 
+def Generator.IsGreedy {Γw Γo Q : Type u}
+    [FinEnum Γw] [Inhabited Γo] [FinEnum Γo]
+    (gen : Generator Γw Γo Q) : Prop :=
+  ∀ q b w q' w' o itd wd,
+    gen.δ q b w = some (q', w', o, itd, wd) → itd = InputTapeDirection.R
+
 def GeneratorSupports {Γw Γo Q : Type u}
   [FinEnum Γw] [Inhabited Γo] [FinEnum Γo]
   (gen : Generator Γw Γo Q) (S : Finset Q) : Prop :=
