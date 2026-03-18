@@ -3,15 +3,15 @@ import RandomisedGeneration.GreedyEnum.GreedyEnumTM2
 
 namespace RandomisedGeneration
 
-namespace GreedyGenExamples
+namespace GreedyEnumExamples
 set_option linter.style.longLine false
 set_option linter.hashCommand false
 
-deriving instance Repr for GreedyEnum.GreedyGenStack
-deriving instance Repr for GreedyEnum.GreedyGenLabel
+deriving instance Repr for GreedyEnum.GreedyEnumStack
+deriving instance Repr for GreedyEnum.GreedyEnumLabel
 deriving instance Repr for InputTapeDirection
 deriving instance Repr for WorkTapeDirection
-deriving instance Repr for GreedyEnum.GreedyGenSigma
+deriving instance Repr for GreedyEnum.GreedyEnumSigma
 
 open GreedyEnum in
 def stripPrefix (s : String) : String :=
@@ -23,28 +23,28 @@ def reprCfg
     [FinEnum Γw] [Inhabited Γw]
     [FinEnum Γo] [Inhabited Γo]
     [FinEnum Q] [Inhabited Q]
-    [Repr (stackAlphabet Γw Γo Q GreedyGenStack.target)]
-    [Repr (stackAlphabet Γw Γo Q GreedyGenStack.counter)]
-    [Repr (stackAlphabet Γw Γo Q GreedyGenStack.input)]
-    [Repr (stackAlphabet Γw Γo Q GreedyGenStack.workL)]
-    [Repr (stackAlphabet Γw Γo Q GreedyGenStack.workR)]
-    [Repr (stackAlphabet Γw Γo Q GreedyGenStack.output)]
-    [Repr (stackAlphabet Γw Γo Q GreedyGenStack.saveTarget)]
-    [Repr (stackAlphabet Γw Γo Q GreedyGenStack.saveCounter)]
-    (cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) GreedyGenLabel (GreedyGenSigma Γw Γo Q)) : String :=
+    [Repr (stackAlphabet Γw Γo Q GreedyEnumStack.target)]
+    [Repr (stackAlphabet Γw Γo Q GreedyEnumStack.counter)]
+    [Repr (stackAlphabet Γw Γo Q GreedyEnumStack.input)]
+    [Repr (stackAlphabet Γw Γo Q GreedyEnumStack.workL)]
+    [Repr (stackAlphabet Γw Γo Q GreedyEnumStack.workR)]
+    [Repr (stackAlphabet Γw Γo Q GreedyEnumStack.output)]
+    [Repr (stackAlphabet Γw Γo Q GreedyEnumStack.saveTarget)]
+    [Repr (stackAlphabet Γw Γo Q GreedyEnumStack.saveCounter)]
+    (cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) GreedyEnumLabel (GreedyEnumSigma Γw Γo Q)) : String :=
   let showStack (name : String) (s : String) : Option String :=
     if s == "[]" then none else some s!"  {name}: {s}"
   let r := fun {α} [Repr α] (x : α) => toString (repr x)
   let lines : List String := List.filterMap id [
     some s!"  label: {stripPrefix (r cfg.l)}",
-    showStack "target     " (r (cfg.stk GreedyGenStack.target)),
-    showStack "counter    " (r (cfg.stk GreedyGenStack.counter)),
-    showStack "input      " (r (cfg.stk GreedyGenStack.input)),
-    showStack "workL      " (r (cfg.stk GreedyGenStack.workL)),
-    showStack "workR      " (r (cfg.stk GreedyGenStack.workR)),
-    showStack "output     " (r (cfg.stk GreedyGenStack.output)),
-    showStack "saveTarget " (r (cfg.stk GreedyGenStack.saveTarget)),
-    showStack "saveCounter" (r (cfg.stk GreedyGenStack.saveCounter))
+    showStack "target     " (r (cfg.stk GreedyEnumStack.target)),
+    showStack "counter    " (r (cfg.stk GreedyEnumStack.counter)),
+    showStack "input      " (r (cfg.stk GreedyEnumStack.input)),
+    showStack "workL      " (r (cfg.stk GreedyEnumStack.workL)),
+    showStack "workR      " (r (cfg.stk GreedyEnumStack.workR)),
+    showStack "output     " (r (cfg.stk GreedyEnumStack.output)),
+    showStack "saveTarget " (r (cfg.stk GreedyEnumStack.saveTarget)),
+    showStack "saveCounter" (r (cfg.stk GreedyEnumStack.saveCounter))
   ]
   "\n".intercalate lines
 
@@ -54,23 +54,23 @@ def runTraceStr
     [FinEnum Γw] [Inhabited Γw]
     [FinEnum Γo] [Inhabited Γo]
     [FinEnum Q] [Inhabited Q]
-    [Repr (stackAlphabet Γw Γo Q GreedyGenStack.target)]
-    [Repr (stackAlphabet Γw Γo Q GreedyGenStack.counter)]
-    [Repr (stackAlphabet Γw Γo Q GreedyGenStack.input)]
-    [Repr (stackAlphabet Γw Γo Q GreedyGenStack.workL)]
-    [Repr (stackAlphabet Γw Γo Q GreedyGenStack.workR)]
-    [Repr (stackAlphabet Γw Γo Q GreedyGenStack.output)]
-    [Repr (stackAlphabet Γw Γo Q GreedyGenStack.saveTarget)]
-    [Repr (stackAlphabet Γw Γo Q GreedyGenStack.saveCounter)]
+    [Repr (stackAlphabet Γw Γo Q GreedyEnumStack.target)]
+    [Repr (stackAlphabet Γw Γo Q GreedyEnumStack.counter)]
+    [Repr (stackAlphabet Γw Γo Q GreedyEnumStack.input)]
+    [Repr (stackAlphabet Γw Γo Q GreedyEnumStack.workL)]
+    [Repr (stackAlphabet Γw Γo Q GreedyEnumStack.workR)]
+    [Repr (stackAlphabet Γw Γo Q GreedyEnumStack.output)]
+    [Repr (stackAlphabet Γw Γo Q GreedyEnumStack.saveTarget)]
+    [Repr (stackAlphabet Γw Γo Q GreedyEnumStack.saveCounter)]
     (gen : Generator Γw Γo Q)
     (target : List Γo)
     (n : ℕ) : String :=
   Id.run do
-    let mut cfg := greedyGenInit (Γw := Γw) (Γo := Γo) (Q := Q) target
+    let mut cfg := greedyEnumInit (Γw := Γw) (Γo := Γo) (Q := Q) target
     let mut acc := ""
     for step in List.range n do
       acc := acc ++ s!"=== Step {step} ===\n" ++ reprCfg cfg ++ "\n"
-      match Turing.TM2.step (greedyGenMachine gen) cfg with
+      match Turing.TM2.step (greedyEnumMachine gen) cfg with
       | none =>
         acc := acc ++ s!"=== Halted after step {step} ===\n"
         return acc
@@ -84,26 +84,26 @@ def runTraceStrRoundStarts
     [FinEnum Γw] [Inhabited Γw]
     [FinEnum Γo] [Inhabited Γo]
     [FinEnum Q] [Inhabited Q]
-    [Repr (stackAlphabet Γw Γo Q GreedyGenStack.target)]
-    [Repr (stackAlphabet Γw Γo Q GreedyGenStack.counter)]
-    [Repr (stackAlphabet Γw Γo Q GreedyGenStack.input)]
-    [Repr (stackAlphabet Γw Γo Q GreedyGenStack.workL)]
-    [Repr (stackAlphabet Γw Γo Q GreedyGenStack.workR)]
-    [Repr (stackAlphabet Γw Γo Q GreedyGenStack.output)]
-    [Repr (stackAlphabet Γw Γo Q GreedyGenStack.saveTarget)]
-    [Repr (stackAlphabet Γw Γo Q GreedyGenStack.saveCounter)]
+    [Repr (stackAlphabet Γw Γo Q GreedyEnumStack.target)]
+    [Repr (stackAlphabet Γw Γo Q GreedyEnumStack.counter)]
+    [Repr (stackAlphabet Γw Γo Q GreedyEnumStack.input)]
+    [Repr (stackAlphabet Γw Γo Q GreedyEnumStack.workL)]
+    [Repr (stackAlphabet Γw Γo Q GreedyEnumStack.workR)]
+    [Repr (stackAlphabet Γw Γo Q GreedyEnumStack.output)]
+    [Repr (stackAlphabet Γw Γo Q GreedyEnumStack.saveTarget)]
+    [Repr (stackAlphabet Γw Γo Q GreedyEnumStack.saveCounter)]
     (gen : Generator Γw Γo Q)
     (target : List Γo)
     (n : ℕ) : String :=
-  let isRoundStart (cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) GreedyGenLabel (GreedyGenSigma Γw Γo Q)) : Bool :=
-    cfg.l == some GreedyGenLabel.copyCounter
+  let isRoundStart (cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) GreedyEnumLabel (GreedyEnumSigma Γw Γo Q)) : Bool :=
+    cfg.l == some GreedyEnumLabel.copyCounter
   Id.run do
-    let mut cfg := greedyGenInit (Γw := Γw) (Γo := Γo) (Q := Q) target
+    let mut cfg := greedyEnumInit (Γw := Γw) (Γo := Γo) (Q := Q) target
     let mut acc := ""
     for step in List.range n do
       if isRoundStart cfg then
         acc := acc ++ s!"=== Step {step} ===\n" ++ reprCfg cfg ++ "\n"
-      match Turing.TM2.step (greedyGenMachine gen) cfg with
+      match Turing.TM2.step (greedyEnumMachine gen) cfg with
       | none =>
         acc := acc ++ s!"=== Halted after step {step} ===\n"
         return acc
@@ -118,7 +118,7 @@ instance instReprStackAlphabet
     [FinEnum Γo] [Inhabited Γo]
     [FinEnum Q] [Inhabited Q]
     [Repr Γo] [Repr Γw] [Repr Q]
-    (s : GreedyGenStack) : Repr (stackAlphabet Γw Γo Q s) :=
+    (s : GreedyEnumStack) : Repr (stackAlphabet Γw Γo Q s) :=
   match s with
   | .target      => inferInstanceAs (Repr Γo)
   | .counter     => inferInstanceAs (Repr (ULift Bool))
@@ -191,6 +191,6 @@ def countFalsesGenerator : Generator (Fin 1) (Fin 2) (Fin 1) where
 -- Detailed trace of count falses
 --#eval IO.println (runTraceStr countFalsesGenerator [1] 300)
 
-end GreedyGenExamples
+end GreedyEnumExamples
 
 end RandomisedGeneration

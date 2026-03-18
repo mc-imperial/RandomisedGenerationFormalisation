@@ -445,6 +445,21 @@ lemma generatedLanguage_greedify {Γw Γo Q : Type u}
     obtain ⟨f, hComp'⟩ := computes_of_greedify gen hComp
     exact ⟨f, hComp'⟩
 
+lemma Generator.restrictToSupport_isGreedy {Γw Γo Q : Type u}
+    [FinEnum Γw] [Inhabited Γo] [FinEnum Γo]
+    (gen : Generator Γw Γo Q)
+    (S : Finset Q) (hS : GeneratorSupports gen S)
+    (hGreedy : gen.IsGreedy) :
+    (gen.restrictToSupport S hS).IsGreedy := by
+  intro ⟨q, hq⟩ b w q' w' o itd wd hδ
+  simp only [Generator.restrictToSupport] at hδ
+  split at hδ
+  · contradiction
+  · rename_i q'' w'' o'' itd'' wd'' hgen
+    simp only [Option.some.injEq, Prod.mk.injEq] at hδ
+    obtain ⟨⟨_, rfl⟩, rfl, rfl, rfl, rfl⟩ := hδ
+    exact hGreedy q b w q'' w'' o'' itd'' wd'' hgen
+
 theorem greedilyGenerable_eq_generable {Γ : Type u}
   [Inhabited Γ] [FinEnum Γ] :
   greedilyGenerableLanguages (Γ := Γ) = generableLanguages := by
