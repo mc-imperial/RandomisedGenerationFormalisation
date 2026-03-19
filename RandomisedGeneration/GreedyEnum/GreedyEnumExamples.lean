@@ -191,6 +191,53 @@ def countFalsesGenerator : Generator (Fin 1) (Fin 2) (Fin 1) where
 -- Detailed trace of count falses
 --#eval IO.println (runTraceStr countFalsesGenerator [1] 300)
 
+/-- Reads one bit b. Writes (1-b) to tape (flips the bit).
+    Move N (stay). Then halts, outputting the head symbol.
+    So on input [false, ...]: writes 1, outputs 1, halts.
+    On input [true, ...]: writes 0, outputs 0, halts.
+
+    State 0: flip input bit, write to tape, stay, goto 1
+    State 1: output head symbol, halt -/
+def flipBitGenerator : Generator (Fin 2) (Fin 2) (Fin 2) where
+  init  := 0
+  blank := 0
+  δ := fun q b w =>
+    match q with
+    | 0 =>
+      let flipped : Fin 2 := if b then 0 else 1
+      some (1, flipped, none, InputTapeDirection.R, WorkTapeDirection.N)
+    | 1 => some (2, w, some w, InputTapeDirection.R, WorkTapeDirection.N)
+
+-- target [1]: should match on input starting with false (flips to 1)
+--#eval IO.println (runTraceStr flipBitGenerator [1] 200)
+
+/-- Reads 3 bits, outputs them in reverse using the work tape.
+
+    State 0: read b0, write to tape pos 0, move R → 1
+    State 1: read b1, write to tape pos 1, move R → 2
+    State 2: read b2, output b2 immediately, move L → 3
+    State 3: output head (b1), move L → 4
+    State 4: output head (b0), halt
+
+    On input [1,0,1,...]: output [1,0,1] (reversed = [1,0,1], palindrome!)
+    On input [1,1,0,...]: output [0,1,1]
+    On input [0,0,1,...]: output [1,0,0] -/
+def reverse3Generator : Generator (Fin 2) (Fin 2) (Fin 5) where
+  init  := 0
+  blank := 0
+  δ := fun q b w =>
+    match q with
+    | 0 => -- read b0, write to tape, move R
+      some (1, if b then 1 else 0, none, InputTapeDirection.R, WorkTapeDirection.R)
+    | 1 => -- read b1, write to tape, move R
+      some (2, if b then 1 else 0, none, InputTapeDirection.R, WorkTapeDirection.R)
+    | 2 => -- read b2, output b2, move L
+      some (3, w, some (if b then 1 else 0), InputTapeDirection.R, WorkTapeDirection.L)
+    | 3 => -- output head (b1), move L
+      some (4, w, some w, InputTapeDirection.R, WorkTapeDirection.L)
+    | 4 => -- output head (b0), halt (δ returns none for state 5)
+      some (5, w, some w, InputTapeDirection.R, WorkTapeDirection.N)
+
 end GreedyEnumExamples
 
 end RandomisedGeneration

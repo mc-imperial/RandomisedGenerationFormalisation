@@ -46,7 +46,7 @@ deriving instance DecidableEq for GreedyEnumStack
 deriving instance Fintype for GreedyEnumStack
 deriving instance Inhabited for GreedyEnumStack
 
-/-- The type of elements stored on each stack. --/
+-- The type of elements stored on each stack.
 def stackAlphabet (Γw Γo Q : Type u)
     [Fintype Γw] [Inhabited Γo] [FinEnum Γo] [FinEnum Q] :
     GreedyEnumStack → Type u
