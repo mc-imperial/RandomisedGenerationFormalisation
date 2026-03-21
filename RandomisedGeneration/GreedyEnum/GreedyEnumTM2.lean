@@ -10,6 +10,7 @@ namespace GreedyEnum
 
 variable {Γw Γo Q : Type u}
 variable [Inhabited Γo] [FinEnum Γo] [FinEnum Γw] [Inhabited Γw] [FinEnum Q]
+set_option linter.unusedSectionVars false
 
 /-- The stacks used by the greedy gen TM2 machine.
 
@@ -138,7 +139,7 @@ instance [Fintype Γw] [Fintype Γo] [Fintype Q] [DecidableEq Γw] [DecidableEq 
 
 def greedyEnumInit (target : List Γo) :
     Turing.TM2.Cfg (stackAlphabet Γw Γo Q) GreedyEnumLabel (GreedyEnumSigma Γw Γo Q) :=
-  Turing.TM2.init GreedyEnumStack.target target
+  Turing.TM2.init GreedyEnumStack.target target.reverse
 
 /-- Apply the generator's transition function to the current instance.
     Reads transQ (current state), inputBit (current input), and transW (head symbol).
@@ -517,6 +518,1002 @@ def greedyEnumMachine (gen : Generator Γw Γo Q) :
   | GreedyEnumLabel.counter_increment        => counter_increment
   | GreedyEnumLabel.counter_increment_loop   => counter_increment_loop
   | GreedyEnumLabel.counter_increment_restore => counter_increment_restore
+
+
+
+def tm2Step (gen : Generator Γw Γo Q) :=
+  Turing.TM2.step (greedyEnumMachine gen)
+
+def TM2Reaches (gen : Generator Γw Γo Q)
+    (cfg cfg' : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) GreedyEnumLabel (GreedyEnumSigma Γw Γo Q))
+    : Prop :=
+  Relation.ReflTransGen (fun a b => tm2Step gen a = some b) cfg cfg'
+
+def TM2Halts (gen : Generator Γw Γo Q)
+    (cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) GreedyEnumLabel (GreedyEnumSigma Γw Γo Q))
+    : Prop :=
+  ∃ cfg', TM2Reaches gen cfg cfg' ∧ tm2Step gen cfg' = none
+
+lemma TM2Reaches_trans {gen : Generator Γw Γo Q}
+    {cfg₁ cfg₂ cfg₃ : Turing.TM2.Cfg (stackAlphabet Γw Γo Q)
+      GreedyEnumLabel (GreedyEnumSigma Γw Γo Q)}
+    (h₁ : TM2Reaches gen cfg₁ cfg₂) (h₂ : TM2Reaches gen cfg₂ cfg₃) :
+    TM2Reaches gen cfg₁ cfg₃ :=
+  Relation.ReflTransGen.trans h₁ h₂
+
+
+
+def WorkTapeMatches
+    (gen : Generator Γw Γo Q)
+    (work : ℤ → Γw)
+    (workIndex : ℤ)
+    (workL workR : List Γw) : Prop :=
+  (∀ i : ℕ, (h : i < workR.length) →
+    workR.get ⟨i, h⟩ = work (workIndex + i)) ∧
+  (∀ i : ℕ, i ≥ workR.length →
+    work (workIndex + i) = gen.blank) ∧
+  (∀ i : ℕ, (h : i < workL.length) →
+    workL.get ⟨i, h⟩ = work (workIndex - (↑i + 1))) ∧
+  (∀ i : ℕ, i ≥ workL.length →
+    work (workIndex - (↑i + 1)) = gen.blank)
+
+structure CopyCounterInvariant
+    (target : List Γo)
+    (counter : List (ULift.{u} Bool))
+    (cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) GreedyEnumLabel (GreedyEnumSigma Γw Γo Q))
+    : Prop where
+  h_label       : cfg.l = some GreedyEnumLabel.copyCounter
+  h_target      : cfg.stk GreedyEnumStack.target      = target
+  h_counter     : cfg.stk GreedyEnumStack.counter     = counter
+  h_input       : cfg.stk GreedyEnumStack.input       = []
+  h_workL       : cfg.stk GreedyEnumStack.workL       = []
+  h_workR       : cfg.stk GreedyEnumStack.workR       = []
+  h_output      : cfg.stk GreedyEnumStack.output      = []
+  h_saveTarget  : cfg.stk GreedyEnumStack.saveTarget  = []
+  h_saveCounter : cfg.stk GreedyEnumStack.saveCounter = []
+
+structure CopyCounterRestoreInvariant
+    (target : List Γo)
+    (counter : List (ULift.{u} Bool))
+    (cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) GreedyEnumLabel (GreedyEnumSigma Γw Γo Q))
+    : Prop where
+  h_label       : cfg.l = some GreedyEnumLabel.copyCounter_restore
+  h_target      : cfg.stk GreedyEnumStack.target      = target
+  h_counter     : cfg.stk GreedyEnumStack.counter     = []
+  h_saveCounter : cfg.stk GreedyEnumStack.saveCounter = counter.reverse
+  h_input       : cfg.stk GreedyEnumStack.input       = []
+  h_workL       : cfg.stk GreedyEnumStack.workL       = []
+  h_workR       : cfg.stk GreedyEnumStack.workR       = []
+  h_output      : cfg.stk GreedyEnumStack.output      = []
+  h_saveTarget  : cfg.stk GreedyEnumStack.saveTarget  = []
+
+structure InitRunInvariant
+    (target : List Γo)
+    (counter : List (ULift.{u} Bool))
+    (cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) GreedyEnumLabel (GreedyEnumSigma Γw Γo Q))
+    : Prop where
+  h_label       : cfg.l = some GreedyEnumLabel.initRun
+  h_target      : cfg.stk GreedyEnumStack.target      = target
+  h_counter     : cfg.stk GreedyEnumStack.counter     = counter
+  h_input       : cfg.stk GreedyEnumStack.input       = counter
+  h_saveCounter : cfg.stk GreedyEnumStack.saveCounter = []
+  h_workL       : cfg.stk GreedyEnumStack.workL       = []
+  h_workR       : cfg.stk GreedyEnumStack.workR       = []
+  h_output      : cfg.stk GreedyEnumStack.output      = []
+  h_saveTarget  : cfg.stk GreedyEnumStack.saveTarget  = []
+
+structure RunStepInvariant
+    (gen : Generator Γw Γo Q)
+    (target : List Γo)
+    (counter : List (ULift.{u} Bool))
+    (gcfg : GenConfig Γw Γo Q)
+    (cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) GreedyEnumLabel (GreedyEnumSigma Γw Γo Q))
+    : Prop where
+  h_label       : cfg.l = some GreedyEnumLabel.runStep
+  h_target      : cfg.stk GreedyEnumStack.target      = target
+  h_counter     : cfg.stk GreedyEnumStack.counter     = counter
+  h_saveCounter : cfg.stk GreedyEnumStack.saveCounter = []
+  h_saveTarget  : cfg.stk GreedyEnumStack.saveTarget  = []
+  h_input       : cfg.stk GreedyEnumStack.input       = counter.drop gcfg.inputIndex
+  h_transQ      : cfg.var.transQ = some gcfg.state
+  h_work        : WorkTapeMatches gen gcfg.work gcfg.workIndex
+                    (cfg.stk GreedyEnumStack.workL) (cfg.stk GreedyEnumStack.workR)
+  h_output      : cfg.stk GreedyEnumStack.output      = gcfg.output.reverse
+
+structure RunStepApplyInvariant
+    (gen : Generator Γw Γo Q)
+    (target : List Γo)
+    (counter : List (ULift.{u} Bool))
+    (gcfg : GenConfig Γw Γo Q)
+    (q' : Q) (w' : Γw) (o : Option Γo) (wd : WorkTapeDirection)
+    (cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) GreedyEnumLabel (GreedyEnumSigma Γw Γo Q))
+    : Prop where
+  h_label       : cfg.l = some GreedyEnumLabel.runStep_apply
+  h_delta       : gen.δ gcfg.state
+                    (gcfg.input gcfg.inputIndex)
+                    (gcfg.work gcfg.workIndex)
+                  = some (q', w', o, InputTapeDirection.R, wd)
+  h_target      : cfg.stk GreedyEnumStack.target      = target
+  h_counter     : cfg.stk GreedyEnumStack.counter     = counter
+  h_saveCounter : cfg.stk GreedyEnumStack.saveCounter = []
+  h_saveTarget  : cfg.stk GreedyEnumStack.saveTarget  = []
+  h_input       : cfg.stk GreedyEnumStack.input       = counter.drop (gcfg.inputIndex + 1)
+  h_output      : cfg.stk GreedyEnumStack.output      = gcfg.output.reverse
+  h_workL       : ∀ i : ℕ, (h : i < (cfg.stk GreedyEnumStack.workL).length) →
+                    (cfg.stk GreedyEnumStack.workL).get ⟨i, h⟩ =
+                      gcfg.work (gcfg.workIndex - (↑i + 1))
+  h_workL_blank : ∀ i : ℕ, i ≥ (cfg.stk GreedyEnumStack.workL).length →
+                    gcfg.work (gcfg.workIndex - (↑i + 1)) = gen.blank
+  h_workR       : ∀ i : ℕ, (h : i < (cfg.stk GreedyEnumStack.workR).length) →
+                    (cfg.stk GreedyEnumStack.workR).get ⟨i, h⟩ =
+                      gcfg.work (gcfg.workIndex + (↑i + 1))
+  h_workR_blank : ∀ i : ℕ, i ≥ (cfg.stk GreedyEnumStack.workR).length →
+                    gcfg.work (gcfg.workIndex + (↑i + 1)) = gen.blank
+  h_transQ      : cfg.var.transQ      = some q'
+  h_transW      : cfg.var.transW      = w'
+  h_transOut    : cfg.var.transOut     = o
+  h_transWDir   : cfg.var.transWDir   = wd
+  h_transHalted : cfg.var.transHalted = false
+
+structure RunStepMoveHeadInvariant
+    (gen : Generator Γw Γo Q)
+    (target : List Γo)
+    (counter : List (ULift.{u} Bool))
+    (gcfg gcfg' : GenConfig Γw Γo Q)
+    (wd : WorkTapeDirection)
+    (cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) GreedyEnumLabel (GreedyEnumSigma Γw Γo Q))
+    : Prop where
+  h_label       : cfg.l = some GreedyEnumLabel.runStep_moveHead
+  h_gen_step    : step gen gcfg = some gcfg'
+  h_wd          : gcfg'.workIndex = gcfg.workIndex + (wd : ℤ)
+  h_target      : cfg.stk GreedyEnumStack.target      = target
+  h_counter     : cfg.stk GreedyEnumStack.counter     = counter
+  h_saveCounter : cfg.stk GreedyEnumStack.saveCounter = []
+  h_saveTarget  : cfg.stk GreedyEnumStack.saveTarget  = []
+  h_input       : cfg.stk GreedyEnumStack.input       = counter.drop gcfg'.inputIndex
+  h_output      : cfg.stk GreedyEnumStack.output      = gcfg'.output.reverse
+  h_work        : WorkTapeMatches gen gcfg'.work gcfg.workIndex
+                    (cfg.stk GreedyEnumStack.workL) (cfg.stk GreedyEnumStack.workR)
+  h_transWDir   : cfg.var.transWDir = wd
+
+structure ClearInputInvariant
+    (target : List Γo)
+    (counter : List (ULift.{u} Bool))
+    (cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) GreedyEnumLabel (GreedyEnumSigma Γw Γo Q))
+    : Prop where
+  h_label       : cfg.l = some GreedyEnumLabel.clearInput
+  h_target      : cfg.stk GreedyEnumStack.target      = target
+  h_counter     : cfg.stk GreedyEnumStack.counter     = counter
+  h_saveCounter : cfg.stk GreedyEnumStack.saveCounter = []
+  h_saveTarget  : cfg.stk GreedyEnumStack.saveTarget  = []
+  h_output      : cfg.stk GreedyEnumStack.output      = []
+
+structure CounterIncrementInvariant
+    (target : List Γo)
+    (counter : List (ULift.{u} Bool))
+    (cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) GreedyEnumLabel (GreedyEnumSigma Γw Γo Q))
+    : Prop where
+  h_label       : cfg.l = some GreedyEnumLabel.counter_increment
+  h_target      : cfg.stk GreedyEnumStack.target      = target
+  h_counter     : cfg.stk GreedyEnumStack.counter     = counter
+  h_input       : cfg.stk GreedyEnumStack.input       = []
+  h_workL       : cfg.stk GreedyEnumStack.workL       = []
+  h_workR       : cfg.stk GreedyEnumStack.workR       = []
+  h_output      : cfg.stk GreedyEnumStack.output      = []
+  h_saveTarget  : cfg.stk GreedyEnumStack.saveTarget  = []
+  h_saveCounter : cfg.stk GreedyEnumStack.saveCounter = []
+
+def counterToInput (counter : List (ULift.{u} Bool)) : ℕ → Bool :=
+  fun i => match counter[i]? with
+    | some b => b.down
+    | none   => false
+
+def counterIncrement : List (ULift.{u} Bool) → List (ULift.{u} Bool)
+  | [] => [ULift.up true]
+  | ⟨false⟩ :: rest => ⟨true⟩ :: rest
+  | ⟨true⟩ :: rest => ⟨false⟩ :: counterIncrement rest
+
+section CopyCounterPhase
+
+private structure CopyCounterLoopInvariant
+    (target : List Γo)
+    (remaining : List (ULift.{u} Bool))
+    (saved : List (ULift.{u} Bool))
+    (cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) GreedyEnumLabel (GreedyEnumSigma Γw Γo Q))
+    : Prop where
+  h_label       : cfg.l = some GreedyEnumLabel.copyCounter
+  h_target      : cfg.stk GreedyEnumStack.target      = target
+  h_counter     : cfg.stk GreedyEnumStack.counter     = remaining
+  h_saveCounter : cfg.stk GreedyEnumStack.saveCounter = saved
+  h_input       : cfg.stk GreedyEnumStack.input       = []
+  h_workL       : cfg.stk GreedyEnumStack.workL       = []
+  h_workR       : cfg.stk GreedyEnumStack.workR       = []
+  h_output      : cfg.stk GreedyEnumStack.output      = []
+  h_saveTarget  : cfg.stk GreedyEnumStack.saveTarget  = []
+
+private structure CopyCounterRestoreLoopInvariant
+    (target : List Γo)
+    (restored : List (ULift.{u} Bool))
+    (remaining : List (ULift.{u} Bool))
+    (cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) GreedyEnumLabel (GreedyEnumSigma Γw Γo Q))
+    : Prop where
+  h_label       : cfg.l = some GreedyEnumLabel.copyCounter_restore
+  h_target      : cfg.stk GreedyEnumStack.target      = target
+  h_counter     : cfg.stk GreedyEnumStack.counter     = restored
+  h_input       : cfg.stk GreedyEnumStack.input       = restored
+  h_saveCounter : cfg.stk GreedyEnumStack.saveCounter = remaining
+  h_workL       : cfg.stk GreedyEnumStack.workL       = []
+  h_workR       : cfg.stk GreedyEnumStack.workR       = []
+  h_output      : cfg.stk GreedyEnumStack.output      = []
+  h_saveTarget  : cfg.stk GreedyEnumStack.saveTarget  = []
+
+private lemma copyCounter_loop
+    (gen : Generator Γw Γo Q)
+    (target : List Γo)
+    (remaining saved : List (ULift.{u} Bool))
+    (cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) GreedyEnumLabel (GreedyEnumSigma Γw Γo Q))
+    (hinv : CopyCounterLoopInvariant target remaining saved cfg) :
+    ∃ cfg', TM2Reaches gen cfg cfg' ∧
+      CopyCounterRestoreLoopInvariant target [] (remaining.reverse ++ saved) cfg' := by
+  induction remaining generalizing saved cfg with
+  | nil =>
+    simp only [List.reverse_nil, List.nil_append]
+    refine ⟨⟨some GreedyEnumLabel.copyCounter_restore,
+             { cfg.var with peekBit := none },
+             cfg.stk⟩, ?_, ?_⟩
+    · apply Relation.ReflTransGen.single
+      cases cfg with
+      | mk l v S =>
+        simp only at *
+        have hl := hinv.h_label; simp only at hl; subst hl
+        have hc : S GreedyEnumStack.counter = [] := hinv.h_counter
+        simp only [tm2Step, Turing.TM2.step, greedyEnumMachine,
+                   copyCounter, Turing.TM2.stepAux, hc, List.head?,
+                   Option.map, Option.isNone, cond_true]
+    · exact ⟨rfl, hinv.h_target, hinv.h_counter, hinv.h_input,
+             hinv.h_saveCounter, hinv.h_workL, hinv.h_workR,
+             hinv.h_output, hinv.h_saveTarget⟩
+  | cons b rest ih =>
+    have hstep : ∃ cfg₁, TM2Reaches gen cfg cfg₁ ∧
+        CopyCounterLoopInvariant target rest (b :: saved) cfg₁ := by
+      refine ⟨⟨some GreedyEnumLabel.copyCounter,
+               { cfg.var with peekBit := some b.down },
+               fun k => match k with
+                 | GreedyEnumStack.counter => rest
+                 | GreedyEnumStack.saveCounter => b :: saved
+                 | other => cfg.stk other⟩, ?_, ?_⟩
+      · apply Relation.ReflTransGen.single
+        cases cfg with
+        | mk l v S =>
+          have hl := hinv.h_label; simp only at hl; subst hl
+          have hc : S GreedyEnumStack.counter = b :: rest := hinv.h_counter
+          have hsc : S GreedyEnumStack.saveCounter = saved := hinv.h_saveCounter
+          simp only [tm2Step, Turing.TM2.step, greedyEnumMachine,
+                     copyCounter, Turing.TM2.stepAux, hc]
+          cases b with
+          | up bv =>
+            simp only [Option.isNone, Option.map, List.head?, List.tail_cons, Option.getD_some,
+              ne_eq, reduceCtorEq, not_false_eq_true, Function.update_of_ne, cond_false,
+              Option.some.injEq, Turing.TM2.Cfg.mk.injEq, true_and]
+            ext k; cases k <;> simp [Function.update, hsc]
+      · exact ⟨rfl, hinv.h_target, rfl, rfl, hinv.h_input,
+               hinv.h_workL, hinv.h_workR, hinv.h_output, hinv.h_saveTarget⟩
+    obtain ⟨cfg₁, hr₁, hinv₁⟩ := hstep
+    obtain ⟨cfg₂, hr₂, hinv₂⟩ := ih (b :: saved) cfg₁ hinv₁
+    refine ⟨cfg₂, TM2Reaches_trans hr₁ hr₂, ?_⟩
+    convert hinv₂ using 1
+    simp [List.reverse_cons, List.append_assoc]
+
+private lemma copyCounter_restore_loop
+    (gen : Generator Γw Γo Q)
+    (target : List Γo)
+    (restored remaining : List (ULift.{u} Bool))
+    (cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) GreedyEnumLabel (GreedyEnumSigma Γw Γo Q))
+    (hinv : CopyCounterRestoreLoopInvariant target restored remaining cfg) :
+    ∃ cfg', TM2Reaches gen cfg cfg' ∧
+      InitRunInvariant target (remaining.reverse ++ restored) cfg' := by
+  induction remaining generalizing restored cfg with
+  | nil =>
+    simp only [List.reverse_nil, List.nil_append]
+    refine ⟨⟨some GreedyEnumLabel.initRun,
+             { cfg.var with peekBit := none },
+             cfg.stk⟩, ?_, ?_⟩
+    · apply Relation.ReflTransGen.single
+      cases cfg with
+      | mk l v S =>
+        have hl := hinv.h_label; simp only at hl; subst hl
+        have hsc : S GreedyEnumStack.saveCounter = [] := hinv.h_saveCounter
+        simp only [tm2Step, Turing.TM2.step, greedyEnumMachine,
+                   copyCounter_restore, Turing.TM2.stepAux, hsc,
+                   List.head?, Option.map, Option.isNone, cond_true]
+    · exact ⟨rfl, hinv.h_target, hinv.h_counter, hinv.h_input,
+             hinv.h_saveCounter, hinv.h_workL, hinv.h_workR,
+             hinv.h_output, hinv.h_saveTarget⟩
+  | cons b rest ih =>
+    have hstep : ∃ cfg₁, TM2Reaches gen cfg cfg₁ ∧
+        CopyCounterRestoreLoopInvariant target (b :: restored) rest cfg₁ := by
+      refine ⟨⟨some GreedyEnumLabel.copyCounter_restore,
+               { cfg.var with peekBit := some b.down },
+               fun k => match k with
+                 | GreedyEnumStack.counter => b :: restored
+                 | GreedyEnumStack.input => b :: restored
+                 | GreedyEnumStack.saveCounter => rest
+                 | other => cfg.stk other⟩, ?_, ?_⟩
+      · apply Relation.ReflTransGen.single
+        cases cfg with
+        | mk l v S =>
+          have hl := hinv.h_label; simp only at hl; subst hl
+          have hsc : S GreedyEnumStack.saveCounter = b :: rest := hinv.h_saveCounter
+          have hc : S GreedyEnumStack.counter = restored := hinv.h_counter
+          have hi : S GreedyEnumStack.input = restored := hinv.h_input
+          simp only [tm2Step, Turing.TM2.step, greedyEnumMachine,
+                     copyCounter_restore, Turing.TM2.stepAux, hsc]
+          cases b with
+          | up bv =>
+            simp only [Option.isNone, Option.map, List.head?, List.tail_cons, Option.getD_some,
+              ne_eq, reduceCtorEq, not_false_eq_true, Function.update_of_ne, cond_false,
+              Option.some.injEq, Turing.TM2.Cfg.mk.injEq, true_and]
+            ext k; cases k <;> simp [Function.update, hc, hi]
+      · exact ⟨rfl, hinv.h_target, rfl, rfl, rfl,
+               hinv.h_workL, hinv.h_workR, hinv.h_output, hinv.h_saveTarget⟩
+    obtain ⟨cfg₁, hr₁, hinv₁⟩ := hstep
+    obtain ⟨cfg₂, hr₂, hinv₂⟩ := ih (b :: restored) cfg₁ hinv₁
+    refine ⟨cfg₂, TM2Reaches_trans hr₁ hr₂, ?_⟩
+    convert hinv₂ using 1
+    simp [List.reverse_cons, List.append_assoc]
+
+end CopyCounterPhase
+
+lemma copyCounter_to_initRun
+    (gen : Generator Γw Γo Q)
+    (target : List Γo)
+    (counter : List (ULift.{u} Bool))
+    (cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) GreedyEnumLabel (GreedyEnumSigma Γw Γo Q))
+    (hinv : CopyCounterInvariant target counter cfg) :
+    ∃ cfg', TM2Reaches gen cfg cfg' ∧
+      InitRunInvariant target counter cfg' := by
+  have hinv₀ : CopyCounterLoopInvariant target counter [] cfg :=
+    ⟨hinv.h_label, hinv.h_target, hinv.h_counter, hinv.h_saveCounter,
+     hinv.h_input, hinv.h_workL, hinv.h_workR, hinv.h_output, hinv.h_saveTarget⟩
+  obtain ⟨cfg₁, hr₁, hinv₁⟩ := copyCounter_loop gen target counter [] cfg hinv₀
+  simp only [List.append_nil] at hinv₁
+  obtain ⟨cfg₂, hr₂, hinv₂⟩ := copyCounter_restore_loop gen target [] counter.reverse cfg₁ hinv₁
+  refine ⟨cfg₂, TM2Reaches_trans hr₁ hr₂, ?_⟩
+  simp only [List.reverse_reverse, List.append_nil] at hinv₂
+  exact hinv₂
+
+lemma initRun_no_match_to_copyCounter
+    (gen : Generator Γw Γo Q)
+    (hGreedy : gen.IsGreedy)
+    (target : List Γo)
+    (counter : List (ULift.{u} Bool))
+    (cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) GreedyEnumLabel (GreedyEnumSigma Γw Γo Q))
+    (hinv : InitRunInvariant target counter cfg)
+    (hNoMatch : ∀ w, Computes gen
+        (initConfig gen (counterToInput counter)) w →
+        w ≠ target) :
+    ∃ cfg', TM2Reaches gen cfg cfg' ∧
+      CopyCounterInvariant target (counterIncrement counter) cfg' := by
+  sorry
+
+lemma initRun_match_halts
+    (gen : Generator Γw Γo Q)
+    (hGreedy : gen.IsGreedy)
+    (target : List Γo)
+    (counter : List (ULift.{u} Bool))
+    (cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) GreedyEnumLabel (GreedyEnumSigma Γw Γo Q))
+    (hinv : InitRunInvariant target counter cfg)
+    (hMatch : Computes gen
+        (initConfig gen (counterToInput counter)) target) :
+    TM2Halts gen cfg := by
+  sorry
+
+section CounterIncrement
+
+private structure CounterIncrementLoopInvariant
+    (target : List Γo)
+    (remaining : List (ULift.{u} Bool))
+    (processed : List (ULift.{u} Bool))
+    (carry : Bool)
+    (cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) GreedyEnumLabel (GreedyEnumSigma Γw Γo Q))
+    : Prop where
+  h_label       : cfg.l = some GreedyEnumLabel.counter_increment_loop
+  h_target      : cfg.stk GreedyEnumStack.target      = target
+  h_counter     : cfg.stk GreedyEnumStack.counter     = remaining
+  h_saveCounter : cfg.stk GreedyEnumStack.saveCounter = processed
+  h_carry       : cfg.var.carry = some carry
+  h_input       : cfg.stk GreedyEnumStack.input       = []
+  h_workL       : cfg.stk GreedyEnumStack.workL       = []
+  h_workR       : cfg.stk GreedyEnumStack.workR       = []
+  h_output      : cfg.stk GreedyEnumStack.output      = []
+  h_saveTarget  : cfg.stk GreedyEnumStack.saveTarget  = []
+
+private structure CounterIncrementRestoreInvariant
+    (target : List Γo)
+    (counter : List (ULift.{u} Bool))
+    (cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) GreedyEnumLabel (GreedyEnumSigma Γw Γo Q))
+    : Prop where
+  h_label       : cfg.l = some GreedyEnumLabel.counter_increment_restore
+  h_target      : cfg.stk GreedyEnumStack.target      = target
+  h_counter     : cfg.stk GreedyEnumStack.counter     = []
+  h_saveCounter : cfg.stk GreedyEnumStack.saveCounter = counter.reverse
+  h_input       : cfg.stk GreedyEnumStack.input       = []
+  h_workL       : cfg.stk GreedyEnumStack.workL       = []
+  h_workR       : cfg.stk GreedyEnumStack.workR       = []
+  h_output      : cfg.stk GreedyEnumStack.output      = []
+  h_saveTarget  : cfg.stk GreedyEnumStack.saveTarget  = []
+
+/-- Increment a bit list with carry (LSB first). -/
+private def addCarry : List (ULift.{u} Bool) → Bool → List (ULift.{u} Bool)
+  | [], false => []
+  | [], true => [ULift.up true]
+  | ⟨b⟩ :: rest, c =>
+    ⟨Bool.xor b c⟩ :: addCarry rest (b && c)
+
+-- Step 1: counter_increment → counter_increment_loop (one step)
+private lemma counter_increment_to_loop
+    (gen : Generator Γw Γo Q)
+    (target : List Γo)
+    (counter : List (ULift.{u} Bool))
+    (cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) GreedyEnumLabel (GreedyEnumSigma Γw Γo Q))
+    (hinv : CounterIncrementInvariant target counter cfg) :
+    ∃ cfg', TM2Reaches gen cfg cfg' ∧
+      CounterIncrementLoopInvariant target counter [] true cfg' := by
+  -- One TM2 step: load sets carry := some true, goto sets label
+  refine ⟨⟨some GreedyEnumLabel.counter_increment_loop,
+           { cfg.var with carry := some true },
+           cfg.stk⟩, ?_, ?_⟩
+  · -- Reachability: one step
+    apply Relation.ReflTransGen.single
+    cases cfg with
+    | mk l v S =>
+      simp only [tm2Step, Turing.TM2.step]
+      have hl := hinv.h_label
+      simp only at hl
+      subst hl
+      simp [greedyEnumMachine, counter_increment, Turing.TM2.stepAux]
+  · -- The invariant holds
+    exact ⟨rfl, hinv.h_target, hinv.h_counter, by exact hinv.h_saveCounter, rfl,
+           hinv.h_input, hinv.h_workL, hinv.h_workR, hinv.h_output, hinv.h_saveTarget⟩
+
+-- Step 2: loop processes all bits
+private lemma counter_increment_loop_to_restore
+    (gen : Generator Γw Γo Q)
+    (target : List Γo)
+    (remaining processed : List (ULift.{u} Bool))
+    (carry : Bool)
+    (cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) GreedyEnumLabel (GreedyEnumSigma Γw Γo Q))
+    (hinv : CounterIncrementLoopInvariant target remaining processed carry cfg) :
+    ∃ cfg', TM2Reaches gen cfg cfg' ∧
+      CounterIncrementRestoreInvariant target
+        ((addCarry remaining carry).reverse ++ processed).reverse cfg' := by
+  induction remaining generalizing processed carry cfg with
+  | nil =>
+    -- remaining = [], addCarry [] carry is either [] or [true]
+    cases carry with
+    | false =>
+      -- addCarry [] false = [], so target counter = processed.reverse
+      -- One step: peek counter (empty), branch isNone = true, branch carry = false, goto restore
+      simp only [addCarry, List.reverse_nil, List.nil_append]
+      refine ⟨⟨some GreedyEnumLabel.counter_increment_restore,
+               { cfg.var with peekBit := none },
+               cfg.stk⟩, ?_, ?_⟩
+      · apply Relation.ReflTransGen.single
+        cases cfg with
+        | mk l v S =>
+          have hl := hinv.h_label; simp only at hl; subst hl
+          have hctr : S GreedyEnumStack.counter = [] := hinv.h_counter
+          have hcarry := hinv.h_carry; simp only at hcarry
+          simp only [tm2Step, Turing.TM2.step, greedyEnumMachine,
+                     counter_increment_loop, Turing.TM2.stepAux]
+          rw [hctr]
+          simp [List.head?, Option.map, Option.isNone, cond_true, hcarry]
+      · exact ⟨rfl, hinv.h_target, hinv.h_counter,
+          by simp [List.reverse_reverse, hinv.h_saveCounter],
+          hinv.h_input, hinv.h_workL, hinv.h_workR, hinv.h_output, hinv.h_saveTarget⟩
+    | true =>
+      -- addCarry [] true = [ULift.up true], push true to saveCounter, goto restore
+      simp only [addCarry, List.reverse_cons, List.reverse_nil, List.nil_append, List.cons_append]
+      refine ⟨⟨some GreedyEnumLabel.counter_increment_restore,
+               { cfg.var with peekBit := none },
+               fun k => match k with
+                 | GreedyEnumStack.saveCounter => ULift.up true :: processed
+                 | other => cfg.stk other⟩, ?_, ?_⟩
+      · apply Relation.ReflTransGen.single
+        cases cfg with
+        | mk l v S =>
+          have hl := hinv.h_label; simp only at hl; subst hl
+          have hctr : S GreedyEnumStack.counter = [] := hinv.h_counter
+          have hcarry := hinv.h_carry; simp only at hcarry
+          have hsc := hinv.h_saveCounter; simp only at hsc
+          simp only [tm2Step, Turing.TM2.step, greedyEnumMachine,
+                     counter_increment_loop, Turing.TM2.stepAux]
+          rw [hctr]
+          simp only [Option.isNone, Option.map, List.head?, hcarry, Option.getD_some, cond_true,
+            Option.getD_none, Bool.and_true, Bool.bne_true, Bool.not_false, List.tail_nil, ne_eq,
+            reduceCtorEq, not_false_eq_true, Function.update_of_ne, Option.some.injEq,
+            Turing.TM2.Cfg.mk.injEq, true_and]
+          ext k; cases k <;> simp [Function.update, hsc]
+      · refine ⟨rfl, ?_, ?_, ?_,
+                hinv.h_input, hinv.h_workL, hinv.h_workR, hinv.h_output, hinv.h_saveTarget⟩
+        · simp [hinv.h_target]
+        · simp [hinv.h_counter]
+        · simp [List.reverse_cons]
+  | cons b rest ih =>
+    -- Pop b from counter, compute newBit = xor b.down carry, newCarry = b.down && carry
+    -- Push newBit to saveCounter, goto loop with rest, (ULift.up newBit :: processed), newCarry
+    cases b with
+    | up bv =>
+      -- One iteration reaches CounterIncrementLoopInvariant with updated state
+      have hone : ∃ cfg₁, TM2Reaches gen cfg cfg₁ ∧
+          CounterIncrementLoopInvariant target rest
+            (⟨Bool.xor bv carry⟩ :: processed) (bv && carry) cfg₁ := by
+        refine ⟨⟨some GreedyEnumLabel.counter_increment_loop,
+                 { cfg.var with
+                   peekBit := some (Bool.xor bv carry)
+                   carry := some (bv && carry) },
+                 fun k => match k with
+                   | GreedyEnumStack.counter => rest
+                   | GreedyEnumStack.saveCounter => ⟨Bool.xor bv carry⟩ :: processed
+                   | other => cfg.stk other⟩, ?_, ?_⟩
+        · apply Relation.ReflTransGen.single
+          cases cfg with
+          | mk l v S =>
+            have hl := hinv.h_label; simp only at hl; subst hl
+            have hctr : S GreedyEnumStack.counter = ⟨bv⟩ :: rest := hinv.h_counter
+            have hcarry := hinv.h_carry; simp only at hcarry
+            have hsc := hinv.h_saveCounter; simp only at hsc
+            simp only [tm2Step, Turing.TM2.step, greedyEnumMachine,
+                       counter_increment_loop, Turing.TM2.stepAux]
+            rw [hctr]
+            simp only [Option.isNone, Option.map, List.head?, hcarry, Option.getD_some,
+              List.tail_cons, ne_eq, reduceCtorEq, not_false_eq_true, Function.update_of_ne,
+              cond_false, Option.some.injEq, Turing.TM2.Cfg.mk.injEq, true_and]
+            ext k; cases k <;> simp [Function.update, hsc]
+        · exact ⟨rfl, hinv.h_target, rfl, rfl, rfl,
+                 hinv.h_input, hinv.h_workL, hinv.h_workR, hinv.h_output, hinv.h_saveTarget⟩
+      obtain ⟨cfg₁, hreach₁, hinv₁⟩ := hone
+      obtain ⟨cfg₂, hreach₂, hinv₂⟩ :=
+        ih (⟨Bool.xor bv carry⟩ :: processed) (bv && carry) cfg₁ hinv₁
+      refine ⟨cfg₂, TM2Reaches_trans hreach₁ hreach₂, ?_⟩
+      -- Need: addCarry (⟨bv⟩ :: rest) carry = ⟨Bool.xor bv carry⟩ :: addCarry rest (bv && carry)
+      simp only [addCarry]
+      convert hinv₂ using 1
+      simp [List.reverse_append, List.reverse_cons, List.reverse_reverse,
+            List.append_assoc]
+
+-- Step 3: restore → copyCounter
+private structure RestoreLoopInvariant
+    (target : List Γo)
+    (moved : List (ULift.{u} Bool))
+    (rest : List (ULift.{u} Bool))
+    (cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) GreedyEnumLabel (GreedyEnumSigma Γw Γo Q))
+    : Prop where
+  h_label       : cfg.l = some GreedyEnumLabel.counter_increment_restore
+  h_target      : cfg.stk GreedyEnumStack.target      = target
+  h_counter     : cfg.stk GreedyEnumStack.counter     = moved
+  h_saveCounter : cfg.stk GreedyEnumStack.saveCounter = rest
+  h_input       : cfg.stk GreedyEnumStack.input       = []
+  h_workL       : cfg.stk GreedyEnumStack.workL       = []
+  h_workR       : cfg.stk GreedyEnumStack.workR       = []
+  h_output      : cfg.stk GreedyEnumStack.output      = []
+  h_saveTarget  : cfg.stk GreedyEnumStack.saveTarget  = []
+
+private lemma restore_loop
+    (gen : Generator Γw Γo Q)
+    (target : List Γo)
+    (moved : List (ULift.{u} Bool))
+    (rest : List (ULift.{u} Bool))
+    (cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) GreedyEnumLabel (GreedyEnumSigma Γw Γo Q))
+    (hinv : RestoreLoopInvariant target moved rest cfg) :
+    ∃ cfg', TM2Reaches gen cfg cfg' ∧
+      CopyCounterInvariant target (rest.reverse ++ moved) cfg' := by
+  induction rest generalizing moved cfg with
+  | nil =>
+    -- saveCounter empty: one step (peek, branch true, goto copyCounter)
+    refine ⟨?_, ?_, ?_⟩
+    · exact ⟨some GreedyEnumLabel.copyCounter,
+           { cfg.var with peekBit := none },
+           cfg.stk⟩
+    · apply Relation.ReflTransGen.single
+      cases cfg with
+      | mk l v S =>
+        have hl := hinv.h_label
+        simp only at hl
+        subst hl
+        simp only [tm2Step, Turing.TM2.step, greedyEnumMachine,
+                    counter_increment_restore, Turing.TM2.stepAux]
+        have hsc : S GreedyEnumStack.saveCounter = [] := hinv.h_saveCounter
+        rw [hsc]
+        simp [List.head?, Option.map, Option.isNone]
+    · simp only [List.reverse_nil, List.nil_append]
+      exact ⟨rfl, hinv.h_target, hinv.h_counter, hinv.h_input,
+            hinv.h_workL, hinv.h_workR, hinv.h_output, hinv.h_saveTarget, hinv.h_saveCounter⟩
+  | cons b rest' ih =>
+    -- After one loop iteration, we have RestoreLoopInvariant with (b :: moved) and rest'
+    -- Then ih gives us the result
+    -- First show one iteration
+    obtain ⟨cfg₁, hreach₁, hinv₁⟩ : ∃ cfg₁, TM2Reaches gen cfg cfg₁ ∧
+        RestoreLoopInvariant target (b :: moved) rest' cfg₁ := by
+      refine ⟨⟨some GreedyEnumLabel.counter_increment_restore,
+                  { cfg.var with peekBit := some b.down },
+                  fun k => match k with
+                    | GreedyEnumStack.counter => b :: moved
+                    | GreedyEnumStack.saveCounter => rest'
+                    | other => cfg.stk other⟩, ?_, ?_⟩
+      · -- One TM2 step
+        apply Relation.ReflTransGen.single
+        cases cfg with
+        | mk l v S =>
+          have hl := hinv.h_label; simp only at hl; subst hl
+          have hsc : S GreedyEnumStack.saveCounter = b :: rest' := hinv.h_saveCounter
+          have hc : S GreedyEnumStack.counter = moved := hinv.h_counter
+          simp only [tm2Step, Turing.TM2.step, greedyEnumMachine,
+                    counter_increment_restore, Turing.TM2.stepAux]
+          rw [hsc]
+          cases b with
+          | up bv =>
+            simp only [Option.isNone, Option.map, List.head?, List.tail_cons,
+              Option.getD_some, ne_eq, reduceCtorEq, not_false_eq_true, Function.update_of_ne,
+              cond_false, Option.some.injEq, Turing.TM2.Cfg.mk.injEq, true_and]
+            ext k
+            cases k <;> simp [Function.update, hc]
+      · -- The invariant holds
+        exact ⟨rfl, hinv.h_target, rfl, rfl,
+              hinv.h_input, hinv.h_workL, hinv.h_workR, hinv.h_output, hinv.h_saveTarget⟩
+    obtain ⟨cfg₂, hreach₂, hinv₂⟩ := ih (b :: moved) cfg₁ hinv₁
+    refine ⟨cfg₂, TM2Reaches_trans hreach₁ hreach₂, ?_⟩
+    -- rest'.reverse ++ (b :: moved) = (b :: rest').reverse ++ moved
+    rwa [List.reverse_cons, List.append_assoc, List.singleton_append]
+
+private lemma counter_increment_restore_to_copyCounter
+    (gen : Generator Γw Γo Q)
+    (target : List Γo)
+    (counter : List (ULift.{u} Bool))
+    (cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) GreedyEnumLabel (GreedyEnumSigma Γw Γo Q))
+    (hinv : CounterIncrementRestoreInvariant target counter cfg) :
+    ∃ cfg', TM2Reaches gen cfg cfg' ∧
+      CopyCounterInvariant target counter cfg' := by
+  have hinv' : RestoreLoopInvariant target [] counter.reverse cfg :=
+    ⟨hinv.h_label, hinv.h_target, hinv.h_counter, hinv.h_saveCounter,
+     hinv.h_input, hinv.h_workL, hinv.h_workR, hinv.h_output, hinv.h_saveTarget⟩
+  obtain ⟨cfg', hreach, hcopy⟩ := restore_loop gen target [] counter.reverse cfg hinv'
+  refine ⟨cfg', hreach, ?_⟩
+  simp only [List.reverse_reverse, List.append_nil] at hcopy
+  exact hcopy
+
+private lemma addCarry_false (l : List (ULift.{u} Bool)) :
+    addCarry l false = l := by
+  induction l with
+  | nil => simp [addCarry]
+  | cons b rest ih =>
+    cases b with
+    | up b => cases b <;> simp [addCarry, Bool.xor, ih]
+
+private lemma counterIncrement_eq_addCarry (counter : List (ULift.{u} Bool)) :
+    counterIncrement counter = addCarry counter true := by
+  induction counter with
+  | nil => simp [counterIncrement, addCarry]
+  | cons b rest ih =>
+    cases b with
+    | up b =>
+      cases b <;> simp [counterIncrement, addCarry, Bool.xor, addCarry_false, *]
+
+lemma counter_increment_to_copyCounter
+    (gen : Generator Γw Γo Q)
+    (target : List Γo)
+    (counter : List (ULift.{u} Bool))
+    (cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) GreedyEnumLabel (GreedyEnumSigma Γw Γo Q))
+    (hinv : CounterIncrementInvariant target counter cfg) :
+    ∃ cfg', TM2Reaches gen cfg cfg' ∧
+      CopyCounterInvariant target (counterIncrement counter) cfg' := by
+  -- Step 1: counter_increment → counter_increment_loop
+  obtain ⟨cfg₁, hreach₁, hinv₁⟩ := counter_increment_to_loop gen target counter cfg hinv
+  -- Step 2: loop processes all bits
+  obtain ⟨cfg₂, hreach₂, hinv₂⟩ :=
+    counter_increment_loop_to_restore gen target counter [] true cfg₁ hinv₁
+  -- Simplify the counter expression in hinv₂
+  simp only [List.append_nil, List.reverse_reverse] at hinv₂
+  -- Step 3: restore → copyCounter
+  obtain ⟨cfg₃, hreach₃, hinv₃⟩ :=
+    counter_increment_restore_to_copyCounter gen target _ cfg₂ hinv₂
+  -- Chain reachability and rewrite counter
+  refine ⟨cfg₃, ?_, ?_⟩
+  · exact TM2Reaches_trans (TM2Reaches_trans hreach₁ hreach₂) hreach₃
+  · rwa [counterIncrement_eq_addCarry]
+
+end CounterIncrement
+
+
+section ClearPhase
+
+private lemma clear_stack_input
+    (gen : Generator Γw Γo Q)
+    (target : List Γo)
+    (counter : List (ULift.{u} Bool))
+    (input : List (ULift.{u} Bool))
+    (workL : List Γw) (workR : List Γw)
+    (cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) GreedyEnumLabel (GreedyEnumSigma Γw Γo Q))
+    (h_label : cfg.l = some GreedyEnumLabel.clearInput)
+    (h_target : cfg.stk GreedyEnumStack.target = target)
+    (h_counter : cfg.stk GreedyEnumStack.counter = counter)
+    (h_input : cfg.stk GreedyEnumStack.input = input)
+    (h_workL : cfg.stk GreedyEnumStack.workL = workL)
+    (h_workR : cfg.stk GreedyEnumStack.workR = workR)
+    (h_output : cfg.stk GreedyEnumStack.output = [])
+    (h_saveTarget : cfg.stk GreedyEnumStack.saveTarget = [])
+    (h_saveCounter : cfg.stk GreedyEnumStack.saveCounter = []) :
+    ∃ cfg', TM2Reaches gen cfg cfg' ∧
+      cfg'.l = some GreedyEnumLabel.clearWorkL ∧
+      cfg'.stk GreedyEnumStack.target = target ∧
+      cfg'.stk GreedyEnumStack.counter = counter ∧
+      cfg'.stk GreedyEnumStack.input = [] ∧
+      cfg'.stk GreedyEnumStack.workL = workL ∧
+      cfg'.stk GreedyEnumStack.workR = workR ∧
+      cfg'.stk GreedyEnumStack.output = [] ∧
+      cfg'.stk GreedyEnumStack.saveTarget = [] ∧
+      cfg'.stk GreedyEnumStack.saveCounter = [] := by
+  induction input generalizing cfg with
+  | nil =>
+    refine ⟨⟨some GreedyEnumLabel.clearWorkL,
+             { cfg.var with peekBit := none },
+             cfg.stk⟩, ?_, rfl, h_target, h_counter, h_input, h_workL, h_workR,
+             h_output, h_saveTarget, h_saveCounter⟩
+    apply Relation.ReflTransGen.single
+    cases cfg with
+    | mk l v S =>
+      simp only at h_label; subst h_label
+      have hi : S GreedyEnumStack.input = [] := h_input
+      simp only [tm2Step, Turing.TM2.step, greedyEnumMachine,
+                 clearInput, Turing.TM2.stepAux]
+      rw [hi]
+      simp [List.head?, Option.map, Option.isNone, cond_true]
+  | cons b rest ih =>
+    -- One step: peek input (non-empty), branch, pop, goto clearInput
+    have hstep : ∃ cfg₁, TM2Reaches gen cfg cfg₁ ∧
+        cfg₁.l = some GreedyEnumLabel.clearInput ∧
+        cfg₁.stk GreedyEnumStack.input = rest ∧
+        cfg₁.stk GreedyEnumStack.target = target ∧
+        cfg₁.stk GreedyEnumStack.counter = counter ∧
+        cfg₁.stk GreedyEnumStack.workL = workL ∧
+        cfg₁.stk GreedyEnumStack.workR = workR ∧
+        cfg₁.stk GreedyEnumStack.output = [] ∧
+        cfg₁.stk GreedyEnumStack.saveTarget = [] ∧
+        cfg₁.stk GreedyEnumStack.saveCounter = [] := by
+      refine ⟨⟨some GreedyEnumLabel.clearInput,
+               { cfg.var with peekBit := some b.down },
+               fun k => match k with
+                 | GreedyEnumStack.input => rest
+                 | other => cfg.stk other⟩,
+              ?_, rfl, rfl, h_target, h_counter, h_workL, h_workR,
+              h_output, h_saveTarget, h_saveCounter⟩
+      apply Relation.ReflTransGen.single
+      cases cfg with
+      | mk l v S =>
+        simp only at h_label; subst h_label
+        have hi : S GreedyEnumStack.input = b :: rest := h_input
+        simp only [tm2Step, Turing.TM2.step, greedyEnumMachine,
+                   clearInput, Turing.TM2.stepAux]
+        rw [hi]
+        cases b with
+        | up bv =>
+          simp only [Option.isNone, Option.map, List.head?, List.tail_cons,
+            cond_false, Option.some.injEq, Turing.TM2.Cfg.mk.injEq, true_and]
+          ext k; cases k <;> simp [Function.update]
+    obtain ⟨cfg₁, hr₁, hl₁, hi₁, ht₁, hc₁, hwl₁, hwr₁, ho₁, hst₁, hsc₁⟩ := hstep
+    obtain ⟨cfg₂, hr₂, h₂⟩ := ih cfg₁ hl₁ ht₁ hc₁ hi₁ hwl₁ hwr₁ ho₁ hst₁ hsc₁
+    exact ⟨cfg₂, TM2Reaches_trans hr₁ hr₂, h₂⟩
+
+private lemma clear_stack_workL
+    (gen : Generator Γw Γo Q)
+    (target : List Γo)
+    (counter : List (ULift.{u} Bool))
+    (workL : List Γw) (workR : List Γw)
+    (cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) GreedyEnumLabel (GreedyEnumSigma Γw Γo Q))
+    (h_label : cfg.l = some GreedyEnumLabel.clearWorkL)
+    (h_target : cfg.stk GreedyEnumStack.target = target)
+    (h_counter : cfg.stk GreedyEnumStack.counter = counter)
+    (h_input : cfg.stk GreedyEnumStack.input = [])
+    (h_workL : cfg.stk GreedyEnumStack.workL = workL)
+    (h_workR : cfg.stk GreedyEnumStack.workR = workR)
+    (h_output : cfg.stk GreedyEnumStack.output = [])
+    (h_saveTarget : cfg.stk GreedyEnumStack.saveTarget = [])
+    (h_saveCounter : cfg.stk GreedyEnumStack.saveCounter = []) :
+    ∃ cfg', TM2Reaches gen cfg cfg' ∧
+      cfg'.l = some GreedyEnumLabel.clearWorkR ∧
+      cfg'.stk GreedyEnumStack.target = target ∧
+      cfg'.stk GreedyEnumStack.counter = counter ∧
+      cfg'.stk GreedyEnumStack.input = [] ∧
+      cfg'.stk GreedyEnumStack.workL = [] ∧
+      cfg'.stk GreedyEnumStack.workR = workR ∧
+      cfg'.stk GreedyEnumStack.output = [] ∧
+      cfg'.stk GreedyEnumStack.saveTarget = [] ∧
+      cfg'.stk GreedyEnumStack.saveCounter = [] := by
+  induction workL generalizing cfg with
+  | nil =>
+    refine ⟨⟨some GreedyEnumLabel.clearWorkR,
+             { cfg.var with peekBit := some false },
+             cfg.stk⟩, ?_, rfl, h_target, h_counter, h_input, h_workL, h_workR,
+             h_output, h_saveTarget, h_saveCounter⟩
+    apply Relation.ReflTransGen.single
+    cases cfg with
+    | mk l v S =>
+      simp only at h_label; subst h_label
+      have hwl : S GreedyEnumStack.workL = [] := h_workL
+      simp only [tm2Step, Turing.TM2.step, greedyEnumMachine,
+                 clearWorkL, Turing.TM2.stepAux]
+      rw [hwl]
+      simp [List.head?, Option.isSome, BEq.beq]
+      rfl
+  | cons w rest ih =>
+    have hstep : ∃ cfg₁, TM2Reaches gen cfg cfg₁ ∧
+        cfg₁.l = some GreedyEnumLabel.clearWorkL ∧
+        cfg₁.stk GreedyEnumStack.workL = rest ∧
+        cfg₁.stk GreedyEnumStack.target = target ∧
+        cfg₁.stk GreedyEnumStack.counter = counter ∧
+        cfg₁.stk GreedyEnumStack.input = [] ∧
+        cfg₁.stk GreedyEnumStack.workR = workR ∧
+        cfg₁.stk GreedyEnumStack.output = [] ∧
+        cfg₁.stk GreedyEnumStack.saveTarget = [] ∧
+        cfg₁.stk GreedyEnumStack.saveCounter = [] := by
+      refine ⟨⟨some GreedyEnumLabel.clearWorkL,
+               { cfg.var with peekBit := some true },
+               fun k => match k with
+                 | GreedyEnumStack.workL => rest
+                 | other => cfg.stk other⟩,
+              ?_, rfl, rfl, h_target, h_counter, h_input, h_workR,
+              h_output, h_saveTarget, h_saveCounter⟩
+      apply Relation.ReflTransGen.single
+      cases cfg with
+      | mk l v S =>
+        simp only at h_label; subst h_label
+        have hwl : S GreedyEnumStack.workL = w :: rest := h_workL
+        simp only [tm2Step, Turing.TM2.step, greedyEnumMachine,
+                   clearWorkL, Turing.TM2.stepAux]
+        rw [hwl]
+        simp only [Option.isSome, List.head?, Option.some_beq_some, beq_false,
+          Bool.not_true, List.tail_cons, cond_false,
+              Option.some.injEq, Turing.TM2.Cfg.mk.injEq, true_and]
+        have : Option.instBEq.beq (some true) (some false) = false := by decide
+        ext k; cases k <;> simp [Function.update]
+    obtain ⟨cfg₁, hr₁, hl₁, hwl₁, ht₁, hc₁, hi₁, hwr₁, ho₁, hst₁, hsc₁⟩ := hstep
+    obtain ⟨cfg₂, hr₂, h₂⟩ := ih cfg₁ hl₁ ht₁ hc₁ hi₁ hwl₁ hwr₁ ho₁ hst₁ hsc₁
+    exact ⟨cfg₂, TM2Reaches_trans hr₁ hr₂, h₂⟩
+
+private lemma clear_stack_workR
+    (gen : Generator Γw Γo Q)
+    (target : List Γo)
+    (counter : List (ULift.{u} Bool))
+    (workR : List Γw)
+    (cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) GreedyEnumLabel (GreedyEnumSigma Γw Γo Q))
+    (h_label : cfg.l = some GreedyEnumLabel.clearWorkR)
+    (h_target : cfg.stk GreedyEnumStack.target = target)
+    (h_counter : cfg.stk GreedyEnumStack.counter = counter)
+    (h_input : cfg.stk GreedyEnumStack.input = [])
+    (h_workL : cfg.stk GreedyEnumStack.workL = [])
+    (h_workR : cfg.stk GreedyEnumStack.workR = workR)
+    (h_output : cfg.stk GreedyEnumStack.output = [])
+    (h_saveTarget : cfg.stk GreedyEnumStack.saveTarget = [])
+    (h_saveCounter : cfg.stk GreedyEnumStack.saveCounter = []) :
+    ∃ cfg', TM2Reaches gen cfg cfg' ∧
+      cfg'.l = some GreedyEnumLabel.clearOutput ∧
+      cfg'.stk GreedyEnumStack.target = target ∧
+      cfg'.stk GreedyEnumStack.counter = counter ∧
+      cfg'.stk GreedyEnumStack.input = [] ∧
+      cfg'.stk GreedyEnumStack.workL = [] ∧
+      cfg'.stk GreedyEnumStack.workR = [] ∧
+      cfg'.stk GreedyEnumStack.output = [] ∧
+      cfg'.stk GreedyEnumStack.saveTarget = [] ∧
+      cfg'.stk GreedyEnumStack.saveCounter = [] := by
+  induction workR generalizing cfg with
+  | nil =>
+    refine ⟨⟨some GreedyEnumLabel.clearOutput,
+             { cfg.var with peekBit := some false },
+             cfg.stk⟩, ?_, rfl, h_target, h_counter, h_input, h_workL, h_workR,
+             h_output, h_saveTarget, h_saveCounter⟩
+    apply Relation.ReflTransGen.single
+    cases cfg with
+    | mk l v S =>
+      simp only at h_label; subst h_label
+      have hwr : S GreedyEnumStack.workR = [] := h_workR
+      simp only [tm2Step, Turing.TM2.step, greedyEnumMachine,
+                 clearWorkR, Turing.TM2.stepAux, hwr, List.head?, Option.isSome,
+                 BEq.beq]
+      rw [show Option.instBEq.beq (some false) (some false) = true from by decide]
+      simp [cond_true]
+  | cons w rest ih =>
+    have hstep : ∃ cfg₁, TM2Reaches gen cfg cfg₁ ∧
+        cfg₁.l = some GreedyEnumLabel.clearWorkR ∧
+        cfg₁.stk GreedyEnumStack.workR = rest ∧
+        cfg₁.stk GreedyEnumStack.target = target ∧
+        cfg₁.stk GreedyEnumStack.counter = counter ∧
+        cfg₁.stk GreedyEnumStack.input = [] ∧
+        cfg₁.stk GreedyEnumStack.workL = [] ∧
+        cfg₁.stk GreedyEnumStack.output = [] ∧
+        cfg₁.stk GreedyEnumStack.saveTarget = [] ∧
+        cfg₁.stk GreedyEnumStack.saveCounter = [] := by
+      refine ⟨⟨some GreedyEnumLabel.clearWorkR,
+               { cfg.var with peekBit := some true },
+               fun k => match k with
+                 | GreedyEnumStack.workR => rest
+                 | other => cfg.stk other⟩,
+              ?_, rfl, rfl, h_target, h_counter, h_input, h_workL,
+              h_output, h_saveTarget, h_saveCounter⟩
+      apply Relation.ReflTransGen.single
+      cases cfg with
+      | mk l v S =>
+        simp only at h_label; subst h_label
+        have hwr : S GreedyEnumStack.workR = w :: rest := h_workR
+        simp only [tm2Step, Turing.TM2.step, greedyEnumMachine,
+                   clearWorkR, Turing.TM2.stepAux, hwr, List.head?,
+                   Option.isSome, List.tail_cons, BEq.beq]
+        rw [show Option.instBEq.beq (some true) (some false) = false from by decide]
+        simp only [cond_false, Option.some.injEq, Turing.TM2.Cfg.mk.injEq, true_and]
+        ext k; cases k <;> simp [Function.update]
+    obtain ⟨cfg₁, hr₁, hl₁, hwr₁, ht₁, hc₁, hi₁, hwl₁, ho₁, hst₁, hsc₁⟩ := hstep
+    obtain ⟨cfg₂, hr₂, h₂⟩ := ih cfg₁ hl₁ ht₁ hc₁ hi₁ hwl₁ hwr₁ ho₁ hst₁ hsc₁
+    exact ⟨cfg₂, TM2Reaches_trans hr₁ hr₂, h₂⟩
+
+private lemma clear_stack_output
+    (gen : Generator Γw Γo Q)
+    (target : List Γo)
+    (counter : List (ULift.{u} Bool))
+    (cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) GreedyEnumLabel (GreedyEnumSigma Γw Γo Q))
+    (h_label : cfg.l = some GreedyEnumLabel.clearOutput)
+    (h_target : cfg.stk GreedyEnumStack.target = target)
+    (h_counter : cfg.stk GreedyEnumStack.counter = counter)
+    (h_input : cfg.stk GreedyEnumStack.input = [])
+    (h_workL : cfg.stk GreedyEnumStack.workL = [])
+    (h_workR : cfg.stk GreedyEnumStack.workR = [])
+    (h_output : cfg.stk GreedyEnumStack.output = [])
+    (h_saveTarget : cfg.stk GreedyEnumStack.saveTarget = [])
+    (h_saveCounter : cfg.stk GreedyEnumStack.saveCounter = []) :
+    ∃ cfg', TM2Reaches gen cfg cfg' ∧
+      CounterIncrementInvariant target counter cfg' := by
+  refine ⟨⟨some GreedyEnumLabel.counter_increment,
+           { cfg.var with peekOut := none },
+           cfg.stk⟩, ?_, ?_⟩
+  · apply Relation.ReflTransGen.single
+    cases cfg with
+    | mk l v S =>
+      simp only at h_label; subst h_label
+      have ho : S GreedyEnumStack.output = [] := h_output
+      simp only [tm2Step, Turing.TM2.step, greedyEnumMachine,
+                 clearOutput, Turing.TM2.stepAux, ho, List.head?,
+                 Option.isNone, cond_true]
+  · exact ⟨rfl, h_target, h_counter, h_input, h_workL, h_workR,
+           h_output, h_saveTarget, h_saveCounter⟩
+
+lemma clearInput_to_counterIncrement
+    (gen : Generator Γw Γo Q)
+    (target : List Γo)
+    (counter : List (ULift.{u} Bool))
+    (cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) GreedyEnumLabel (GreedyEnumSigma Γw Γo Q))
+    (hinv : ClearInputInvariant target counter cfg) :
+    ∃ cfg', TM2Reaches gen cfg cfg' ∧
+      CounterIncrementInvariant target counter cfg' := by
+  obtain ⟨cfg₁, hr₁, hl₁, ht₁, hc₁, hi₁, hwl₁, hwr₁, ho₁, hst₁, hsc₁⟩ :=
+    clear_stack_input gen target counter
+      (cfg.stk GreedyEnumStack.input)
+      (cfg.stk GreedyEnumStack.workL)
+      (cfg.stk GreedyEnumStack.workR)
+      cfg hinv.h_label hinv.h_target hinv.h_counter rfl rfl rfl
+      hinv.h_output hinv.h_saveTarget hinv.h_saveCounter
+  obtain ⟨cfg₂, hr₂, hl₂, ht₂, hc₂, hi₂, hwl₂, hwr₂, ho₂, hst₂, hsc₂⟩ :=
+    clear_stack_workL gen target counter
+      (cfg.stk GreedyEnumStack.workL)
+      (cfg.stk GreedyEnumStack.workR)
+      cfg₁ hl₁ ht₁ hc₁ hi₁ hwl₁ hwr₁ ho₁ hst₁ hsc₁
+  obtain ⟨cfg₃, hr₃, hl₃, ht₃, hc₃, hi₃, hwl₃, hwr₃, ho₃, hst₃, hsc₃⟩ :=
+    clear_stack_workR gen target counter
+      (cfg.stk GreedyEnumStack.workR)
+      cfg₂ hl₂ ht₂ hc₂ hi₂ hwl₂ hwr₂ ho₂ hst₂ hsc₂
+  obtain ⟨cfg₄, hr₄, hinv₄⟩ :=
+    clear_stack_output gen target counter
+      cfg₃ hl₃ ht₃ hc₃ hi₃ hwl₃ hwr₃ ho₃ hst₃ hsc₃
+  exact ⟨cfg₄, TM2Reaches_trans (TM2Reaches_trans (TM2Reaches_trans hr₁ hr₂) hr₃) hr₄, hinv₄⟩
+
+end ClearPhase
 
 end GreedyEnum
 
