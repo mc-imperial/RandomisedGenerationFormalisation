@@ -664,15 +664,124 @@ private lemma runStep_halted_to_checkOutput
       simp only [CharP.cast_eq_zero, add_zero] at this
       exact this
     rw [← hBitVal] at hHalted
-    sorry -- single TM2 step, same pattern as exhausted halted nil case
+    refine ⟨⟨some GreedyEnumLabel.checkOutput,
+             applyDelta gen
+               { transQ := cfg.var.transQ
+                 transW := gen.blank
+                 transWDir := cfg.var.transWDir
+                 transOut := cfg.var.transOut
+                 transHalted := cfg.var.transHalted
+                 inputBit := bit.down
+                 carry := cfg.var.carry
+                 peekBit := some false
+                 peekTarget := cfg.var.peekTarget
+                 peekOut := cfg.var.peekOut },
+             fun k => match k with
+               | GreedyEnumStack.input => rest_input
+               | other => cfg.stk other⟩, ?_, ?_⟩
+    · apply Relation.ReflTransGen.single
+      cases cfg with
+      | mk l v S =>
+        simp only at *
+        have hl := hinv.h_label; simp only at hl; subst hl
+        have hQ := hinv.h_transQ; simp only at hQ
+        simp only [GEStep, Turing.TM2.step,
+                   greedyEnumMachine, runStep,
+                   Turing.TM2.stepAux,
+                   hDrop, List.head?, List.tail_cons,
+                   Option.isSome,
+                   BEq.beq,
+                   hWR, Option.getD,
+                   applyDelta, hQ]
+        have h1 : Option.instBEq.beq (some true)
+            (some false) = false := by decide
+        have h2 : Option.instBEq.beq (some false)
+            (some true) = false := by decide
+        rw [h1, h2, cond_false]
+        have hUpd : Function.update S GreedyEnumStack.input
+            rest_input GreedyEnumStack.workR
+            = S GreedyEnumStack.workR := by
+          simp [Function.update]
+        rw [hUpd, hWR]
+        simp only [List.tail_nil, Option.some.injEq]
+        rw [h2, cond_false]
+        have hd : gen.δ gcfg.state bit.down gen.blank = none := by
+          rw [← hBlank]; exact hHalted
+        rw [hd, cond_true]
+        congr 1
+        funext k; cases k <;> simp [Function.update]
+    · constructor
+      · rfl
+      · exact hinv.h_target
+      · rw [hinv.h_output]
+      · simp [hinv.h_saveTarget]
+      · exact hinv.h_counter
+      · exact hinv.h_saveCounter
+      · simp
   | cons w rest_work =>
     have hHead : w = gcfg.work gcfg.workIndex := by
       have := hinv.h_work.1 0 (by simp [hWR])
       simp only [List.get_eq_getElem, hWR, List.getElem_cons_zero,
         CharP.cast_eq_zero, add_zero] at this
       exact this
-    rw [← hBitVal, ← hHead] at hHalted
-    sorry -- single TM2 step, same pattern as exhausted halted cons case
+    rw [← hHead] at hHalted
+    refine ⟨⟨some GreedyEnumLabel.checkOutput,
+             applyDelta gen
+               { transQ := cfg.var.transQ
+                 transW := w
+                 transWDir := cfg.var.transWDir
+                 transOut := cfg.var.transOut
+                 transHalted := cfg.var.transHalted
+                 inputBit := bit.down
+                 carry := cfg.var.carry
+                 peekBit := some true
+                 peekTarget := cfg.var.peekTarget
+                 peekOut := cfg.var.peekOut },
+             fun k => match k with
+               | GreedyEnumStack.input => rest_input
+               | GreedyEnumStack.workR => rest_work
+               | other => cfg.stk other⟩, ?_, ?_⟩
+    · apply Relation.ReflTransGen.single
+      cases cfg with
+      | mk l v S =>
+        simp only at *
+        have hl := hinv.h_label; simp only at hl; subst hl
+        have hQ := hinv.h_transQ; simp only at hQ
+        simp only [GEStep, Turing.TM2.step,
+                   greedyEnumMachine, runStep,
+                   Turing.TM2.stepAux,
+                   hDrop, List.head?, List.tail_cons,
+                   Option.isSome,
+                   BEq.beq,
+                   hWR, List.tail_cons, Option.getD,
+                   applyDelta, hQ]
+        have h1 : Option.instBEq.beq (some true)
+            (some false) = false := by decide
+        have h2 : Option.instBEq.beq (some true)
+            (some true) = true := by decide
+        rw [h1, h2, cond_false]
+        have hUpd : Function.update S GreedyEnumStack.input
+            rest_input GreedyEnumStack.workR
+            = S GreedyEnumStack.workR := by
+          simp [Function.update]
+        rw [hUpd, hWR, hHead,
+            List.tail_cons]
+        simp only [hBitVal]
+        have h3 : Option.instBEq.beq (some true)
+            (some true) = true := by decide
+        rw [h3, cond_true]
+        congr 1
+        rw [← hHead, hHalted, cond_true]
+        congr 1
+        funext k; cases k <;> simp [Function.update]
+    · constructor
+      · rfl
+      · exact hinv.h_target
+      · rw [hinv.h_output]
+      · simp [hinv.h_saveTarget]
+      · exact hinv.h_counter
+      · exact hinv.h_saveCounter
+      · simp
 
 private lemma take_succ_reverse_cons
     {α : Type*} (l : List α) (n : ℕ) (h : n < l.length) :
@@ -1073,15 +1182,14 @@ private lemma checkOutput_mismatch_to_clearInput
                       Option.isNone, Bool.and_false,
                       cond_false, Bool.or_false,
                       hne, cond_false]
-        sorry
-        -- obtain ⟨cfg', hr', hinv'⟩ :=
-        --   checkOutput_restore_to_clearInput gen
-        --     stackTarget counter (t :: rest_t) _ cfgR
-        --     hlR htR hstR hcR hscR
-        --     (by have := hinv.h_suffix
-        --         simp only [List.length_cons, List.reverse_reverse] at this ⊢
-        --         rw [← this, List.take_append_drop]) -- take/drop concat
-        -- exact ⟨cfg', TM2Reaches_trans hrR hr', hinv'⟩
+        obtain ⟨cfg', hr', hinv'⟩ :=
+          checkOutput_restore_to_clearInput gen
+            stackTarget counter (t :: rest_t) _ cfgR
+            hlR htR hstR hcR hscR
+            (by have := hinv.h_suffix
+                simp only [List.length_cons, List.reverse_reverse] at this ⊢
+                rw [← this, List.take_append_drop]) -- take/drop concat
+        exact ⟨cfg', TM2Reaches_trans hrR hr', hinv'⟩
 
 end CheckOutputPhase
 
