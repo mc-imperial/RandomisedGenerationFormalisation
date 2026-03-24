@@ -617,8 +617,16 @@ private lemma checkOutput_matching_lists_halt
     (hinv : CheckOutputInvariant stackTarget counter
         matched matched cfg) :
     TM2Halts gen cfg := by
-  sorry
-  -- Induction on matched, using checkOutput_step_match then checkOutput_both_empty_halts.
+  induction matched generalizing cfg with
+  | nil =>
+    exact checkOutput_both_empty_halts gen stackTarget
+      counter cfg hinv
+  | cons t rest ih =>
+    obtain ⟨cfg', hr, hinv'⟩ :=
+      checkOutput_step_match gen stackTarget counter
+        t rest rest cfg hinv
+    obtain ⟨cfg'', hr', hhalted⟩ := ih cfg' hinv'
+    exact ⟨cfg'', TM2Reaches_trans hr hr', hhalted⟩
 
 private lemma checkOutput_mismatch_to_clearInput
     (gen : Generator Γw Γo Q)
