@@ -370,98 +370,6 @@ private lemma copyCounter_restore_loop
 
 end CopyCounterPhase
 
-section RunPhase
-
-/-- After initRun loads the generator state, we're at runStep with
-    the initial GenConfig. -/
-private lemma initRun_to_runStep
-    (gen : Generator Γw Γo Q)
-    (stackTarget : List Γo)
-    (counter : List (ULift.{u} Bool))
-    (cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q)
-      GreedyEnumLabel (GreedyEnumSigma Γw Γo Q))
-    (hinv : InitRunInvariant stackTarget counter cfg) :
-    ∃ cfg', TM2Reaches gen cfg cfg' ∧
-      RunStepInvariant gen stackTarget counter
-        (initConfig gen (counterToInput counter)) cfg' := by
-  refine ⟨⟨some GreedyEnumLabel.runStep,
-           { cfg.var with
-             transQ := some gen.init
-             transW := gen.blank },
-           cfg.stk⟩, ?_, ?_⟩
-  · apply Relation.ReflTransGen.single
-    cases cfg with
-    | mk l v S =>
-      simp only at *
-      have hl := hinv.h_label; simp only at hl; subst hl
-      simp only [GEStep, Turing.TM2.step,
-                 greedyEnumMachine, initRun,
-                 Turing.TM2.stepAux]
-  · constructor
-    · -- h_label
-      rfl
-    · -- h_target
-      exact hinv.h_target
-    · -- h_counter
-      exact hinv.h_counter
-    · -- h_saveCounter
-      exact hinv.h_saveCounter
-    · -- h_saveTarget
-      exact hinv.h_saveTarget
-    · -- h_input
-      rw [hinv.h_input]; simp [initConfig]
-    · -- h_transQ
-      rfl
-    · -- h_work: WorkTapeMatches
-      refine ⟨?_, ?_, ?_, ?_⟩
-      · intro i h; rw [hinv.h_workR] at h; simp at h
-      · intro i _; simp [initConfig]
-      · intro i h; rw [hinv.h_workL] at h; simp at h
-      · intro i _; simp [initConfig]
-    · -- h_output
-      rw [hinv.h_output]; simp [initConfig]
-
-/-- One iteration of the run loop: if input is non-empty and delta doesn't halt,
-    we advance the GenConfig by one step and return to runStep. -/
-private lemma runStep_step
-    (gen : Generator Γw Γo Q)
-    (hGreedy : gen.IsGreedy)
-    (stackTarget : List Γo)
-    (counter : List (ULift.{u} Bool))
-    (gcfg gcfg' : GenConfig Γw Γo Q)
-    (cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) GreedyEnumLabel (GreedyEnumSigma Γw Γo Q))
-    (hinv : RunStepInvariant gen stackTarget counter gcfg cfg)
-    (hInput : gcfg.inputIndex < counter.length)
-    (hStep : step gen gcfg = some gcfg') :
-    ∃ cfg', TM2Reaches gen cfg cfg' ∧
-      RunStepInvariant gen stackTarget counter gcfg' cfg' := by
-  sorry
-  -- This is the big one. Path: runStep → runStep_apply → runStep_moveHead → runStep.
-  -- Needs to go through the branch on input non-empty, pop input, peek workR,
-  -- apply delta (non-halting), push new workR, emit output, move head.
-  -- You may want to split this into sub-lemmas:
-  --   runStep_to_apply, runStep_apply_to_moveHead, runStep_moveHead_to_runStep
-
-/-- Run the full loop for N steps, chaining runStep_step. -/
-private lemma runStep_loop
-    (gen : Generator Γw Γo Q)
-    (hGreedy : gen.IsGreedy)
-    (stackTarget : List Γo)
-    (counter : List (ULift.{u} Bool))
-    (gcfg : GenConfig Γw Γo Q)
-    (n : ℕ)
-    (cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) GreedyEnumLabel (GreedyEnumSigma Γw Γo Q))
-    (hinv : RunStepInvariant gen stackTarget counter gcfg cfg)
-    (hSteps : ∀ i, i < n → gcfg.inputIndex + i < counter.length)
-    (hAlive : ∀ i, i < n → ¬IsHalting gen (stepNHalt gen gcfg i)) :
-    ∃ cfg', TM2Reaches gen cfg cfg' ∧
-      RunStepInvariant gen stackTarget counter (stepNHalt gen gcfg n) cfg' := by
-  sorry
-  -- Induction on n, using runStep_step at each iteration.
-
-end RunPhase
-
-
 section CheckOutputPhase
 
 /-- When the run loop ends (input exhausted), we reach checkOutput
@@ -1193,6 +1101,23 @@ private lemma checkOutput_mismatch_to_clearInput
 
 end CheckOutputPhase
 
+lemma stepNHalt_succ_of_step
+    (gen : Generator Γw Γo Q)
+    (gcfg gcfg' : GenConfig Γw Γo Q)
+    (n : ℕ)
+    (hStep : step gen gcfg = some gcfg') :
+    stepNHalt gen gcfg (n + 1) =
+      stepNHalt gen gcfg' n := by
+  induction n with
+  | zero => simp [stepNHalt, hStep]
+  | succ n ih =>
+    show stepNHalt gen gcfg (n + 1 + 1) =
+      stepNHalt gen gcfg' (n + 1)
+    simp only [stepNHalt]
+    have : stepNHalt gen gcfg (n + 1) = stepNHalt gen gcfg' n := ih
+    simp only [stepNHalt] at this ⊢
+    rw [this]
+
 /-- Once halted, stepNHalt stays fixed. -/
 lemma stepNHalt_of_isHalting
     (gen : Generator Γw Γo Q)
@@ -1332,6 +1257,140 @@ lemma copyCounter_to_initRun
   refine ⟨cfg₂, TM2Reaches_trans hr₁ hr₂, ?_⟩
   simp only [List.reverse_reverse, List.append_nil] at hinv₂
   exact hinv₂
+
+section RunPhase
+
+/-- After initRun loads the generator state, we're at runStep with
+    the initial GenConfig. -/
+private lemma initRun_to_runStep
+    (gen : Generator Γw Γo Q)
+    (stackTarget : List Γo)
+    (counter : List (ULift.{u} Bool))
+    (cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q)
+      GreedyEnumLabel (GreedyEnumSigma Γw Γo Q))
+    (hinv : InitRunInvariant stackTarget counter cfg) :
+    ∃ cfg', TM2Reaches gen cfg cfg' ∧
+      RunStepInvariant gen stackTarget counter
+        (initConfig gen (counterToInput counter)) cfg' := by
+  refine ⟨⟨some GreedyEnumLabel.runStep,
+           { cfg.var with
+             transQ := some gen.init
+             transW := gen.blank },
+           cfg.stk⟩, ?_, ?_⟩
+  · apply Relation.ReflTransGen.single
+    cases cfg with
+    | mk l v S =>
+      simp only at *
+      have hl := hinv.h_label; simp only at hl; subst hl
+      simp only [GEStep, Turing.TM2.step,
+                 greedyEnumMachine, initRun,
+                 Turing.TM2.stepAux]
+  · constructor
+    · -- h_label
+      rfl
+    · -- h_target
+      exact hinv.h_target
+    · -- h_counter
+      exact hinv.h_counter
+    · -- h_saveCounter
+      exact hinv.h_saveCounter
+    · -- h_saveTarget
+      exact hinv.h_saveTarget
+    · -- h_input
+      rw [hinv.h_input]; simp [initConfig]
+    · -- h_transQ
+      rfl
+    · -- h_work: WorkTapeMatches
+      refine ⟨?_, ?_, ?_, ?_⟩
+      · intro i h; rw [hinv.h_workR] at h; simp at h
+      · intro i _; simp [initConfig]
+      · intro i h; rw [hinv.h_workL] at h; simp at h
+      · intro i _; simp [initConfig]
+    · -- h_output
+      rw [hinv.h_output]; simp [initConfig]
+
+/-- One iteration of the run loop: if input is non-empty and delta doesn't halt,
+    we advance the GenConfig by one step and return to runStep. -/
+private lemma runStep_step
+    (gen : Generator Γw Γo Q)
+    (hGreedy : gen.IsGreedy)
+    (stackTarget : List Γo)
+    (counter : List (ULift.{u} Bool))
+    (gcfg gcfg' : GenConfig Γw Γo Q)
+    (cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) GreedyEnumLabel (GreedyEnumSigma Γw Γo Q))
+    (hinv : RunStepInvariant gen stackTarget counter gcfg cfg)
+    (hInput : gcfg.inputIndex < counter.length)
+    (hStep : step gen gcfg = some gcfg') :
+    ∃ cfg', TM2Reaches gen cfg cfg' ∧
+      RunStepInvariant gen stackTarget counter gcfg' cfg' := by
+  sorry
+  -- This is the big one. Path: runStep → runStep_apply → runStep_moveHead → runStep.
+  -- Needs to go through the branch on input non-empty, pop input, peek workR,
+  -- apply delta (non-halting), push new workR, emit output, move head.
+  -- You may want to split this into sub-lemmas:
+  --   runStep_to_apply, runStep_apply_to_moveHead, runStep_moveHead_to_runStep
+
+/-- Run the full loop for N steps, chaining runStep_step. -/
+private lemma runStep_loop
+    (gen : Generator Γw Γo Q)
+    (hGreedy : gen.IsGreedy)
+    (stackTarget : List Γo)
+    (counter : List (ULift.{u} Bool))
+    (gcfg : GenConfig Γw Γo Q)
+    (n : ℕ)
+    (cfg : GECfg Γw Γo Q)
+    (hinv : RunStepInvariant gen stackTarget counter gcfg cfg)
+    (hSteps : ∀ i, i < n → gcfg.inputIndex + i < counter.length)
+    (hAlive : ∀ i, i < n → ¬IsHalting gen (stepNHalt gen gcfg i)) :
+    ∃ cfg', TM2Reaches gen cfg cfg' ∧
+      RunStepInvariant gen stackTarget counter
+        (stepNHalt gen gcfg n) cfg' := by
+  induction n generalizing gcfg cfg with
+  | zero => exact ⟨cfg, Relation.ReflTransGen.refl, hinv⟩
+  | succ n ih =>
+    have hAlive0 : ¬IsHalting gen gcfg :=
+      hAlive 0 (Nat.zero_lt_succ n)
+    have hne := Option.ne_none_iff_exists'.mp
+      (by simp only [IsHalting, step, Int.reduceNeg] at hAlive0
+          exact hAlive0)
+    obtain ⟨gcfg₁, hStep₁⟩ := hne
+    have hStep₁' : step gen gcfg = some gcfg₁ := hStep₁
+    obtain ⟨cfg₁, hr₁, hinv₁⟩ :=
+      runStep_step gen hGreedy stackTarget counter
+        gcfg gcfg₁ cfg hinv
+        (hSteps 0 (Nat.zero_lt_succ n))
+        hStep₁'
+    have hShift : ∀ i,
+        stepNHalt gen gcfg (i + 1) =
+          stepNHalt gen gcfg₁ i :=
+      fun i => stepNHalt_succ_of_step gen gcfg gcfg₁
+        i hStep₁'
+    have hIdx₁ : gcfg₁.inputIndex =
+        gcfg.inputIndex + 1 := by
+      simp only [step] at hStep₁'
+      revert hStep₁'
+      cases hd : gen.δ gcfg.state
+          (gcfg.input gcfg.inputIndex)
+          (gcfg.work gcfg.workIndex) with
+      | none => simp
+      | some val =>
+        obtain ⟨q', w', o, itd, wd⟩ := val
+        have := hGreedy _ _ _ _ _ _ _ _ hd; subst this
+        simp only [Int.reduceNeg, Option.some.injEq]
+        intro h
+        rw [← h]
+    obtain ⟨cfg₂, hr₂, hinv₂⟩ := ih gcfg₁ cfg₁ hinv₁
+      (fun i hi => by
+        rw [hIdx₁]
+        have := hSteps (i + 1) (by omega)
+        omega)
+      (fun i hi => by
+        rw [← hShift]
+        exact hAlive (i + 1) (by omega))
+    rw [hShift n]
+    exact ⟨cfg₂, TM2Reaches_trans hr₁ hr₂, hinv₂⟩
+
+end RunPhase
 
 lemma initRun_match_halts
     (gen : Generator Γw Γo Q)
