@@ -185,10 +185,14 @@ structure CheckOutputInvariant
   h_target      : cfg.stk GreedyEnumStack.target = remaining_target
   h_output      : cfg.stk GreedyEnumStack.output = remaining_output
   h_saveTarget  : cfg.stk GreedyEnumStack.saveTarget =
-      (stackTarget.take (stackTarget.length - remaining_target.length)).reverse
+      (stackTarget.take
+        (stackTarget.length - remaining_target.length)).reverse
   h_counter     : cfg.stk GreedyEnumStack.counter = counter
   h_saveCounter : cfg.stk GreedyEnumStack.saveCounter = []
   h_input       : cfg.stk GreedyEnumStack.input = []
+  h_suffix      : stackTarget.drop
+      (stackTarget.length - remaining_target.length)
+      = remaining_target
 
 structure ClearInputInvariant
     (target : List Γo)
@@ -469,7 +473,12 @@ private lemma runStep_halted_to_checkOutput
   -- runStep peeks input (non-empty), pops, peeks workR, applies delta,
   -- delta returns none → transHalted = true → goto checkOutput.
 
-/-- One iteration of checkOutput: both have elements and they match. -/
+private lemma take_succ_reverse_cons
+    {α : Type*} (l : List α) (n : ℕ) (h : n < l.length) :
+    (l.take (n + 1)).reverse = l[n] :: (l.take n).reverse := by
+  rw [List.take_add_one, List.reverse_append]
+  simp [List.getElem?_eq_getElem h]
+
 private lemma checkOutput_step_match
     (gen : Generator Γw Γo Q)
     (stackTarget : List Γo)
@@ -481,9 +490,70 @@ private lemma checkOutput_step_match
     ∃ cfg', TM2Reaches gen cfg cfg' ∧
       CheckOutputInvariant stackTarget counter
         rest_t rest_o cfg' := by
-  sorry
-  -- Peek target (some t), peek output (some t), not both none,
-  -- not one none, compare equal → pop both, push target to saveTarget, goto checkOutput.
+  have hSuffix := hinv.h_suffix
+  have hLen : (t :: rest_t).length ≤ stackTarget.length := by
+    have := congr_arg List.length hSuffix
+    simp [List.length_drop] at this
+    simp only [List.length_cons]
+    omega
+  have hIdx : stackTarget.length - (t :: rest_t).length < stackTarget.length := by
+    have : (t :: rest_t).length ≥ 1 := by simp [List.length_cons]
+    omega
+  have hAt : stackTarget[stackTarget.length -
+      (t :: rest_t).length] = t := by
+    have h : stackTarget[stackTarget.length - (t :: rest_t).length]? = some t := by
+      rw [← List.head?_drop, hSuffix]; rfl
+    simp at h
+    sorry
+  -- TM2 steps: peek target (some t), peek output (some t),
+  -- not both none, not one none, compare equal,
+  -- pop both, push target to saveTarget, goto checkOutput
+  refine ⟨⟨some GreedyEnumLabel.checkOutput,
+           { cfg.var with
+             peekTarget := some t
+             peekOut := some t },
+           fun k => match k with
+             | GreedyEnumStack.target => rest_t
+             | GreedyEnumStack.output => rest_o
+             | GreedyEnumStack.saveTarget =>
+                 t :: (stackTarget.take
+                   (stackTarget.length -
+                     (t :: rest_t).length)).reverse
+             | other => cfg.stk other⟩, ?_, ?_⟩
+  · apply Relation.ReflTransGen.single
+    cases cfg with
+    | mk l v S =>
+      simp only at *
+      have hl := hinv.h_label; simp only at hl; subst hl
+      have ht := hinv.h_target; simp only at ht
+      have ho := hinv.h_output; simp only at ho
+      have hst := hinv.h_saveTarget; simp only at hst
+      simp only [GEStep, Turing.TM2.step,
+                 greedyEnumMachine, checkOutput,
+                 Turing.TM2.stepAux,
+                 ht, ho, List.head?,
+                 Option.isNone, Bool.and_false,
+                 cond_false, Bool.or_false,
+                 decide_true, cond_true,
+                 List.tail_cons, Option.getD_some]
+      simp only [Option.some.injEq,
+                 Turing.TM2.Cfg.mk.injEq, true_and]
+      ext k; cases k <;>
+        simp only [Function.update, reduceCtorEq,
+                   ↓reduceDIte, List.getElem?_tail,
+                   hst, List.length_cons]
+      rw [ho, List.getElem?_cons_succ]
+  · refine ⟨rfl, rfl, rfl, ?_,
+            hinv.h_counter, hinv.h_saveCounter,
+            hinv.h_input, ?_⟩
+    · -- h_saveTarget
+      rw [show stackTarget.length - rest_t.length =
+          (stackTarget.length -
+            (t :: rest_t).length) + 1
+          from by simp [List.length_cons]; sorry]
+      sorry
+    · -- h_suffix: stackTarget.drop (...) = rest_t
+      sorry
 
 /-- checkOutput with both stacks empty → halt. -/
 private lemma checkOutput_both_empty_halts
