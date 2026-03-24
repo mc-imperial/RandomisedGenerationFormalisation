@@ -379,14 +379,48 @@ private lemma initRun_to_runStep
     (gen : Generator Γw Γo Q)
     (stackTarget : List Γo)
     (counter : List (ULift.{u} Bool))
-    (cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) GreedyEnumLabel (GreedyEnumSigma Γw Γo Q))
+    (cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q)
+      GreedyEnumLabel (GreedyEnumSigma Γw Γo Q))
     (hinv : InitRunInvariant stackTarget counter cfg) :
     ∃ cfg', TM2Reaches gen cfg cfg' ∧
       RunStepInvariant gen stackTarget counter
         (initConfig gen (counterToInput counter)) cfg' := by
-  sorry
-  -- One TM2 step: load sets transQ := some gen.init, transW := gen.blank,
-  -- then goto runStep. Need to show the initial GenConfig matches.
+  refine ⟨⟨some GreedyEnumLabel.runStep,
+           { cfg.var with
+             transQ := some gen.init
+             transW := gen.blank },
+           cfg.stk⟩, ?_, ?_⟩
+  · apply Relation.ReflTransGen.single
+    cases cfg with
+    | mk l v S =>
+      simp only at *
+      have hl := hinv.h_label; simp only at hl; subst hl
+      simp only [GEStep, Turing.TM2.step,
+                 greedyEnumMachine, initRun,
+                 Turing.TM2.stepAux]
+  · constructor
+    · -- h_label
+      rfl
+    · -- h_target
+      exact hinv.h_target
+    · -- h_counter
+      exact hinv.h_counter
+    · -- h_saveCounter
+      exact hinv.h_saveCounter
+    · -- h_saveTarget
+      exact hinv.h_saveTarget
+    · -- h_input
+      rw [hinv.h_input]; simp [initConfig]
+    · -- h_transQ
+      rfl
+    · -- h_work: WorkTapeMatches
+      refine ⟨?_, ?_, ?_, ?_⟩
+      · intro i h; rw [hinv.h_workR] at h; simp at h
+      · intro i _; simp [initConfig]
+      · intro i h; rw [hinv.h_workL] at h; simp at h
+      · intro i _; simp [initConfig]
+    · -- h_output
+      rw [hinv.h_output]; simp [initConfig]
 
 /-- One iteration of the run loop: if input is non-empty and delta doesn't halt,
     we advance the GenConfig by one step and return to runStep. -/
@@ -2103,7 +2137,36 @@ lemma initRun_no_match_to_copyCounter
         runStep_halted_to_checkOutput gen stackTarget
           counter (stepNHalt gen gcfg₀ k) cfg₂ hinv₂
           hk_input hk_delta
-      sorry -- mismatch → restore → clear → increment → copyCounter
+      have hOutputMismatch :
+          stackTarget ≠
+            (stepNHalt gen gcfg₀ k).output.reverse := by
+        intro heq
+        apply hNoMatch
+        rw [← hk_fixed] at hk_halt
+        exact (counterEnumStep_eq_none_iff gen
+          stackTarget.reverse counter).mpr
+          ⟨hk_halt, by
+            rw [heq, hk_fixed, List.reverse_reverse]
+          ⟩
+      obtain ⟨cfg₄, hr₄, hinv₄⟩ :=
+        checkOutput_mismatch_to_clearInput gen
+          stackTarget counter stackTarget
+          (stepNHalt gen gcfg₀ k).output.reverse
+          cfg₃ hinv₃ hOutputMismatch
+      obtain ⟨cfg₅, hr₅, hinv₅⟩ :=
+        clearInput_to_counterIncrement gen stackTarget
+          counter cfg₄ hinv₄
+      obtain ⟨cfg₆, hr₆, hinv₆⟩ :=
+        counter_increment_to_copyCounter gen stackTarget
+          counter cfg₅ hinv₅
+      exact ⟨cfg₆,
+        TM2Reaches_trans
+          (TM2Reaches_trans
+            (TM2Reaches_trans
+              (TM2Reaches_trans
+                (TM2Reaches_trans hr₁ hr₂) hr₃)
+              hr₄) hr₅) hr₆,
+        hinv₆⟩
     · -- k = counter.length: exhausted then halted
       have hk_exhausted :
           (stepNHalt gen gcfg₀ k).inputIndex
@@ -2116,7 +2179,38 @@ lemma initRun_no_match_to_copyCounter
           hk_exhausted hk_halt
           (by rw [stepNHalt_preserves_input];
               simp [gcfg₀, initConfig])
-      sorry -- mismatch → restore → clear → increment → copyCounter
+      have hOutputMismatch :
+          stackTarget ≠
+            (stepNHalt gen gcfg₀ k).output.reverse := by
+        intro heq
+        apply hNoMatch
+        have hk_halt' : IsHalting gen gcfgN := by
+          change IsHalting gen
+            (stepNHalt gen gcfg₀ counter.length)
+          rw [hk_fixed]; exact hk_halt
+        exact (counterEnumStep_eq_none_iff gen
+          stackTarget.reverse counter).mpr
+          ⟨hk_halt', by
+            rw [hk_fixed, heq, List.reverse_reverse]⟩
+      obtain ⟨cfg₄, hr₄, hinv₄⟩ :=
+        checkOutput_mismatch_to_clearInput gen
+          stackTarget counter stackTarget
+          (stepNHalt gen gcfg₀ k).output.reverse
+          cfg₃ hinv₃ hOutputMismatch
+      obtain ⟨cfg₅, hr₅, hinv₅⟩ :=
+        clearInput_to_counterIncrement gen stackTarget
+          counter cfg₄ hinv₄
+      obtain ⟨cfg₆, hr₆, hinv₆⟩ :=
+        counter_increment_to_copyCounter gen stackTarget
+          counter cfg₅ hinv₅
+      exact ⟨cfg₆,
+        TM2Reaches_trans
+          (TM2Reaches_trans
+            (TM2Reaches_trans
+              (TM2Reaches_trans
+                (TM2Reaches_trans hr₁ hr₂) hr₃)
+              hr₄) hr₅) hr₆,
+        hinv₆⟩
   · -- Case B: generator doesn't halt within counter.length steps
     -- Run loop for counter.length steps
     obtain ⟨cfg₂, hr₂, hinv₂⟩ :=
