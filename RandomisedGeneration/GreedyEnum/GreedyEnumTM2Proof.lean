@@ -470,7 +470,6 @@ section CheckOutputPhase
     This handles the halting case. -/
 private lemma runStep_exhausted_halted_to_checkOutput
     (gen : Generator Γw Γo Q)
-    (hGreedy : gen.IsGreedy)
     (stackTarget : List Γo)
     (counter : List (ULift.{u} Bool))
     (gcfg : GenConfig Γw Γo Q)
@@ -1293,7 +1292,7 @@ lemma initRun_match_halts
       rw [hk_inputIdx, hk_eq]
     obtain ⟨cfg₃, hr₃, hinv₃⟩ :=
       runStep_exhausted_halted_to_checkOutput gen
-        hGreedy stackTarget counter
+        stackTarget counter
         (stepNHalt gen gcfg₀ k) cfg₂ hinv₂
         hk_exhausted hk_halt
         (by
@@ -2313,7 +2312,7 @@ lemma initRun_no_match_to_copyCounter
         rw [hk_inputIdx, hk_eq]
       obtain ⟨cfg₃, hr₃, hinv₃⟩ :=
         runStep_exhausted_halted_to_checkOutput gen
-          hGreedy stackTarget counter
+          stackTarget counter
           (stepNHalt gen gcfg₀ k) cfg₂ hinv₂
           hk_exhausted hk_halt
           (by rw [stepNHalt_preserves_input];
