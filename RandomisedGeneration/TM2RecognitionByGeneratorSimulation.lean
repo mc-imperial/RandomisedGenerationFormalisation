@@ -83,8 +83,7 @@ private lemma tm2_halts_of_counterEnum_none
 theorem greedyEnumTM2_halts_iff_CounterEnumRecognises {Γw Γo Q : Type u}
     [FinEnum Γw] [Inhabited Γw] [Inhabited Γo] [FinEnum Γo] [FinEnum Q]
     (gen : Generator Γw Γo Q) (hGreedy : gen.IsGreedy) (target : List Γo) :
-    (Turing.TM2.eval (GreedyEnum.greedyEnumMachine gen)
-      GreedyEnum.GreedyEnumStack.target target.reverse).Dom ↔
+    (GreedyEnum.GEEval gen target.reverse).Dom ↔
     GreedyEnum.CounterEnumRecognises gen target := by
   rw [GreedyEnum.eval_dom_iff_TM2Halts]
   constructor
@@ -96,8 +95,7 @@ theorem greedyEnumTM2_halts_iff_CounterEnumRecognises {Γw Γo Q : Type u}
 theorem greedyEnumMachine_recognises {Γw Γo Q : Type u}
     [FinEnum Γw] [Inhabited Γw] [Inhabited Γo] [FinEnum Γo] [FinEnum Q]
     (gen : Generator Γw Γo Q) (hGreedy : gen.IsGreedy) (target : List Γo) :
-    (Turing.TM2.eval (GreedyEnum.greedyEnumMachine gen)
-      GreedyEnum.GreedyEnumStack.target target.reverse).Dom ↔
+    (GreedyEnum.GEEval gen target.reverse).Dom ↔
     target ∈ generatedLanguage gen Finset.univ (generator_supports_univ gen) := by
   rw [greedyEnumTM2_halts_iff_CounterEnumRecognises gen hGreedy]
   rw [GreedyEnum.CounterEnumRecognises_iff_Computes gen hGreedy]

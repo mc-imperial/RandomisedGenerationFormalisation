@@ -528,6 +528,11 @@ abbrev GECfg (Γw Γo Q : Type u) [FinEnum Γw] [Inhabited Γo] [FinEnum Γo] [F
 abbrev GEStep (gen : Generator Γw Γo Q) : GECfg Γw Γo Q → Option (GECfg Γw Γo Q) :=
   Turing.TM2.step (greedyEnumMachine gen)
 
+abbrev GEEval (gen : Generator Γw Γo Q) (target : List Γo) : Part (List Γo) :=
+  @Turing.TM2.eval.{u,u,u,u} GreedyEnumStack (stackAlphabet Γw Γo Q)
+    GreedyEnumLabel (GreedyEnumSigma Γw Γo Q) _ _ _
+    (greedyEnumMachine gen) GreedyEnumStack.target target
+
 def TM2Reaches (gen : Generator Γw Γo Q) (cfg cfg' : GECfg Γw Γo Q) : Prop :=
   Relation.ReflTransGen (fun a b => GEStep gen a = some b) cfg cfg'
 
@@ -966,7 +971,7 @@ private lemma counter_increment_to_loop
     apply Relation.ReflTransGen.single
     cases cfg with
     | mk l v S =>
-      simp only [Turing.TM2.step]
+      simp only
       have hl := hinv.h_label
       simp only at hl
       subst hl
