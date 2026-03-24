@@ -1722,13 +1722,48 @@ lemma initRun_no_match_to_copyCounter
             gcfg₀ k hk_min, hInitIdx, Nat.zero_add]
     rcases Nat.lt_or_eq_of_le hk_le with hk_lt | hk_eq
     · -- k < counter.length: halted mid-run
-      sorry -- runStep_halted_to_checkOutput → mismatch
-            -- → restore → clearInput → counterIncrement
-            -- → copyCounter
+      have hk_input :
+          (stepNHalt gen gcfg₀ k).inputIndex
+            < counter.length := by
+        rw [hk_inputIdx]; exact hk_lt
+      have hk_delta : gen.δ
+          (stepNHalt gen gcfg₀ k).state
+          ((stepNHalt gen gcfg₀ k).input
+            (stepNHalt gen gcfg₀ k).inputIndex)
+          ((stepNHalt gen gcfg₀ k).work
+            (stepNHalt gen gcfg₀ k).workIndex)
+          = none := by
+        have h := hk_halt
+        simp only [IsHalting, step] at h
+        revert h
+        cases gen.δ
+          (stepNHalt gen gcfg₀ k).state
+          ((stepNHalt gen gcfg₀ k).input
+            (stepNHalt gen gcfg₀ k).inputIndex)
+          ((stepNHalt gen gcfg₀ k).work
+            (stepNHalt gen gcfg₀ k).workIndex) with
+        | none => intro; rfl
+        | some val =>
+          obtain ⟨q', w', out?, inDir, workDir⟩ := val
+          simp
+      obtain ⟨cfg₃, hr₃, hinv₃⟩ :=
+        runStep_halted_to_checkOutput gen stackTarget
+          counter (stepNHalt gen gcfg₀ k) cfg₂ hinv₂
+          hk_input hk_delta
+      sorry -- mismatch → restore → clear → increment → copyCounter
     · -- k = counter.length: exhausted then halted
-      sorry -- runStep_exhausted_halted_to_checkOutput
-            -- → mismatch → restore → clearInput
-            -- → counterIncrement → copyCounter
+      have hk_exhausted :
+          (stepNHalt gen gcfg₀ k).inputIndex
+            = counter.length := by
+        rw [hk_inputIdx, hk_eq]
+      obtain ⟨cfg₃, hr₃, hinv₃⟩ :=
+        runStep_exhausted_halted_to_checkOutput gen
+          hGreedy stackTarget counter
+          (stepNHalt gen gcfg₀ k) cfg₂ hinv₂
+          hk_exhausted hk_halt
+          (by rw [stepNHalt_preserves_input];
+              simp [gcfg₀, initConfig])
+      sorry -- mismatch → restore → clear → increment → copyCounter
   · -- Case B: generator doesn't halt within counter.length steps
     -- Run loop for counter.length steps
     obtain ⟨cfg₂, hr₂, hinv₂⟩ :=
