@@ -1854,14 +1854,15 @@ private lemma clear_stack_input
     (counter : List (ULift.{u} Bool))
     (input : List (ULift.{u} Bool))
     (workL : List Γw) (workR : List Γw)
-    (cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) GreedyEnumLabel (GreedyEnumSigma Γw Γo Q))
+    (output : List Γo)
+    (cfg : GECfg Γw Γo Q)
     (h_label : cfg.l = some GreedyEnumLabel.clearInput)
     (h_target : cfg.stk GreedyEnumStack.target = target)
     (h_counter : cfg.stk GreedyEnumStack.counter = counter)
     (h_input : cfg.stk GreedyEnumStack.input = input)
     (h_workL : cfg.stk GreedyEnumStack.workL = workL)
     (h_workR : cfg.stk GreedyEnumStack.workR = workR)
-    (h_output : cfg.stk GreedyEnumStack.output = [])
+    (h_output : cfg.stk GreedyEnumStack.output = output)
     (h_saveTarget : cfg.stk GreedyEnumStack.saveTarget = [])
     (h_saveCounter : cfg.stk GreedyEnumStack.saveCounter = []) :
     ∃ cfg', TM2Reaches gen cfg cfg' ∧
@@ -1871,7 +1872,7 @@ private lemma clear_stack_input
       cfg'.stk GreedyEnumStack.input = [] ∧
       cfg'.stk GreedyEnumStack.workL = workL ∧
       cfg'.stk GreedyEnumStack.workR = workR ∧
-      cfg'.stk GreedyEnumStack.output = [] ∧
+      cfg'.stk GreedyEnumStack.output = output ∧
       cfg'.stk GreedyEnumStack.saveTarget = [] ∧
       cfg'.stk GreedyEnumStack.saveCounter = [] := by
   induction input generalizing cfg with
@@ -1898,7 +1899,7 @@ private lemma clear_stack_input
         cfg₁.stk GreedyEnumStack.counter = counter ∧
         cfg₁.stk GreedyEnumStack.workL = workL ∧
         cfg₁.stk GreedyEnumStack.workR = workR ∧
-        cfg₁.stk GreedyEnumStack.output = [] ∧
+        cfg₁.stk GreedyEnumStack.output = output ∧
         cfg₁.stk GreedyEnumStack.saveTarget = [] ∧
         cfg₁.stk GreedyEnumStack.saveCounter = [] := by
       refine ⟨⟨some GreedyEnumLabel.clearInput,
@@ -1930,14 +1931,15 @@ private lemma clear_stack_workL
     (target : List Γo)
     (counter : List (ULift.{u} Bool))
     (workL : List Γw) (workR : List Γw)
-    (cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) GreedyEnumLabel (GreedyEnumSigma Γw Γo Q))
+    (output : List Γo)
+    (cfg : GECfg Γw Γo Q)
     (h_label : cfg.l = some GreedyEnumLabel.clearWorkL)
     (h_target : cfg.stk GreedyEnumStack.target = target)
     (h_counter : cfg.stk GreedyEnumStack.counter = counter)
     (h_input : cfg.stk GreedyEnumStack.input = [])
     (h_workL : cfg.stk GreedyEnumStack.workL = workL)
     (h_workR : cfg.stk GreedyEnumStack.workR = workR)
-    (h_output : cfg.stk GreedyEnumStack.output = [])
+    (h_output : cfg.stk GreedyEnumStack.output = output)
     (h_saveTarget : cfg.stk GreedyEnumStack.saveTarget = [])
     (h_saveCounter : cfg.stk GreedyEnumStack.saveCounter = []) :
     ∃ cfg', TM2Reaches gen cfg cfg' ∧
@@ -1947,7 +1949,7 @@ private lemma clear_stack_workL
       cfg'.stk GreedyEnumStack.input = [] ∧
       cfg'.stk GreedyEnumStack.workL = [] ∧
       cfg'.stk GreedyEnumStack.workR = workR ∧
-      cfg'.stk GreedyEnumStack.output = [] ∧
+      cfg'.stk GreedyEnumStack.output = output ∧
       cfg'.stk GreedyEnumStack.saveTarget = [] ∧
       cfg'.stk GreedyEnumStack.saveCounter = [] := by
   induction workL generalizing cfg with
@@ -1974,7 +1976,7 @@ private lemma clear_stack_workL
         cfg₁.stk GreedyEnumStack.counter = counter ∧
         cfg₁.stk GreedyEnumStack.input = [] ∧
         cfg₁.stk GreedyEnumStack.workR = workR ∧
-        cfg₁.stk GreedyEnumStack.output = [] ∧
+        cfg₁.stk GreedyEnumStack.output = output ∧
         cfg₁.stk GreedyEnumStack.saveTarget = [] ∧
         cfg₁.stk GreedyEnumStack.saveCounter = [] := by
       refine ⟨⟨some GreedyEnumLabel.clearWorkL,
@@ -2006,14 +2008,15 @@ private lemma clear_stack_workR
     (target : List Γo)
     (counter : List (ULift.{u} Bool))
     (workR : List Γw)
-    (cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) GreedyEnumLabel (GreedyEnumSigma Γw Γo Q))
+    (output : List Γo)
+    (cfg : GECfg Γw Γo Q)
     (h_label : cfg.l = some GreedyEnumLabel.clearWorkR)
     (h_target : cfg.stk GreedyEnumStack.target = target)
     (h_counter : cfg.stk GreedyEnumStack.counter = counter)
     (h_input : cfg.stk GreedyEnumStack.input = [])
     (h_workL : cfg.stk GreedyEnumStack.workL = [])
     (h_workR : cfg.stk GreedyEnumStack.workR = workR)
-    (h_output : cfg.stk GreedyEnumStack.output = [])
+    (h_output : cfg.stk GreedyEnumStack.output = output)
     (h_saveTarget : cfg.stk GreedyEnumStack.saveTarget = [])
     (h_saveCounter : cfg.stk GreedyEnumStack.saveCounter = []) :
     ∃ cfg', TM2Reaches gen cfg cfg' ∧
@@ -2023,7 +2026,7 @@ private lemma clear_stack_workR
       cfg'.stk GreedyEnumStack.input = [] ∧
       cfg'.stk GreedyEnumStack.workL = [] ∧
       cfg'.stk GreedyEnumStack.workR = [] ∧
-      cfg'.stk GreedyEnumStack.output = [] ∧
+      cfg'.stk GreedyEnumStack.output = output ∧
       cfg'.stk GreedyEnumStack.saveTarget = [] ∧
       cfg'.stk GreedyEnumStack.saveCounter = [] := by
   induction workR generalizing cfg with
@@ -2050,7 +2053,7 @@ private lemma clear_stack_workR
         cfg₁.stk GreedyEnumStack.counter = counter ∧
         cfg₁.stk GreedyEnumStack.input = [] ∧
         cfg₁.stk GreedyEnumStack.workL = [] ∧
-        cfg₁.stk GreedyEnumStack.output = [] ∧
+        cfg₁.stk GreedyEnumStack.output = output ∧
         cfg₁.stk GreedyEnumStack.saveTarget = [] ∧
         cfg₁.stk GreedyEnumStack.saveCounter = [] := by
       refine ⟨⟨some GreedyEnumLabel.clearWorkR,
@@ -2152,8 +2155,7 @@ lemma clearInput_to_counterIncrement
     (gen : Generator Γw Γo Q)
     (target : List Γo)
     (counter : List (ULift.{u} Bool))
-    (cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q)
-      GreedyEnumLabel (GreedyEnumSigma Γw Γo Q))
+    (cfg : GECfg Γw Γo Q)
     (hinv : ClearInputInvariant target counter cfg) :
     ∃ cfg', TM2Reaches gen cfg cfg' ∧
       CounterIncrementInvariant target counter cfg' := by
@@ -2163,20 +2165,23 @@ lemma clearInput_to_counterIncrement
       (cfg.stk GreedyEnumStack.input)
       (cfg.stk GreedyEnumStack.workL)
       (cfg.stk GreedyEnumStack.workR)
+      (cfg.stk GreedyEnumStack.output)
       cfg hinv.h_label hinv.h_target hinv.h_counter
-      rfl rfl rfl
-      hinv.h_output hinv.h_saveTarget hinv.h_saveCounter
+      rfl rfl rfl rfl
+      hinv.h_saveTarget hinv.h_saveCounter
   obtain ⟨cfg₂, hr₂, hl₂, ht₂, hc₂, hi₂,
           hwl₂, hwr₂, ho₂, hst₂, hsc₂⟩ :=
     clear_stack_workL gen target counter
       (cfg.stk GreedyEnumStack.workL)
       (cfg.stk GreedyEnumStack.workR)
+      (cfg.stk GreedyEnumStack.output)
       cfg₁ hl₁ ht₁ hc₁ hi₁ hwl₁ hwr₁
       ho₁ hst₁ hsc₁
   obtain ⟨cfg₃, hr₃, hl₃, ht₃, hc₃, hi₃,
           hwl₃, hwr₃, ho₃, hst₃, hsc₃⟩ :=
     clear_stack_workR gen target counter
       (cfg.stk GreedyEnumStack.workR)
+      (cfg.stk GreedyEnumStack.output)
       cfg₂ hl₂ ht₂ hc₂ hi₂ hwl₂ hwr₂
       ho₂ hst₂ hsc₂
   obtain ⟨cfg₄, hr₄, hinv₄⟩ :=
