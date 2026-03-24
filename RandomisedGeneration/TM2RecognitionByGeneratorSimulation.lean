@@ -40,43 +40,74 @@ to comparing output against cmpTarget when stackTarget = cmpTarget.reverse.
 -/
 
 private lemma tm2_halts_of_counterEnum_none
-    (gen : Generator Γw Γo Q) (hGreedy : gen.IsGreedy)
-    (stackTarget cmpTarget : List Γo)
+    (gen : Generator Γw Γo Q)
+    (hGreedy : gen.IsGreedy)
+    (stackTarget : List Γo)
     (counter : List (ULift.{u} Bool))
-    (cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) GreedyEnumLabel (GreedyEnumSigma Γw Γo Q))
+    (cfg : GECfg Γw Γo Q)
     (hInv : CopyCounterInvariant stackTarget counter cfg)
     (n : ℕ)
-    (hn : (fun c => c.bind (counterEnumStep gen cmpTarget))^[n] (some counter) = none) :
+    (hn : (fun c => c.bind
+      (counterEnumStep gen stackTarget.reverse))^[n]
+      (some counter) = none) :
     TM2Halts gen cfg := by
   induction n generalizing counter cfg with
   | zero => simp at hn
   | succ n ih =>
     rw [Function.iterate_succ_apply'] at hn
-    obtain ⟨cfg₁, hReach₁, hInv₁⟩ := copyCounter_to_initRun gen stackTarget counter cfg hInv
-    by_cases h : counterEnumStep gen cmpTarget counter = none
-    · have ⟨hHalt, hOut⟩ := (counterEnumStep_eq_none_iff gen cmpTarget counter).mp h
+    obtain ⟨cfg₁, hReach₁, hInv₁⟩ :=
+      copyCounter_to_initRun gen stackTarget counter cfg hInv
+    by_cases h :
+        counterEnumStep gen stackTarget.reverse counter
+          = none
+    · have ⟨hHalt, hOut⟩ :=
+        (counterEnumStep_eq_none_iff gen
+          stackTarget.reverse counter).mp h
       obtain ⟨cfg_halt, hReach_halt, hHalt_halt⟩ :=
-        initRun_match_halts gen hGreedy stackTarget cmpTarget counter cfg₁ hInv₁ hHalt hOut
-      exact ⟨cfg_halt, TM2Reaches_trans hReach₁ hReach_halt, hHalt_halt⟩
-    · have hNoMatch : ¬(IsHalting gen
-          (stepNHalt gen (initConfig gen (counterToInput counter)) counter.length) ∧
-        (stepNHalt gen (initConfig gen (counterToInput counter)) counter.length).output
-          = cmpTarget) := by
-        rwa [← counterEnumStep_eq_none_iff]
-      obtain ⟨cfg₂, hReach₂, hInv₂⟩ :=
-        initRun_no_match_to_copyCounter gen hGreedy stackTarget cmpTarget counter cfg₁ hInv₁ hNoMatch
-      have hSome := counterEnumStep_ne_none gen cmpTarget counter h
-      have hn' : (fun c => c.bind (counterEnumStep gen cmpTarget))^[n]
-          (some (counterIncrement counter)) = none := by
-        have key : (fun c => c.bind (counterEnumStep gen cmpTarget))^[n + 1]
-            (some counter) = none := by
-          rw [Function.iterate_succ_apply']; exact hn
-        rw [Function.iterate_succ_apply] at key
-        simpa [hSome] using key
-      obtain ⟨cfg_halt, hReach_halt, hHalt_halt⟩ :=
-        ih (counterIncrement counter) cfg₂ hInv₂ hn'
+        initRun_match_halts gen hGreedy stackTarget
+          counter cfg₁ hInv₁ hHalt
+          (by rw [hOut, List.reverse_reverse])
       exact ⟨cfg_halt,
-        TM2Reaches_trans (TM2Reaches_trans hReach₁ hReach₂) hReach_halt, hHalt_halt⟩
+        TM2Reaches_trans hReach₁ hReach_halt,
+        hHalt_halt⟩
+    · -- counterEnumStep returned some
+      have hSome :
+          counterEnumStep gen stackTarget.reverse counter
+            = some (counterIncrement counter) := by
+        simp only [counterEnumStep] at h ⊢
+        split <;> simp_all
+      have hn' : (fun c => c.bind
+          (counterEnumStep gen stackTarget.reverse))^[n]
+          (some (counterIncrement counter)) = none := by
+        set f := fun c : Option (List (ULift.{u} Bool)) =>
+          c.bind
+            (counterEnumStep gen stackTarget.reverse)
+        have hf : f (some counter) =
+            some (counterIncrement counter) := by
+          simp [f, hSome]
+        change f^[n] (some (counterIncrement counter))
+          = none
+        rw [← hf,
+          show f^[n] (f (some counter)) =
+            f (f^[n] (some counter)) from
+          (Function.Semiconj.iterate_right
+            (fun x => rfl) n (some counter)).symm]
+        exact hn
+      obtain ⟨cfg₂, hReach₂, hInv₂⟩ :=
+        initRun_no_match_to_copyCounter gen hGreedy
+          stackTarget stackTarget.reverse counter
+          cfg₁ hInv₁ (by
+            intro ⟨hHalt, hOut⟩
+            apply h
+            exact (counterEnumStep_eq_none_iff gen
+              stackTarget.reverse counter).mpr
+              ⟨hHalt, hOut⟩)
+      obtain ⟨cfg₃, hReach₃, hHalt₃⟩ :=
+        ih (counterIncrement counter) cfg₂ hInv₂ hn'
+      exact ⟨cfg₃,
+        TM2Reaches_trans
+          (TM2Reaches_trans hReach₁ hReach₂) hReach₃,
+        hHalt₃⟩
 
 theorem greedyEnumTM2_halts_iff_CounterEnumRecognises {Γw Γo Q : Type u}
     [FinEnum Γw] [Inhabited Γw] [Inhabited Γo] [FinEnum Γo] [FinEnum Q]
@@ -87,8 +118,11 @@ theorem greedyEnumTM2_halts_iff_CounterEnumRecognises {Γw Γo Q : Type u}
   constructor
   · sorry
   · intro ⟨n, hn⟩
-    have hInit := init_copyCounterInvariant gen target.reverse
-    exact tm2_halts_of_counterEnum_none gen hGreedy target.reverse target [] _ hInit n hn
+    have hInit :=
+      init_copyCounterInvariant gen target.reverse
+    exact tm2_halts_of_counterEnum_none gen hGreedy
+      target.reverse [] _ hInit n
+      (by rwa [List.reverse_reverse])
 
 theorem greedyEnumMachine_recognises {Γw Γo Q : Type u}
     [FinEnum Γw] [Inhabited Γw] [Inhabited Γo] [FinEnum Γo] [FinEnum Q]

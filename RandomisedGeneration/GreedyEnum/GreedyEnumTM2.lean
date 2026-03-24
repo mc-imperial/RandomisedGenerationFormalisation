@@ -12,6 +12,141 @@ variable {Γw Γo Q : Type u}
 variable [Inhabited Γo] [FinEnum Γo] [FinEnum Γw] [Inhabited Γw] [FinEnum Q]
 set_option linter.unusedSectionVars false
 
+-- Pseudocode for the TM2
+--
+-- // Stacks: target, counter, input, workL, workR, output, saveTarget, saveCounter
+-- // Registers: transQ, transW, transWDir, transOut, transHalted, inputBit, carry,
+-- //            peekBit, peekTarget, peekOut
+
+-- // Generator transition function: delta(state, inputBit, headSym) ->
+--                (newState, newHead, output, _, dir) or HALT
+
+-- void greedyEnum(Generator gen, Symbol[] targetWord) {
+--     // target stack holds targetWord (first symbol on top)
+--     // counter stack = [] (represents 0)
+--     // all other stacks empty
+
+-- copyCounter:
+--     // Move counter bits to saveCounter (reversing order)
+--     while (!empty(counter)) {
+--         b = pop(counter);
+--         push(saveCounter, b);
+--     }
+
+-- copyCounter_restore:
+--     // Restore counter AND copy bits to input
+--     while (!empty(saveCounter)) {
+--         b = pop(saveCounter);
+--         push(counter, b);
+--         push(input, b);
+--     }
+
+-- initRun:
+--     transQ = gen.init;
+--     transW = gen.blank;
+
+-- runStep:
+--     inputBit = empty(input) ? false : peek(input);
+--
+--     if (empty(input)) {
+--         // Final delta check with inputBit=false
+--         if (!empty(workR))
+--             transW = pop(workR);
+--         else
+--             transW = gen.blank;
+--         result = gen.delta(transQ, inputBit, transW);
+--         if (result == HALT)
+--             goto checkOutput;
+--         else
+--             goto clearWorkL;
+--     }
+--
+--     pop(input);  // consume the bit
+--
+--     if (!empty(workR))
+--         transW = pop(workR);
+--     else
+--         transW = gen.blank;
+--
+--     result = gen.delta(transQ, inputBit, transW);
+--     if (result == HALT) {
+--         transHalted = true;
+--         goto checkOutput;
+--     }
+--     (transQ, transW, transOut, _, transWDir) = result;
+
+-- runStep_apply:
+--     push(workR, transW);           // write new head symbol
+--     if (transOut != null)
+--         push(output, transOut);    // emit output symbol
+
+-- runStep_moveHead:
+--     switch (transWDir) {
+--     case L:
+--         if (!empty(workL))
+--             push(workR, pop(workL));
+--         else
+--             push(workR, gen.blank);
+--         break;
+--     case R:
+--         cell = pop(workR);         // = transW we just pushed
+--         push(workL, cell);
+--         if (empty(workR))
+--             push(workR, gen.blank); // extend tape with blank
+--         break;
+--     case N:
+--         break;
+--     }
+--     goto runStep;
+
+-- checkOutput:
+--     // Compare output stack vs target stack element-by-element
+--     // (both have first symbol on top)
+--     while (true) {
+--         t = peek(target);
+--         o = peek(output);
+--         if (t == NULL && o == NULL)
+--             HALT_ACCEPT;           // exact match!
+--         if (t == NULL || o == NULL)
+--             goto checkOutput_restoreTarget;  // length mismatch
+--         if (pop(target) != pop(output)) {
+--             push(saveTarget, t);   // save what we just popped
+--             goto checkOutput_restoreTarget;
+--         }
+--         push(saveTarget, t);       // save consumed target symbol
+--     }
+
+-- checkOutput_restoreTarget:
+--     while (!empty(saveTarget))
+--         push(target, pop(saveTarget));
+--     goto clearInput;
+
+-- clearInput:
+--     while (!empty(input)) pop(input);
+-- clearWorkL:
+--     while (!empty(workL)) pop(workL);
+-- clearWorkR:
+--     while (!empty(workR)) pop(workR);
+-- clearOutput:
+--     while (!empty(output)) pop(output);
+
+-- counter_increment:
+--     // Binary increment, LSB on top, no leading zeros
+--     carry = true;
+--     while (!empty(counter)) {
+--         bit = pop(counter);
+--         push(saveCounter, bit XOR carry);
+--         carry = bit AND carry;
+--     }
+--     if (carry)
+--         push(saveCounter, true);
+
+-- counter_increment_restore:
+--     while (!empty(saveCounter))
+--         push(counter, pop(saveCounter));
+--     goto copyCounter;  // next bitstring
+-- }
+
 /-- The stacks used by the greedy gen TM2 machine.
 
     Stack layout at quiescent points (start of each round):
@@ -244,37 +379,79 @@ def initRun (gen : Generator Γw Γo Q) :
 -/
 
 /-- Main step loop. Peek input:
-    • Empty → steps exhausted, teardown.
-    • Non-empty → pop bit, peek/pop workR head, apply delta, branch. -/
+    • Empty → one final delta check with inputBit=false.
+      If delta halts → checkOutput. Otherwise → teardown.
+    • Non-empty → pop bit, peek/pop workR head, apply delta,
+      branch. -/
 def runStep (gen : Generator Γw Γo Q) :
-    Turing.TM2.Stmt (stackAlphabet Γw Γo Q) GreedyEnumLabel (GreedyEnumSigma Γw Γo Q) :=
+    Turing.TM2.Stmt (stackAlphabet Γw Γo Q)
+      GreedyEnumLabel (GreedyEnumSigma Γw Γo Q) :=
   -- Peek input
-  Turing.TM2.Stmt.peek GreedyEnumStack.input (fun σ b => { σ with
-    inputBit := match b with | some b => b.down | none => false
-    -- Stash "had input" in peekBit: some true = had bit, some false = empty
-    peekBit  := some b.isSome })
-  <| Turing.TM2.Stmt.branch (fun σ => σ.peekBit == some false)
-    ( -- Input empty → teardown (clear remaining stacks)
-      Turing.TM2.Stmt.goto (fun _ => GreedyEnumLabel.clearWorkL) )
-    ( -- Pop the input bit (greedy: always consume one bit per step)
-      Turing.TM2.Stmt.pop GreedyEnumStack.input (fun σ _ => σ)
-      -- Peek workR to get head symbol, set transW
-      <| Turing.TM2.Stmt.peek GreedyEnumStack.workR (fun σ w => { σ with
+  Turing.TM2.Stmt.peek GreedyEnumStack.input
+    (fun σ b => { σ with
+      inputBit := match b with
+        | some b => b.down | none => false
+      peekBit  := some b.isSome })
+  <| Turing.TM2.Stmt.branch
+      (fun σ => σ.peekBit == some false)
+    ( -- Input empty → final delta check with inputBit=false
+      -- inputBit is already set to false by the peek above
+      Turing.TM2.Stmt.peek GreedyEnumStack.workR
+        (fun σ w => { σ with
           transW := w.getD gen.blank
-          -- Stash "workR had data" in peekBit
           peekBit := some w.isSome })
-      -- If workR had a symbol, pop it (will be replaced by applyDelta result)
-      <| Turing.TM2.Stmt.branch (fun σ => σ.peekBit == some true)
-        ( Turing.TM2.Stmt.pop GreedyEnumStack.workR (fun σ _ => σ)
-          <| Turing.TM2.Stmt.load (fun σ => applyDelta gen σ)
-          <| Turing.TM2.Stmt.branch (fun σ => σ.transHalted)
-            ( Turing.TM2.Stmt.goto (fun _ => GreedyEnumLabel.checkOutput) )
-            ( Turing.TM2.Stmt.goto (fun _ => GreedyEnumLabel.runStep_apply) ) )
-        ( -- workR was empty, transW = gen.blank, no need to pop
-          Turing.TM2.Stmt.load (fun σ => applyDelta gen σ)
-          <| Turing.TM2.Stmt.branch (fun σ => σ.transHalted)
-            ( Turing.TM2.Stmt.goto (fun _ => GreedyEnumLabel.checkOutput) )
-            ( Turing.TM2.Stmt.goto (fun _ => GreedyEnumLabel.runStep_apply) ) ) )
+      <| Turing.TM2.Stmt.branch
+          (fun σ => σ.peekBit == some true)
+        ( Turing.TM2.Stmt.pop GreedyEnumStack.workR
+            (fun σ _ => σ)
+          <| Turing.TM2.Stmt.load
+              (fun σ => applyDelta gen σ)
+          <| Turing.TM2.Stmt.branch
+              (fun σ => σ.transHalted)
+            ( Turing.TM2.Stmt.goto
+                (fun _ => GreedyEnumLabel.checkOutput) )
+            ( Turing.TM2.Stmt.goto
+                (fun _ => GreedyEnumLabel.clearWorkL) ))
+        ( Turing.TM2.Stmt.load
+            (fun σ => applyDelta gen σ)
+          <| Turing.TM2.Stmt.branch
+              (fun σ => σ.transHalted)
+            ( Turing.TM2.Stmt.goto
+                (fun _ => GreedyEnumLabel.checkOutput) )
+            ( Turing.TM2.Stmt.goto
+                (fun _ => GreedyEnumLabel.clearWorkL) )))
+    ( -- Pop the input bit (greedy: always consume one bit
+      -- per step)
+      Turing.TM2.Stmt.pop GreedyEnumStack.input
+        (fun σ _ => σ)
+      -- Peek workR to get head symbol, set transW
+      <| Turing.TM2.Stmt.peek GreedyEnumStack.workR
+          (fun σ w => { σ with
+            transW := w.getD gen.blank
+            peekBit := some w.isSome })
+      -- If workR had a symbol, pop it
+      <| Turing.TM2.Stmt.branch
+          (fun σ => σ.peekBit == some true)
+        ( Turing.TM2.Stmt.pop GreedyEnumStack.workR
+            (fun σ _ => σ)
+          <| Turing.TM2.Stmt.load
+              (fun σ => applyDelta gen σ)
+          <| Turing.TM2.Stmt.branch
+              (fun σ => σ.transHalted)
+            ( Turing.TM2.Stmt.goto
+                (fun _ => GreedyEnumLabel.checkOutput) )
+            ( Turing.TM2.Stmt.goto
+                (fun _ =>
+                  GreedyEnumLabel.runStep_apply) ) )
+        ( Turing.TM2.Stmt.load
+            (fun σ => applyDelta gen σ)
+          <| Turing.TM2.Stmt.branch
+              (fun σ => σ.transHalted)
+            ( Turing.TM2.Stmt.goto
+                (fun _ => GreedyEnumLabel.checkOutput) )
+            ( Turing.TM2.Stmt.goto
+                (fun _ =>
+                  GreedyEnumLabel.runStep_apply) ) ) )
 
 /-- Apply transition: push new head to workR, optionally emit output,
     then move work tape head. -/
@@ -883,10 +1060,6 @@ private lemma copyCounter_restore_loop
 
 end CopyCounterPhase
 
-
-
-
-
 section RunPhase
 
 /-- After initRun loads the generator state, we're at runStep with
@@ -1016,8 +1189,9 @@ private lemma checkOutput_matching_lists_halt
     (gen : Generator Γw Γo Q)
     (stackTarget : List Γo)
     (matched : List Γo)
-    (cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) GreedyEnumLabel (GreedyEnumSigma Γw Γo Q))
-    (hinv : CheckOutputInvariant stackTarget matched matched matched cfg) :
+    (cfg : GECfg Γw Γo Q)
+    (hinv : CheckOutputInvariant stackTarget matched
+        matched matched cfg) :
     TM2Halts gen cfg := by
   sorry
   -- Induction on matched, using checkOutput_step_match then checkOutput_both_empty_halts.
@@ -1134,19 +1308,143 @@ lemma initRun_no_match_to_copyCounter
   --    and counter_increment_to_copyCounter (you have this ✓)
   sorry
 
+/-- Once halted, stepNHalt stays fixed. -/
+lemma stepNHalt_of_isHalting
+    (gen : Generator Γw Γo Q)
+    (cfg : GenConfig Γw Γo Q)
+    (k : ℕ)
+    (hHalt : IsHalting gen (stepNHalt gen cfg k)) :
+    stepNHalt gen cfg (k + 1) = stepNHalt gen cfg k := by
+  simp only [stepNHalt, IsHalting, step] at *
+  -- stepNHalt gen cfg (k+1) = match step gen (stepNHalt gen cfg k) with
+  --   | none => stepNHalt gen cfg k | some c' => c'
+  -- hHalt : step gen (stepNHalt gen cfg k) = none
+  -- so it returns stepNHalt gen cfg k
+  simp [hHalt]
+
+lemma stepNHalt_fixed_of_isHalting
+    (gen : Generator Γw Γo Q)
+    (cfg : GenConfig Γw Γo Q)
+    (k m : ℕ)
+    (hHalt : IsHalting gen (stepNHalt gen cfg k)) :
+    stepNHalt gen cfg (k + m) = stepNHalt gen cfg k := by
+  induction m with
+  | zero => simp
+  | succ m ih =>
+    rw [← Nat.add_assoc, stepNHalt_of_isHalting]
+    · exact ih
+    · rwa [ih]
+
+/-- If `stepNHalt gen gcfg n` is halting, there exists a first halting
+    step `k ≤ n`, all earlier steps are non-halting, and stepNHalt is
+    the same at `k` and `n`. -/
+lemma exists_first_halt
+    (gen : Generator Γw Γo Q)
+    (gcfg : GenConfig Γw Γo Q)
+    (n : ℕ)
+    (hHalt : IsHalting gen (stepNHalt gen gcfg n)) :
+    ∃ k, k ≤ n ∧
+      IsHalting gen (stepNHalt gen gcfg k) ∧
+      (∀ i, i < k → ¬IsHalting gen (stepNHalt gen gcfg i)) ∧
+      stepNHalt gen gcfg n = stepNHalt gen gcfg k := by
+  -- The predicate is decidable, so Nat.find works
+  have hdec : DecidablePred (fun i => IsHalting gen (stepNHalt gen gcfg i)) := by
+    intro i
+    simp only [IsHalting, step]
+    exact inferInstance
+  have hexists : ∃ k, IsHalting gen (stepNHalt gen gcfg k) := ⟨n, hHalt⟩
+  let k := Nat.find hexists
+  have hk_halt : IsHalting gen (stepNHalt gen gcfg k) :=
+    Nat.find_spec hexists
+  have hk_min : ∀ i, i < k → ¬IsHalting gen (stepNHalt gen gcfg i) :=
+    fun i hi => Nat.find_min hexists hi
+  have hk_le : k ≤ n := by
+    by_contra h
+    push_neg at h
+    exact Nat.find_min hexists h hHalt
+  have hk_fixed : stepNHalt gen gcfg n = stepNHalt gen gcfg k := by
+    have : n = k + (n - k) := (Nat.add_sub_cancel' hk_le).symm
+    rw [this]
+    exact stepNHalt_fixed_of_isHalting gen gcfg k (n - k) hk_halt
+  exact ⟨k, hk_le, hk_halt, hk_min, hk_fixed⟩
+
 lemma initRun_match_halts
     (gen : Generator Γw Γo Q)
     (hGreedy : gen.IsGreedy)
-    (stackTarget cmpTarget : List Γo)
+    (stackTarget : List Γo)
     (counter : List (ULift.{u} Bool))
-    (cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) GreedyEnumLabel (GreedyEnumSigma Γw Γo Q))
+    (cfg : GECfg Γw Γo Q)
     (hinv : InitRunInvariant stackTarget counter cfg)
     (hHalt : IsHalting gen
-        (stepNHalt gen (initConfig gen (counterToInput counter)) counter.length))
-    (hOut : (stepNHalt gen (initConfig gen (counterToInput counter)) counter.length).output
-        = cmpTarget) :
+        (stepNHalt gen (initConfig gen (counterToInput counter))
+          counter.length))
+    (hOut : (stepNHalt gen (initConfig gen (counterToInput counter))
+          counter.length).output.reverse = stackTarget) :
     TM2Halts gen cfg := by
-  sorry
+  set gcfg₀ := initConfig gen (counterToInput counter)
+  set gcfgN := stepNHalt gen gcfg₀ counter.length
+  -- Phase 1: initRun → first runStep
+  obtain ⟨cfg₁, hr₁, hinv₁⟩ := initRun_to_runStep gen stackTarget counter cfg hinv
+  -- Phase 2: find first halting index
+  -- Since stepNHalt stops on halt, there exists a first k where it halts
+  obtain ⟨k, hk_le, hk_halt, hk_alive⟩ := exists_first_halt gen gcfg₀ counter.length hHalt
+-- Phase 3: run loop for k steps (all alive)
+  have hk_min := hk_alive.1
+  have hk_fixed := hk_alive.2
+  have hInitIdx : gcfg₀.inputIndex = 0 := by
+    simp [gcfg₀, initConfig]
+  obtain ⟨cfg₂, hr₂, hinv₂⟩ :=
+    runStep_loop gen hGreedy stackTarget counter gcfg₀ k cfg₁
+      hinv₁
+      (fun i hi => by
+        simp only [hInitIdx, zero_add]
+        exact Nat.lt_of_lt_of_le hi hk_le)
+      hk_min
+  -- Phase 4: at step k, delta returns none → checkOutput
+  -- IsHalting means step gen (stepNHalt gen gcfg₀ k) = none,
+  -- which means gen.δ on the current state/input/work = none.
+  have hk_input :
+      (stepNHalt gen gcfg₀ k).inputIndex < counter.length := by
+    sorry -- follows from greedy: each step increments inputIndex
+          -- by 1, starting at 0, k steps → inputIndex = k,
+          -- and k ≤ counter.length. Need k < counter.length
+          -- or handle k = counter.length separately.
+  have hk_delta : gen.δ (stepNHalt gen gcfg₀ k).state
+      ((stepNHalt gen gcfg₀ k).input
+        (stepNHalt gen gcfg₀ k).inputIndex)
+      ((stepNHalt gen gcfg₀ k).work
+        (stepNHalt gen gcfg₀ k).workIndex) = none := by
+    have h := hk_halt
+    simp only [IsHalting, step] at h
+    revert h
+    cases hd : gen.δ
+      (stepNHalt gen gcfg₀ k).state
+      ((stepNHalt gen gcfg₀ k).input
+        (stepNHalt gen gcfg₀ k).inputIndex)
+      ((stepNHalt gen gcfg₀ k).work
+        (stepNHalt gen gcfg₀ k).workIndex) with
+    | none => intro; rfl
+    | some val =>
+      obtain ⟨q', w', out?, inDir, workDir⟩ := val
+      simp
+  obtain ⟨cfg₃, hr₃, hinv₃⟩ :=
+    runStep_halted_to_checkOutput gen stackTarget counter
+      (stepNHalt gen gcfg₀ k) cfg₂ hinv₂
+      hk_input hk_delta
+  -- Phase 5: output matches target → halt
+  have hOutK :
+      (stepNHalt gen gcfg₀ k).output.reverse = stackTarget := by
+    have : gcfgN = stepNHalt gen gcfg₀ k := hk_fixed
+    rw [this] at hOut; exact hOut
+  obtain ⟨cfg₄, hr₄, hhalted⟩ :=
+    checkOutput_matching_lists_halt gen stackTarget
+      stackTarget cfg₃
+      (by rw [← hOutK] at hinv₃; rw [← hOutK]; exact hinv₃)
+  exact ⟨cfg₄,
+    TM2Reaches_trans
+      (TM2Reaches_trans
+        (TM2Reaches_trans hr₁ hr₂) hr₃) hr₄,
+    hhalted⟩
 
 section CounterIncrement
 
