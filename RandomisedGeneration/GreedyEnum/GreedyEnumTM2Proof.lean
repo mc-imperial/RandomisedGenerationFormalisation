@@ -175,18 +175,20 @@ structure RunStepMoveHeadInvariant
 /-- When input is exhausted and the generator halts, runStep branches
     to checkOutput. -/
 structure CheckOutputInvariant
-    (stackTarget cmpTarget : List Γo)
+    (stackTarget : List Γo)
+    (counter : List (ULift.{u} Bool))
     (remaining_target : List Γo)
     (remaining_output : List Γo)
-    (cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) GreedyEnumLabel (GreedyEnumSigma Γw Γo Q))
+    (cfg : GECfg Γw Γo Q)
     : Prop where
   h_label       : cfg.l = some GreedyEnumLabel.checkOutput
-  h_target      : cfg.stk GreedyEnumStack.target      = remaining_target
-  h_output      : cfg.stk GreedyEnumStack.output      = remaining_output
-  -- saveTarget holds the already-compared prefix (reversed)
-  h_saveTarget  : cfg.stk GreedyEnumStack.saveTarget   =
+  h_target      : cfg.stk GreedyEnumStack.target = remaining_target
+  h_output      : cfg.stk GreedyEnumStack.output = remaining_output
+  h_saveTarget  : cfg.stk GreedyEnumStack.saveTarget =
       (stackTarget.take (stackTarget.length - remaining_target.length)).reverse
+  h_counter     : cfg.stk GreedyEnumStack.counter = counter
   h_saveCounter : cfg.stk GreedyEnumStack.saveCounter = []
+  h_input       : cfg.stk GreedyEnumStack.input = []
 
 structure ClearInputInvariant
     (target : List Γo)
@@ -441,7 +443,7 @@ private lemma runStep_exhausted_halted_to_checkOutput
     (hHalted : IsHalting gen gcfg)
     (hInput : gcfg.input = counterToInput counter) :
     ∃ cfg', TM2Reaches gen cfg cfg' ∧
-      CheckOutputInvariant stackTarget gcfg.output.reverse
+      CheckOutputInvariant stackTarget counter
         stackTarget gcfg.output.reverse cfg' := by
   sorry
   -- runStep peeks input (empty), branches to checkOutput.
@@ -456,12 +458,12 @@ private lemma runStep_halted_to_checkOutput
     (stackTarget : List Γo)
     (counter : List (ULift.{u} Bool))
     (gcfg : GenConfig Γw Γo Q)
-    (cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) GreedyEnumLabel (GreedyEnumSigma Γw Γo Q))
+    (cfg : GECfg Γw Γo Q)
     (hinv : RunStepInvariant gen stackTarget counter gcfg cfg)
     (hInput : gcfg.inputIndex < counter.length)
     (hHalted : gen.δ gcfg.state (gcfg.input gcfg.inputIndex) (gcfg.work gcfg.workIndex) = none) :
     ∃ cfg', TM2Reaches gen cfg cfg' ∧
-      CheckOutputInvariant stackTarget gcfg.output.reverse
+      CheckOutputInvariant stackTarget counter
         stackTarget gcfg.output.reverse cfg' := by
   sorry
   -- runStep peeks input (non-empty), pops, peeks workR, applies delta,
@@ -470,12 +472,15 @@ private lemma runStep_halted_to_checkOutput
 /-- One iteration of checkOutput: both have elements and they match. -/
 private lemma checkOutput_step_match
     (gen : Generator Γw Γo Q)
-    (stackTarget cmpTarget : List Γo)
+    (stackTarget : List Γo)
+    (counter : List (ULift.{u} Bool))
     (t : Γo) (rest_t rest_o : List Γo)
-    (cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) GreedyEnumLabel (GreedyEnumSigma Γw Γo Q))
-    (hinv : CheckOutputInvariant stackTarget cmpTarget (t :: rest_t) (t :: rest_o) cfg) :
+    (cfg : GECfg Γw Γo Q)
+    (hinv : CheckOutputInvariant stackTarget counter
+        (t :: rest_t) (t :: rest_o) cfg) :
     ∃ cfg', TM2Reaches gen cfg cfg' ∧
-      CheckOutputInvariant stackTarget cmpTarget rest_t rest_o cfg' := by
+      CheckOutputInvariant stackTarget counter
+        rest_t rest_o cfg' := by
   sorry
   -- Peek target (some t), peek output (some t), not both none,
   -- not one none, compare equal → pop both, push target to saveTarget, goto checkOutput.
@@ -483,25 +488,60 @@ private lemma checkOutput_step_match
 /-- checkOutput with both stacks empty → halt. -/
 private lemma checkOutput_both_empty_halts
     (gen : Generator Γw Γo Q)
-    (stackTarget cmpTarget : List Γo)
-    (cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) GreedyEnumLabel (GreedyEnumSigma Γw Γo Q))
-    (hinv : CheckOutputInvariant stackTarget cmpTarget [] [] cfg) :
+    (stackTarget : List Γo)
+    (counter : List (ULift.{u} Bool))
+    (cfg : GECfg Γw Γo Q)
+    (hinv : CheckOutputInvariant stackTarget counter
+        [] [] cfg) :
     TM2Halts gen cfg := by
-  sorry
-  -- Peek target (none), peek output (none), both none → halt.
-  -- One step to halted config. TM2Halts needs a cfg' with step = none.
+  -- One TM2 step: peek target (none), peek output (none),
+  -- both none → halt
+  refine ⟨⟨none,
+           { cfg.var with
+             peekTarget := none
+             peekOut := none },
+           cfg.stk⟩, ?_, ?_⟩
+  · apply Relation.ReflTransGen.single
+    cases cfg with
+    | mk l v S =>
+      simp only at *
+      have hl := hinv.h_label; simp only at hl; subst hl
+      have ht := hinv.h_target; simp only at ht
+      have ho := hinv.h_output; simp only at ho
+      simp only [GEStep, Turing.TM2.step,
+                 greedyEnumMachine, checkOutput,
+                 Turing.TM2.stepAux,
+                 ht, ho, List.head?,
+                 Option.isNone, Bool.and_self,
+                 cond_true]
+  · -- GEStep on halted config = none
+    simp [GEStep, Turing.TM2.step]
 
 /-- Chain checkOutput over matching lists. -/
 private lemma checkOutput_matching_lists_halt
     (gen : Generator Γw Γo Q)
     (stackTarget : List Γo)
+    (counter : List (ULift.{u} Bool))
     (matched : List Γo)
     (cfg : GECfg Γw Γo Q)
-    (hinv : CheckOutputInvariant stackTarget matched
+    (hinv : CheckOutputInvariant stackTarget counter
         matched matched cfg) :
     TM2Halts gen cfg := by
   sorry
   -- Induction on matched, using checkOutput_step_match then checkOutput_both_empty_halts.
+
+private lemma checkOutput_mismatch_to_clearInput
+    (gen : Generator Γw Γo Q)
+    (stackTarget : List Γo)
+    (counter : List (ULift.{u} Bool))
+    (remaining_target remaining_output : List Γo)
+    (cfg : GECfg Γw Γo Q)
+    (hinv : CheckOutputInvariant stackTarget counter
+        remaining_target remaining_output cfg)
+    (hMismatch : remaining_target ≠ remaining_output) :
+    ∃ cfg', TM2Reaches gen cfg cfg' ∧
+      ClearInputInvariant stackTarget counter cfg' := by
+  sorry
 
 end CheckOutputPhase
 
@@ -720,7 +760,7 @@ lemma initRun_match_halts
       rw [this] at hOut; exact hOut
     obtain ⟨cfg₄, hr₄, hhalted⟩ :=
       checkOutput_matching_lists_halt gen stackTarget
-        stackTarget cfg₃
+        counter stackTarget cfg₃
         (by rw [← hOutK] at hinv₃; rw [← hOutK]
             exact hinv₃)
     exact ⟨cfg₄,
@@ -750,7 +790,7 @@ lemma initRun_match_halts
       rw [this] at hOut; exact hOut
     obtain ⟨cfg₄, hr₄, hhalted⟩ :=
       checkOutput_matching_lists_halt gen stackTarget
-        stackTarget cfg₃
+        counter stackTarget cfg₃
         (by rw [← hOutK] at hinv₃; rw [← hOutK]
             exact hinv₃)
     exact ⟨cfg₄,
@@ -1428,37 +1468,6 @@ lemma clearInput_to_counterIncrement
 end ClearPhase
 
 section NoMatchPhase
-
-/-- checkOutput with a mismatch → goto checkOutput_restoreTarget. -/
-private lemma checkOutput_mismatch_to_restore
-    (gen : Generator Γw Γo Q)
-    (stackTarget cmpTarget : List Γo)
-    (remaining_target remaining_output : List Γo)
-    (cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) GreedyEnumLabel (GreedyEnumSigma Γw Γo Q))
-    (hinv : CheckOutputInvariant stackTarget cmpTarget remaining_target remaining_output cfg)
-    (hMismatch : remaining_target ≠ [] ∨ remaining_output ≠ [])
-    -- Plus: they don't match at the head
-    :
-    ∃ cfg', TM2Reaches gen cfg cfg' ∧
-      cfg'.l = some GreedyEnumLabel.checkOutput_restoreTarget ∧
-      -- target is partially consumed, saveTarget has the consumed prefix
-      True := by
-  sorry
-
-/-- Restore target from saveTarget, then reach clearInput. -/
-private lemma checkOutput_restoreTarget_to_clearInput
-    (gen : Generator Γw Γo Q)
-    (stackTarget : List Γo)
-    (counter : List (ULift.{u} Bool))
-    (cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) GreedyEnumLabel (GreedyEnumSigma Γw Γo Q))
-    (h_label : cfg.l = some GreedyEnumLabel.checkOutput_restoreTarget)
-    -- ... stack conditions: target partially consumed, saveTarget has prefix ...
-    :
-    ∃ cfg', TM2Reaches gen cfg cfg' ∧
-      ClearInputInvariant stackTarget counter cfg' := by
-  sorry
-  -- Loop: pop saveTarget, push to target, until saveTarget empty.
-  -- Then goto clearInput.
 
 /-- When input is exhausted and generator did NOT halt,
     runStep goes to clearWorkL (via the "input empty" branch).
