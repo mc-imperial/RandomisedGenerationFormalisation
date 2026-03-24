@@ -503,8 +503,14 @@ private lemma checkOutput_step_match
       (t :: rest_t).length] = t := by
     have h : stackTarget[stackTarget.length - (t :: rest_t).length]? = some t := by
       rw [← List.head?_drop, hSuffix]; rfl
-    simp at h
-    sorry
+    simp only [List.length_cons] at h
+    have hEq : stackTarget.length - (t :: rest_t).length =
+        stackTarget.length - (rest_t.length + 1) := by
+      simp [List.length_cons]
+    simp only [List.length_cons] at hIdx ⊢
+    have := List.getElem?_eq_getElem hIdx
+    rw [this] at h
+    exact Option.some.inj h
   -- TM2 steps: peek target (some t), peek output (some t),
   -- not both none, not one none, compare equal,
   -- pop both, push target to saveTarget, goto checkOutput
@@ -550,10 +556,24 @@ private lemma checkOutput_step_match
       rw [show stackTarget.length - rest_t.length =
           (stackTarget.length -
             (t :: rest_t).length) + 1
-          from by simp [List.length_cons]; sorry]
-      sorry
+          from by
+            simp [List.length_cons]
+            have : (t :: rest_t).length = rest_t.length + 1 := by simp [List.length_cons]
+            omega
+          ]
+      simp only []
+      rw [take_succ_reverse_cons stackTarget (stackTarget.length - (t :: rest_t).length) hIdx, hAt]
     · -- h_suffix: stackTarget.drop (...) = rest_t
-      sorry
+      have hEq : stackTarget.length - rest_t.length =
+        (stackTarget.length - (t :: rest_t).length) + 1 := by
+        have : (t :: rest_t).length = rest_t.length + 1 := by
+          simp [List.length_cons]
+        omega
+      rw [hEq]
+      have : List.drop ((stackTarget.length - (t :: rest_t).length) + 1) stackTarget =
+        List.drop 1 (List.drop (stackTarget.length - (t :: rest_t).length) stackTarget) := by
+        rw [List.drop_drop]
+      rw [this, hSuffix, show List.drop 1 (t :: rest_t) = rest_t from rfl]
 
 /-- checkOutput with both stacks empty → halt. -/
 private lemma checkOutput_both_empty_halts
