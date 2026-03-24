@@ -197,14 +197,13 @@ structure CheckOutputInvariant
 structure ClearInputInvariant
     (target : List Γo)
     (counter : List (ULift.{u} Bool))
-    (cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) GreedyEnumLabel (GreedyEnumSigma Γw Γo Q))
+    (cfg : GECfg Γw Γo Q)
     : Prop where
   h_label       : cfg.l = some GreedyEnumLabel.clearInput
-  h_target      : cfg.stk GreedyEnumStack.target      = target
-  h_counter     : cfg.stk GreedyEnumStack.counter     = counter
+  h_target      : cfg.stk GreedyEnumStack.target = target
+  h_counter     : cfg.stk GreedyEnumStack.counter = counter
   h_saveCounter : cfg.stk GreedyEnumStack.saveCounter = []
-  h_saveTarget  : cfg.stk GreedyEnumStack.saveTarget  = []
-  h_output      : cfg.stk GreedyEnumStack.output      = []
+  h_saveTarget  : cfg.stk GreedyEnumStack.saveTarget = []
 
 structure CounterIncrementInvariant
     (target : List Γo)
@@ -628,6 +627,86 @@ private lemma checkOutput_matching_lists_halt
     obtain ⟨cfg'', hr', hhalted⟩ := ih cfg' hinv'
     exact ⟨cfg'', TM2Reaches_trans hr hr', hhalted⟩
 
+/-- Restore target from saveTarget, then goto clearInput. -/
+private lemma checkOutput_restore_to_clearInput
+    (gen : Generator Γw Γo Q)
+    (stackTarget : List Γo)
+    (counter : List (ULift.{u} Bool))
+    (remaining_target : List Γo)
+    (saved : List Γo)
+    (cfg : GECfg Γw Γo Q)
+    (h_label : cfg.l = some GreedyEnumLabel.checkOutput_restoreTarget)
+    (h_target : cfg.stk GreedyEnumStack.target = remaining_target)
+    (h_saveTarget : cfg.stk GreedyEnumStack.saveTarget = saved)
+    (h_counter : cfg.stk GreedyEnumStack.counter = counter)
+    (h_saveCounter : cfg.stk GreedyEnumStack.saveCounter = [])
+    (h_input : cfg.stk GreedyEnumStack.input = [])
+    (h_concat : saved.reverse ++ remaining_target = stackTarget) :
+    ∃ cfg', TM2Reaches gen cfg cfg' ∧
+      ClearInputInvariant stackTarget counter cfg' := by
+  induction saved generalizing remaining_target cfg with
+  | nil =>
+    -- saveTarget empty: one step, goto clearInput
+    simp only [List.reverse_nil, List.nil_append] at h_concat
+    refine ⟨⟨some GreedyEnumLabel.clearInput,
+             { cfg.var with peekTarget := none },
+             cfg.stk⟩, ?_, ?_⟩
+    · apply Relation.ReflTransGen.single
+      cases cfg with
+      | mk l v S =>
+        simp only at *; subst h_label
+        simp only [GEStep, Turing.TM2.step,
+                   greedyEnumMachine,
+                   checkOutput_restoreTarget,
+                   Turing.TM2.stepAux,
+                   h_saveTarget, List.head?,
+                   Option.isNone, cond_true]
+    · exact ⟨rfl, by rw [← h_concat]; exact h_target,
+           h_counter, h_saveCounter, h_saveTarget⟩
+  | cons s rest ih =>
+    -- Pop s from saveTarget, push to target, loop
+    have hstep : ∃ cfg₁, TM2Reaches gen cfg cfg₁ ∧
+        cfg₁.l = some GreedyEnumLabel.checkOutput_restoreTarget ∧
+        cfg₁.stk GreedyEnumStack.target = s :: remaining_target ∧
+        cfg₁.stk GreedyEnumStack.saveTarget = rest ∧
+        cfg₁.stk GreedyEnumStack.counter = counter ∧
+        cfg₁.stk GreedyEnumStack.saveCounter = [] ∧
+        cfg₁.stk GreedyEnumStack.input = [] := by
+      refine ⟨⟨some GreedyEnumLabel.checkOutput_restoreTarget,
+               { cfg.var with peekTarget := some s },
+               fun k => match k with
+                 | GreedyEnumStack.target => s :: remaining_target
+                 | GreedyEnumStack.saveTarget => rest
+                 | other => cfg.stk other⟩,
+              ?_, rfl, rfl, rfl, h_counter,
+              h_saveCounter, h_input⟩
+      apply Relation.ReflTransGen.single
+      cases cfg with
+      | mk l v S =>
+        simp only at *; subst h_label
+        simp only [GEStep, Turing.TM2.step,
+                   greedyEnumMachine,
+                   checkOutput_restoreTarget,
+                   Turing.TM2.stepAux,
+                   h_saveTarget, List.head?,
+                   Option.isNone, cond_false,
+                   List.tail_cons, Option.getD_some]
+        simp only [Option.some.injEq,
+                   Turing.TM2.Cfg.mk.injEq, true_and]
+        ext k; cases k <;>
+          simp [Function.update, h_target]
+    obtain ⟨cfg₁, hr₁, hl₁, ht₁, hst₁, hc₁,
+            hsc₁, hi₁⟩ := hstep
+    have hConcat : rest.reverse ++ (s :: remaining_target)
+        = stackTarget := by
+      simp [List.reverse_cons, List.append_assoc] at h_concat
+      simpa [List.reverse_cons, List.append_assoc,
+             List.singleton_append] using h_concat
+    obtain ⟨cfg₂, hr₂, hinv₂⟩ :=
+      ih (s :: remaining_target) cfg₁ hl₁ ht₁ hst₁
+        hc₁ hsc₁ hi₁ hConcat
+    exact ⟨cfg₂, TM2Reaches_trans hr₁ hr₂, hinv₂⟩
+
 private lemma checkOutput_mismatch_to_clearInput
     (gen : Generator Γw Γo Q)
     (stackTarget : List Γo)
@@ -639,7 +718,174 @@ private lemma checkOutput_mismatch_to_clearInput
     (hMismatch : remaining_target ≠ remaining_output) :
     ∃ cfg', TM2Reaches gen cfg cfg' ∧
       ClearInputInvariant stackTarget counter cfg' := by
-  sorry
+  induction remaining_target generalizing remaining_output cfg with
+  | nil =>
+    -- remaining_target = [], remaining_output ≠ [] (from hMismatch)
+    -- checkOutput: peek target (none), peek output (some _),
+    -- not both none, one is none → goto checkOutput_restoreTarget
+    cases remaining_output with
+    | nil => exact absurd rfl hMismatch
+    | cons o rest_o =>
+      have hstep : ∃ cfgR : GECfg Γw Γo Q,
+          TM2Reaches gen cfg cfgR ∧
+          cfgR.l = some GreedyEnumLabel.checkOutput_restoreTarget ∧
+          cfgR.stk GreedyEnumStack.target = [] ∧
+          cfgR.stk GreedyEnumStack.saveTarget =
+            cfg.stk GreedyEnumStack.saveTarget ∧
+          cfgR.stk GreedyEnumStack.counter = counter ∧
+          cfgR.stk GreedyEnumStack.saveCounter = [] ∧
+          cfgR.stk GreedyEnumStack.input = [] := by
+        refine ⟨⟨some GreedyEnumLabel.checkOutput_restoreTarget,
+                 { cfg.var with
+                   peekTarget := none
+                   peekOut := some o },
+                 cfg.stk⟩, ?_, rfl, hinv.h_target,
+               rfl, hinv.h_counter, hinv.h_saveCounter,
+               hinv.h_input⟩
+        apply Relation.ReflTransGen.single
+        cases cfg with
+        | mk l v S =>
+          simp only at *
+          have hl := hinv.h_label; simp only at hl; subst hl
+          have ht := hinv.h_target; simp only at ht
+          have ho := hinv.h_output; simp only at ho
+          simp only [GEStep, Turing.TM2.step,
+                     greedyEnumMachine, checkOutput,
+                     Turing.TM2.stepAux,
+                     ht, ho, List.head?,
+                     Option.isNone, Bool.true_and,
+                     cond_false, Bool.true_or,
+                     cond_true]
+      obtain ⟨cfgR, hrR, hlR, htR, hstR, hcR, hscR, hiR⟩ := hstep
+      -- The saved target on cfgR equals what was on cfg
+      -- hinv.h_saveTarget tells us about cfg's saveTarget
+      -- hinv.h_suffix with remaining = [] gives stackTarget.drop (stackTarget.length) = []
+      -- and hinv.h_saveTarget says cfg.stk saveTarget =
+      -- (stackTarget.take stackTarget.length).reverse = stackTarget.reverse
+      -- so cfgR.stk saveTarget = stackTarget.reverse
+      have hSaved : cfgR.stk GreedyEnumStack.saveTarget =
+          stackTarget.reverse := by
+        rw [hstR, hinv.h_saveTarget]
+        simp
+      have hConcat : stackTarget.reverse.reverse
+          ++ ([] : List Γo) = stackTarget := by
+        simp [List.reverse_reverse]
+      obtain ⟨cfg', hr', hinv'⟩ :=
+        checkOutput_restore_to_clearInput gen
+          stackTarget counter ([] : List Γo)
+          stackTarget.reverse cfgR
+          hlR htR hSaved hcR hscR hiR
+          hConcat
+      exact ⟨cfg', TM2Reaches_trans hrR hr', hinv'⟩
+  | cons t rest_t ih =>
+    cases remaining_output with
+    | nil =>
+      -- remaining_target = t :: rest_t, remaining_output = []
+      -- checkOutput: peek target (some t), peek output (none),
+      -- one is none → goto checkOutput_restoreTarget
+      obtain ⟨cfgR, hrR, hlR, htR, hstR, hcR,
+              hscR, hiR, hoR⟩ :
+          ∃ cfgR : GECfg Γw Γo Q,
+            TM2Reaches gen cfg cfgR ∧
+            cfgR.l = some GreedyEnumLabel.checkOutput_restoreTarget ∧
+            cfgR.stk GreedyEnumStack.target = t :: rest_t ∧
+            cfgR.stk GreedyEnumStack.saveTarget =
+              (stackTarget.take
+                (stackTarget.length -
+                  (t :: rest_t).length)).reverse ∧
+            cfgR.stk GreedyEnumStack.counter = counter ∧
+            cfgR.stk GreedyEnumStack.saveCounter = [] ∧
+            cfgR.stk GreedyEnumStack.input = [] ∧
+            cfgR.stk GreedyEnumStack.output = [] := by
+        refine ⟨⟨some GreedyEnumLabel.checkOutput_restoreTarget,
+               { cfg.var with
+                 peekTarget := some t
+                 peekOut := none },
+               cfg.stk⟩, ?_, rfl, hinv.h_target,
+             hinv.h_saveTarget, hinv.h_counter,
+             hinv.h_saveCounter, hinv.h_input,
+             hinv.h_output⟩
+        apply Relation.ReflTransGen.single
+        cases cfg with
+        | mk l v S =>
+          simp only at *
+          have hl := hinv.h_label; simp only at hl; subst hl
+          have ht := hinv.h_target; simp only at ht
+          have ho := hinv.h_output; simp only at ho
+          simp only [GEStep, Turing.TM2.step,
+                    greedyEnumMachine, checkOutput,
+                    Turing.TM2.stepAux,
+                    ht, ho, List.head?,
+                    Option.isNone, Bool.and_true,
+                    cond_false, Bool.or_true,
+                    cond_true]
+      obtain ⟨cfg', hr', hinv'⟩ :=
+        checkOutput_restore_to_clearInput gen
+          stackTarget counter (t :: rest_t) _ cfgR
+          hlR htR hstR hcR hscR hiR
+          (by have := hinv.h_suffix
+              simp only [List.length_cons, List.reverse_reverse] at this ⊢
+              rw [← this, List.take_append_drop]) -- take/drop concat
+      exact ⟨cfg', TM2Reaches_trans hrR hr', hinv'⟩
+    | cons o rest_o =>
+      -- Both non-empty
+      by_cases heq : t = o
+      · -- Heads match: consume and recurse
+        subst heq
+        obtain ⟨cfg₁, hr₁, hinv₁⟩ :=
+          checkOutput_step_match gen stackTarget
+            counter t rest_t rest_o cfg hinv
+        have hMismatch' : rest_t ≠ rest_o := by
+          intro h; apply hMismatch
+          rw [h]
+        obtain ⟨cfg₂, hr₂, hinv₂⟩ :=
+          ih rest_o cfg₁ hinv₁ hMismatch'
+        exact ⟨cfg₂, TM2Reaches_trans hr₁ hr₂, hinv₂⟩
+      · -- Heads differ: one TM2 step to checkOutput_restoreTarget
+        obtain ⟨cfgR, hrR, hlR, htR, hstR, hcR,
+                hscR, hiR⟩ :
+            ∃ cfgR : GECfg Γw Γo Q,
+              TM2Reaches gen cfg cfgR ∧
+              cfgR.l = some GreedyEnumLabel.checkOutput_restoreTarget ∧
+              cfgR.stk GreedyEnumStack.target = t :: rest_t ∧
+              cfgR.stk GreedyEnumStack.saveTarget =
+                (stackTarget.take
+                  (stackTarget.length -
+                    (t :: rest_t).length)).reverse ∧
+              cfgR.stk GreedyEnumStack.counter = counter ∧
+              cfgR.stk GreedyEnumStack.saveCounter = [] ∧
+              cfgR.stk GreedyEnumStack.input = [] := by
+          refine ⟨⟨some GreedyEnumLabel.checkOutput_restoreTarget,
+                  { cfg.var with
+                    peekTarget := some t
+                    peekOut := some o },
+                  cfg.stk⟩, ?_, rfl, hinv.h_target,
+                hinv.h_saveTarget, hinv.h_counter,
+                hinv.h_saveCounter, hinv.h_input⟩
+          apply Relation.ReflTransGen.single
+          cases cfg with
+          | mk l v S =>
+            simp only at *
+            have hl := hinv.h_label; simp only at hl; subst hl
+            have ht := hinv.h_target; simp only at ht
+            have ho := hinv.h_output; simp only at ho
+            have hne : decide (t = o) = false := by
+              simp [heq]
+            simp only [GEStep, Turing.TM2.step,
+                      greedyEnumMachine, checkOutput,
+                      Turing.TM2.stepAux,
+                      ht, ho, List.head?,
+                      Option.isNone, Bool.and_false,
+                      cond_false, Bool.or_false,
+                      hne, cond_false]
+        obtain ⟨cfg', hr', hinv'⟩ :=
+          checkOutput_restore_to_clearInput gen
+            stackTarget counter (t :: rest_t) _ cfgR
+            hlR htR hstR hcR hscR hiR
+            (by have := hinv.h_suffix
+                simp only [List.length_cons, List.reverse_reverse] at this ⊢
+                rw [← this, List.take_append_drop]) -- take/drop concat
+        exact ⟨cfg', TM2Reaches_trans hrR hr', hinv'⟩
 
 end CheckOutputPhase
 
