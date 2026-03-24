@@ -519,20 +519,20 @@ def greedyEnumMachine (gen : Generator Γw Γo Q) :
   | GreedyEnumLabel.counter_increment_loop   => counter_increment_loop
   | GreedyEnumLabel.counter_increment_restore => counter_increment_restore
 
+abbrev GECfg (Γw Γo Q : Type u) [FinEnum Γw] [Inhabited Γo] [FinEnum Γo] [FinEnum Q] :=
+  Turing.TM2.Cfg.{u,u,u,u}
+    (stackAlphabet Γw Γo Q)
+    GreedyEnumLabel.{u}
+    (GreedyEnumSigma Γw Γo Q)
 
-
-def tm2Step (gen : Generator Γw Γo Q) :=
+abbrev GEStep (gen : Generator Γw Γo Q) : GECfg Γw Γo Q → Option (GECfg Γw Γo Q) :=
   Turing.TM2.step (greedyEnumMachine gen)
 
-def TM2Reaches (gen : Generator Γw Γo Q)
-    (cfg cfg' : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) GreedyEnumLabel (GreedyEnumSigma Γw Γo Q))
-    : Prop :=
-  Relation.ReflTransGen (fun a b => tm2Step gen a = some b) cfg cfg'
+def TM2Reaches (gen : Generator Γw Γo Q) (cfg cfg' : GECfg Γw Γo Q) : Prop :=
+  Relation.ReflTransGen (fun a b => GEStep gen a = some b) cfg cfg'
 
-def TM2Halts (gen : Generator Γw Γo Q)
-    (cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) GreedyEnumLabel (GreedyEnumSigma Γw Γo Q))
-    : Prop :=
-  ∃ cfg', TM2Reaches gen cfg cfg' ∧ tm2Step gen cfg' = none
+def TM2Halts (gen : Generator Γw Γo Q) (cfg : GECfg Γw Γo Q) : Prop :=
+  ∃ cfg', TM2Reaches gen cfg cfg' ∧ GEStep gen cfg' = none
 
 lemma TM2Reaches_trans {gen : Generator Γw Γo Q}
     {cfg₁ cfg₂ cfg₃ : Turing.TM2.Cfg (stackAlphabet Γw Γo Q)
@@ -540,8 +540,6 @@ lemma TM2Reaches_trans {gen : Generator Γw Γo Q}
     (h₁ : TM2Reaches gen cfg₁ cfg₂) (h₂ : TM2Reaches gen cfg₂ cfg₃) :
     TM2Reaches gen cfg₁ cfg₃ :=
   Relation.ReflTransGen.trans h₁ h₂
-
-
 
 def WorkTapeMatches
     (gen : Generator Γw Γo Q)
@@ -767,7 +765,7 @@ private lemma copyCounter_loop
         simp only at *
         have hl := hinv.h_label; simp only at hl; subst hl
         have hc : S GreedyEnumStack.counter = [] := hinv.h_counter
-        simp only [tm2Step, Turing.TM2.step, greedyEnumMachine,
+        simp only [Turing.TM2.step, greedyEnumMachine,
                    copyCounter, Turing.TM2.stepAux, hc, List.head?,
                    Option.map, Option.isNone, cond_true]
     · exact ⟨rfl, hinv.h_target, hinv.h_counter, hinv.h_input,
@@ -788,7 +786,7 @@ private lemma copyCounter_loop
           have hl := hinv.h_label; simp only at hl; subst hl
           have hc : S GreedyEnumStack.counter = b :: rest := hinv.h_counter
           have hsc : S GreedyEnumStack.saveCounter = saved := hinv.h_saveCounter
-          simp only [tm2Step, Turing.TM2.step, greedyEnumMachine,
+          simp only [Turing.TM2.step, greedyEnumMachine,
                      copyCounter, Turing.TM2.stepAux, hc]
           cases b with
           | up bv =>
@@ -823,7 +821,7 @@ private lemma copyCounter_restore_loop
       | mk l v S =>
         have hl := hinv.h_label; simp only at hl; subst hl
         have hsc : S GreedyEnumStack.saveCounter = [] := hinv.h_saveCounter
-        simp only [tm2Step, Turing.TM2.step, greedyEnumMachine,
+        simp only [Turing.TM2.step, greedyEnumMachine,
                    copyCounter_restore, Turing.TM2.stepAux, hsc,
                    List.head?, Option.map, Option.isNone, cond_true]
     · exact ⟨rfl, hinv.h_target, hinv.h_counter, hinv.h_input,
@@ -846,7 +844,7 @@ private lemma copyCounter_restore_loop
           have hsc : S GreedyEnumStack.saveCounter = b :: rest := hinv.h_saveCounter
           have hc : S GreedyEnumStack.counter = restored := hinv.h_counter
           have hi : S GreedyEnumStack.input = restored := hinv.h_input
-          simp only [tm2Step, Turing.TM2.step, greedyEnumMachine,
+          simp only [Turing.TM2.step, greedyEnumMachine,
                      copyCounter_restore, Turing.TM2.stepAux, hsc]
           cases b with
           | up bv =>
@@ -968,7 +966,7 @@ private lemma counter_increment_to_loop
     apply Relation.ReflTransGen.single
     cases cfg with
     | mk l v S =>
-      simp only [tm2Step, Turing.TM2.step]
+      simp only [Turing.TM2.step]
       have hl := hinv.h_label
       simp only at hl
       subst hl
@@ -1005,7 +1003,7 @@ private lemma counter_increment_loop_to_restore
           have hl := hinv.h_label; simp only at hl; subst hl
           have hctr : S GreedyEnumStack.counter = [] := hinv.h_counter
           have hcarry := hinv.h_carry; simp only at hcarry
-          simp only [tm2Step, Turing.TM2.step, greedyEnumMachine,
+          simp only [Turing.TM2.step, greedyEnumMachine,
                      counter_increment_loop, Turing.TM2.stepAux]
           rw [hctr]
           simp [List.head?, Option.map, Option.isNone, cond_true, hcarry]
@@ -1027,7 +1025,7 @@ private lemma counter_increment_loop_to_restore
           have hctr : S GreedyEnumStack.counter = [] := hinv.h_counter
           have hcarry := hinv.h_carry; simp only at hcarry
           have hsc := hinv.h_saveCounter; simp only at hsc
-          simp only [tm2Step, Turing.TM2.step, greedyEnumMachine,
+          simp only [Turing.TM2.step, greedyEnumMachine,
                      counter_increment_loop, Turing.TM2.stepAux]
           rw [hctr]
           simp only [Option.isNone, Option.map, List.head?, hcarry, Option.getD_some, cond_true,
@@ -1064,7 +1062,7 @@ private lemma counter_increment_loop_to_restore
             have hctr : S GreedyEnumStack.counter = ⟨bv⟩ :: rest := hinv.h_counter
             have hcarry := hinv.h_carry; simp only at hcarry
             have hsc := hinv.h_saveCounter; simp only at hsc
-            simp only [tm2Step, Turing.TM2.step, greedyEnumMachine,
+            simp only [Turing.TM2.step, greedyEnumMachine,
                        counter_increment_loop, Turing.TM2.stepAux]
             rw [hctr]
             simp only [Option.isNone, Option.map, List.head?, hcarry, Option.getD_some,
@@ -1122,7 +1120,7 @@ private lemma restore_loop
         have hl := hinv.h_label
         simp only at hl
         subst hl
-        simp only [tm2Step, Turing.TM2.step, greedyEnumMachine,
+        simp only [Turing.TM2.step, greedyEnumMachine,
                     counter_increment_restore, Turing.TM2.stepAux]
         have hsc : S GreedyEnumStack.saveCounter = [] := hinv.h_saveCounter
         rw [hsc]
@@ -1149,7 +1147,7 @@ private lemma restore_loop
           have hl := hinv.h_label; simp only at hl; subst hl
           have hsc : S GreedyEnumStack.saveCounter = b :: rest' := hinv.h_saveCounter
           have hc : S GreedyEnumStack.counter = moved := hinv.h_counter
-          simp only [tm2Step, Turing.TM2.step, greedyEnumMachine,
+          simp only [Turing.TM2.step, greedyEnumMachine,
                     counter_increment_restore, Turing.TM2.stepAux]
           rw [hsc]
           cases b with
@@ -1265,7 +1263,7 @@ private lemma clear_stack_input
     | mk l v S =>
       simp only at h_label; subst h_label
       have hi : S GreedyEnumStack.input = [] := h_input
-      simp only [tm2Step, Turing.TM2.step, greedyEnumMachine,
+      simp only [Turing.TM2.step, greedyEnumMachine,
                  clearInput, Turing.TM2.stepAux]
       rw [hi]
       simp [List.head?, Option.map, Option.isNone, cond_true]
@@ -1293,7 +1291,7 @@ private lemma clear_stack_input
       | mk l v S =>
         simp only at h_label; subst h_label
         have hi : S GreedyEnumStack.input = b :: rest := h_input
-        simp only [tm2Step, Turing.TM2.step, greedyEnumMachine,
+        simp only [Turing.TM2.step, greedyEnumMachine,
                    clearInput, Turing.TM2.stepAux]
         rw [hi]
         cases b with
@@ -1341,7 +1339,7 @@ private lemma clear_stack_workL
     | mk l v S =>
       simp only at h_label; subst h_label
       have hwl : S GreedyEnumStack.workL = [] := h_workL
-      simp only [tm2Step, Turing.TM2.step, greedyEnumMachine,
+      simp only [Turing.TM2.step, greedyEnumMachine,
                  clearWorkL, Turing.TM2.stepAux]
       rw [hwl]
       simp [List.head?, Option.isSome, BEq.beq]
@@ -1369,7 +1367,7 @@ private lemma clear_stack_workL
       | mk l v S =>
         simp only at h_label; subst h_label
         have hwl : S GreedyEnumStack.workL = w :: rest := h_workL
-        simp only [tm2Step, Turing.TM2.step, greedyEnumMachine,
+        simp only [Turing.TM2.step, greedyEnumMachine,
                    clearWorkL, Turing.TM2.stepAux]
         rw [hwl]
         simp only [Option.isSome, List.head?, Option.some_beq_some, beq_false,
@@ -1417,7 +1415,7 @@ private lemma clear_stack_workR
     | mk l v S =>
       simp only at h_label; subst h_label
       have hwr : S GreedyEnumStack.workR = [] := h_workR
-      simp only [tm2Step, Turing.TM2.step, greedyEnumMachine,
+      simp only [Turing.TM2.step, greedyEnumMachine,
                  clearWorkR, Turing.TM2.stepAux, hwr, List.head?, Option.isSome,
                  BEq.beq]
       rw [show Option.instBEq.beq (some false) (some false) = true from by decide]
@@ -1445,7 +1443,7 @@ private lemma clear_stack_workR
       | mk l v S =>
         simp only at h_label; subst h_label
         have hwr : S GreedyEnumStack.workR = w :: rest := h_workR
-        simp only [tm2Step, Turing.TM2.step, greedyEnumMachine,
+        simp only [Turing.TM2.step, greedyEnumMachine,
                    clearWorkR, Turing.TM2.stepAux, hwr, List.head?,
                    Option.isSome, List.tail_cons, BEq.beq]
         rw [show Option.instBEq.beq (some true) (some false) = false from by decide]
@@ -1479,7 +1477,7 @@ private lemma clear_stack_output
     | mk l v S =>
       simp only at h_label; subst h_label
       have ho : S GreedyEnumStack.output = [] := h_output
-      simp only [tm2Step, Turing.TM2.step, greedyEnumMachine,
+      simp only [Turing.TM2.step, greedyEnumMachine,
                  clearOutput, Turing.TM2.stepAux, ho, List.head?,
                  Option.isNone, cond_true]
   · exact ⟨rfl, h_target, h_counter, h_input, h_workL, h_workR,
@@ -1516,17 +1514,13 @@ lemma clearInput_to_counterIncrement
 
 end ClearPhase
 
-
-/-- Bridge between Turing.TM2.eval.Dom and TM2Halts.
-    Turing.TM2.eval runs the machine from init and checks halting.
-    TM2Halts checks halting via ReflTransGen of steps. -/
 lemma eval_dom_iff_TM2Halts
     (gen : Generator Γw Γo Q) (target : List Γo) :
-    (Turing.TM2.eval (greedyEnumMachine gen)
-      GreedyEnumStack.target target).Dom ↔
+    (@Turing.TM2.eval.{u,u,u,u} GreedyEnumStack (stackAlphabet Γw Γo Q)
+      GreedyEnumLabel (GreedyEnumSigma Γw Γo Q) _ _ _
+      (greedyEnumMachine gen) GreedyEnumStack.target target).Dom ↔
     TM2Halts gen (Turing.TM2.init GreedyEnumStack.target target) := by
-  unfold Turing.TM2.eval TM2Halts TM2Reaches tm2Step
-  change (Turing.eval _ _).Dom ↔ _
+  change (Turing.eval (GEStep gen) _).Dom ↔ _
   constructor
   · intro h
     obtain ⟨cfg', hcfg'⟩ := Part.dom_iff_mem.mp h
