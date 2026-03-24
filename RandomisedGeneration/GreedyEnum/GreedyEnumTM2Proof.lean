@@ -635,14 +635,49 @@ private lemma runStep_halted_to_checkOutput
     (gcfg : GenConfig Γw Γo Q)
     (cfg : GECfg Γw Γo Q)
     (hinv : RunStepInvariant gen stackTarget counter gcfg cfg)
-    (hInput : gcfg.inputIndex < counter.length)
-    (hHalted : gen.δ gcfg.state (gcfg.input gcfg.inputIndex) (gcfg.work gcfg.workIndex) = none) :
+    (hInputIdx : gcfg.inputIndex < counter.length)
+    (hHalted : gen.δ gcfg.state
+        (gcfg.input gcfg.inputIndex)
+        (gcfg.work gcfg.workIndex) = none)
+    (hInputFn : gcfg.input = counterToInput counter) :
     ∃ cfg', TM2Reaches gen cfg cfg' ∧
       CheckOutputInvariant stackTarget counter
         stackTarget gcfg.output.reverse cfg' := by
-  sorry
-  -- runStep peeks input (non-empty), pops, peeks workR, applies delta,
-  -- delta returns none → transHalted = true → goto checkOutput.
+  -- Input stack is non-empty: counter.drop gcfg.inputIndex = bit :: rest
+  have hDrop := hinv.h_input
+  have hDropNe : counter.drop gcfg.inputIndex ≠ [] := by
+    intro h
+    have : (counter.drop gcfg.inputIndex).length = 0 := by
+      rw [h]; simp
+    simp [List.length_drop] at this
+    omega
+  obtain ⟨bit, rest_input, hDropEq⟩ :=
+    List.exists_cons_of_ne_nil hDropNe
+  rw [hDropEq] at hDrop
+  -- The TM2 reads bit.down as inputBit
+  -- bit.down = counterToInput counter gcfg.inputIndex = gcfg.input gcfg.inputIndex
+  have hBitVal : bit.down = gcfg.input gcfg.inputIndex := by
+    rw [hInputFn]
+    simp [counterToInput]
+    have : counter[gcfg.inputIndex]? = some bit := by
+      rw [← List.head?_drop]; rw [hDropEq]; rfl
+    simp [this]
+  cases hWR : cfg.stk GreedyEnumStack.workR with
+  | nil =>
+    have hBlank : gcfg.work gcfg.workIndex = gen.blank := by
+      have := hinv.h_work.2.1 0 (by simp [hWR])
+      simp only [CharP.cast_eq_zero, add_zero] at this
+      exact this
+    rw [← hBitVal] at hHalted
+    sorry -- single TM2 step, same pattern as exhausted halted nil case
+  | cons w rest_work =>
+    have hHead : w = gcfg.work gcfg.workIndex := by
+      have := hinv.h_work.1 0 (by simp [hWR])
+      simp only [List.get_eq_getElem, hWR, List.getElem_cons_zero,
+        CharP.cast_eq_zero, add_zero] at this
+      exact this
+    rw [← hBitVal, ← hHead] at hHalted
+    sorry -- single TM2 step, same pattern as exhausted halted cons case
 
 private lemma take_succ_reverse_cons
     {α : Type*} (l : List α) (n : ℕ) (h : n < l.length) :
