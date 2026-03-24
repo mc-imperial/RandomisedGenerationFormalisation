@@ -885,26 +885,27 @@ lemma copyCounter_to_initRun
 lemma initRun_no_match_to_copyCounter
     (gen : Generator Γw Γo Q)
     (hGreedy : gen.IsGreedy)
-    (target : List Γo)
+    (stackTarget cmpTarget : List Γo)
     (counter : List (ULift.{u} Bool))
     (cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) GreedyEnumLabel (GreedyEnumSigma Γw Γo Q))
-    (hinv : InitRunInvariant target counter cfg)
-    (hNoMatch : ∀ w, Computes gen
-        (initConfig gen (counterToInput counter)) w →
-        w ≠ target) :
+    (hinv : InitRunInvariant stackTarget counter cfg)
+    (hNoMatch : ¬(IsHalting gen
+        (stepNHalt gen (initConfig gen (counterToInput counter)) counter.length) ∧
+      (stepNHalt gen (initConfig gen (counterToInput counter)) counter.length).output
+        = cmpTarget)) :
     ∃ cfg', TM2Reaches gen cfg cfg' ∧
-      CopyCounterInvariant target (counterIncrement counter) cfg' := by
+      CopyCounterInvariant stackTarget (counterIncrement counter) cfg' := by
   sorry
 
 lemma initRun_match_halts
     (gen : Generator Γw Γo Q)
     (hGreedy : gen.IsGreedy)
-    (target : List Γo)
+    (stackTarget cmpTarget : List Γo)
     (counter : List (ULift.{u} Bool))
     (cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) GreedyEnumLabel (GreedyEnumSigma Γw Γo Q))
-    (hinv : InitRunInvariant target counter cfg)
+    (hinv : InitRunInvariant stackTarget counter cfg)
     (hMatch : Computes gen
-        (initConfig gen (counterToInput counter)) target) :
+        (initConfig gen (counterToInput counter)) cmpTarget) :
     TM2Halts gen cfg := by
   sorry
 
@@ -1514,6 +1515,44 @@ lemma clearInput_to_counterIncrement
   exact ⟨cfg₄, TM2Reaches_trans (TM2Reaches_trans (TM2Reaches_trans hr₁ hr₂) hr₃) hr₄, hinv₄⟩
 
 end ClearPhase
+
+
+/-- Bridge between Turing.TM2.eval.Dom and TM2Halts.
+    Turing.TM2.eval runs the machine from init and checks halting.
+    TM2Halts checks halting via ReflTransGen of steps. -/
+lemma eval_dom_iff_TM2Halts
+    (gen : Generator Γw Γo Q) (target : List Γo) :
+    (Turing.TM2.eval (greedyEnumMachine gen)
+      GreedyEnumStack.target target).Dom ↔
+    TM2Halts gen (Turing.TM2.init GreedyEnumStack.target target) := by
+  unfold Turing.TM2.eval TM2Halts TM2Reaches tm2Step
+  change (Turing.eval _ _).Dom ↔ _
+  constructor
+  · intro h
+    obtain ⟨cfg', hcfg'⟩ := Part.dom_iff_mem.mp h
+    rw [Turing.mem_eval] at hcfg'
+    exact ⟨cfg', hcfg'.1, hcfg'.2⟩
+  · intro ⟨cfg', h1, h2⟩
+    exact Part.dom_iff_mem.mpr ⟨cfg', Turing.mem_eval.mpr ⟨h1, h2⟩⟩
+
+lemma init_copyCounterInvariant
+    (_ : Generator Γw Γo Q) -- Keep this to help with universe level pinning.
+    (target : List Γo) :
+    CopyCounterInvariant target []
+      (@Turing.TM2.init GreedyEnumStack.{u}
+        (stackAlphabet Γw Γo Q)
+        GreedyEnumLabel.{u}
+        (GreedyEnumSigma Γw Γo Q)
+        _ _ _
+        GreedyEnumStack.target target) := by
+  exact ⟨rfl, by simp [Turing.TM2.init, Function.update],
+    by simp [Turing.TM2.init, Function.update],
+    by simp [Turing.TM2.init, Function.update],
+    by simp [Turing.TM2.init, Function.update],
+    by simp [Turing.TM2.init, Function.update],
+    by simp [Turing.TM2.init, Function.update],
+    by simp [Turing.TM2.init, Function.update],
+    by simp [Turing.TM2.init, Function.update]⟩
 
 end GreedyEnum
 

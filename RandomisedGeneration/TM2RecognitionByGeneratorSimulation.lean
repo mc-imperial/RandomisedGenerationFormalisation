@@ -1,3 +1,12 @@
+/-
+══════════════════════════════════════════════════════════════════════════════
+  Top-level assembly: every generable language is TM2-recognisable.
+
+  Uses the counter-based abstract machine (`CounterEnumRecognises`) for the
+  bisimulation with the TM2.
+══════════════════════════════════════════════════════════════════════════════
+-/
+
 import Mathlib
 import Mathlib.Computability.Halting
 import Mathlib.Computability.PostTuringMachine
@@ -12,59 +21,101 @@ namespace RandomisedGeneration
 
 universe u
 
-/-- The TM2 machine halts iff the abstract greedy enumeration reaches none. -/
-theorem greedyEnumTM2_halts_iff_GreedyEnumRecognises {Γw Γo Q : Type u}
-    [FinEnum Γw] [Inhabited Γw] [Inhabited Γo] [FinEnum Γo] [FinEnum Q]
-    (gen : Generator Γw Γo Q)
-    (target : List Γo) :
-    (Turing.TM2.eval (GreedyEnum.greedyEnumMachine gen)
-      GreedyEnum.GreedyEnumStack.target target).Dom ↔
-    GreedyEnum.GreedyEnumRecognises gen target.reverse := by
-  sorry
+namespace GreedyEnum
 
--- The greedy enum TM2 halts on input `target` iff `target` is computed by
--- the generator on some input (for a greedy generator).
+variable {Γw Γo Q : Type u}
+variable [Inhabited Γo] [FinEnum Γo] [FinEnum Γw] [Inhabited Γw] [FinEnum Q]
+
+/-!
+## Bisimulation: backward direction
+
+If the abstract machine reaches `none` (match found), the TM2 halts.
+Each round chains:
+  CopyCounterInvariant → InitRunInvariant → (TM2Halts or CopyCounterInvariant next)
+
+Note: `stackTarget` is what sits on the TM2's target stack (= input.reverse).
+`cmpTarget` is what counterEnumStep compares cfg.output against (= the actual word).
+The TM2's checkOutput compares output.reverse against stackTarget, which is equivalent
+to comparing output against cmpTarget when stackTarget = cmpTarget.reverse.
+-/
+
+private lemma tm2_halts_of_counterEnum_none
+    (gen : Generator Γw Γo Q) (hGreedy : gen.IsGreedy)
+    (stackTarget cmpTarget : List Γo)
+    (counter : List (ULift.{u} Bool))
+    (cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) GreedyEnumLabel (GreedyEnumSigma Γw Γo Q))
+    (hInv : CopyCounterInvariant stackTarget counter cfg)
+    (n : ℕ)
+    (hn : (fun c => c.bind (counterEnumStep gen cmpTarget))^[n] (some counter) = none) :
+    TM2Halts gen cfg := by
+  induction n generalizing counter cfg with
+  | zero => simp at hn
+  | succ n ih =>
+    rw [Function.iterate_succ_apply'] at hn
+    obtain ⟨cfg₁, hReach₁, hInv₁⟩ := copyCounter_to_initRun gen stackTarget counter cfg hInv
+    by_cases h : counterEnumStep gen cmpTarget counter = none
+    · have ⟨hHalt, hOut⟩ := (counterEnumStep_eq_none_iff gen cmpTarget counter).mp h
+      have hComp : Computes gen (initConfig gen (counterToInput counter)) cmpTarget :=
+        hOut ▸ stepNHalt_Computes gen _ _ hHalt
+      obtain ⟨cfg_halt, hReach_halt, hHalt_halt⟩ :=
+        initRun_match_halts gen hGreedy stackTarget cmpTarget counter cfg₁ hInv₁ hComp
+      exact ⟨cfg_halt, TM2Reaches_trans hReach₁ hReach_halt, hHalt_halt⟩
+    · have hNoMatch : ¬(IsHalting gen
+          (stepNHalt gen (initConfig gen (counterToInput counter)) counter.length) ∧
+        (stepNHalt gen (initConfig gen (counterToInput counter)) counter.length).output
+          = cmpTarget) := by
+        rwa [← counterEnumStep_eq_none_iff]
+      obtain ⟨cfg₂, hReach₂, hInv₂⟩ :=
+        initRun_no_match_to_copyCounter gen hGreedy stackTarget cmpTarget counter cfg₁ hInv₁ hNoMatch
+      have hSome := counterEnumStep_ne_none gen cmpTarget counter h
+      have hn' : (fun c => c.bind (counterEnumStep gen cmpTarget))^[n]
+          (some (counterIncrement counter)) = none := by
+        have key : (fun c => c.bind (counterEnumStep gen cmpTarget))^[n + 1]
+            (some counter) = none := by
+          rw [Function.iterate_succ_apply']; exact hn
+        rw [Function.iterate_succ_apply] at key
+        simpa [hSome] using key
+      obtain ⟨cfg_halt, hReach_halt, hHalt_halt⟩ :=
+        ih (counterIncrement counter) cfg₂ hInv₂ hn'
+      exact ⟨cfg_halt,
+        TM2Reaches_trans (TM2Reaches_trans hReach₁ hReach₂) hReach_halt, hHalt_halt⟩
+
+theorem greedyEnumTM2_halts_iff_CounterEnumRecognises {Γw Γo Q : Type u}
+    [FinEnum Γw] [Inhabited Γw] [Inhabited Γo] [FinEnum Γo] [FinEnum Q]
+    (gen : Generator Γw Γo Q) (hGreedy : gen.IsGreedy) (target : List Γo) :
+    (Turing.TM2.eval (GreedyEnum.greedyEnumMachine gen)
+      GreedyEnum.GreedyEnumStack.target target.reverse).Dom ↔
+    GreedyEnum.CounterEnumRecognises gen target := by
+  rw [GreedyEnum.eval_dom_iff_TM2Halts]
+  constructor
+  · sorry
+  · intro ⟨n, hn⟩
+    have hInit := init_copyCounterInvariant gen target.reverse
+    exact tm2_halts_of_counterEnum_none gen hGreedy target.reverse target [] _ hInit n hn
+
 theorem greedyEnumMachine_recognises {Γw Γo Q : Type u}
     [FinEnum Γw] [Inhabited Γw] [Inhabited Γo] [FinEnum Γo] [FinEnum Q]
-    (gen : Generator Γw Γo Q)
-    (hGreedy : gen.IsGreedy)
-    (target : List Γo) :
+    (gen : Generator Γw Γo Q) (hGreedy : gen.IsGreedy) (target : List Γo) :
     (Turing.TM2.eval (GreedyEnum.greedyEnumMachine gen)
       GreedyEnum.GreedyEnumStack.target target.reverse).Dom ↔
     target ∈ generatedLanguage gen Finset.univ (generator_supports_univ gen) := by
-  rw [greedyEnumTM2_halts_iff_GreedyEnumRecognises]
-  simp only [List.reverse_reverse]
-  rw [GreedyEnum.GreedyEnumRecognises_iff_Computes gen hGreedy]
+  rw [greedyEnumTM2_halts_iff_CounterEnumRecognises gen hGreedy]
+  rw [GreedyEnum.CounterEnumRecognises_iff_Computes gen hGreedy]
   simp only [generatedLanguage, Set.mem_setOf_eq]
 
--- -- The dovetail   TM2 halts on input `target` iff `target` is in the generated language.
--- theorem dovetailMachine_recognises {Γw Γo Q : Type u}
---     [FinEnum Γw] [Inhabited Γw] [Inhabited Γo] [FinEnum Γo] [FinEnum Q]
---     (gen : Generator Γw Γo Q)
---     (target : List Γo) :
---     (Turing.TM2.eval (dovetailMachine gen) DovetailStack.target target.reverse).Dom ↔
---     target ∈ generatedLanguage gen Finset.univ (generator_supports_univ gen) := by
---   rw [dovetailTM2_halts_iff_DovetailRecognises]
---   simp only [List.reverse_reverse]
---   rw [DovetailRecognises_iff_Computes]
---   simp only [generatedLanguage, Set.mem_setOf_eq]
+end GreedyEnum
 
 lemma every_generable_language_is_tm2_recognisable
-    {Γ : Type u}
-    [Inhabited Γ] [FinEnum Γ]
-    (L : Language Γ)
-    (hL : L ∈ generableLanguages) :
+    {Γ : Type u} [Inhabited Γ] [FinEnum Γ]
+    (L : Language Γ) (hL : L ∈ generableLanguages) :
     L ∈ languagesRecognisedByTM2s := by
-  -- Step 1: Extract the generator
   obtain ⟨Γw, Q, hΓwfinenum, hQdec, gen, S_gen, hS_gen, hgen⟩ := hL
   haveI : DecidableEq Q := hQdec
-  -- Step 2: Greedify, then restrict
   let ggen := gen.greedify
   let S_ggen := S_gen ×ˢ (Finset.univ : Finset (Option Bool))
   have hS_ggen : GeneratorSupports ggen S_ggen := GeneratorSupports_greedify gen S_gen hS_gen
   have hGreedy : ggen.IsGreedy := gen.greedify_isGreedy
-  have hLang : generatedLanguage gen S_gen hS_gen = generatedLanguage ggen S_ggen hS_ggen :=
-    generatedLanguage_greedify gen S_gen hS_gen
+  have hLang := generatedLanguage_greedify gen S_gen hS_gen
   let gen' := ggen.restrictToSupport S_ggen hS_ggen
   haveI : Fintype ↥S_ggen := inferInstance
   haveI : DecidableEq ↥S_ggen := inferInstance
@@ -77,7 +128,6 @@ lemma every_generable_language_is_tm2_recognisable
     fun k => by cases k <;> simp only [GreedyEnum.stackAlphabet] <;> infer_instance
   haveI : ∀ k, DecidableEq (GreedyEnum.stackAlphabet Γw Γ ↥S_ggen k) :=
     fun k => by cases k <;> simp only [GreedyEnum.stackAlphabet] <;> infer_instance
-  -- Step 3: gen' is also greedy
   have hGreedy' : gen'.IsGreedy :=
     Generator.restrictToSupport_isGreedy ggen S_ggen hS_ggen hGreedy
   refine ⟨
@@ -108,15 +158,11 @@ lemma every_generable_language_is_tm2_recognisable
   simp only [Set.mem_setOf_eq]
   have lang_eq : generatedLanguage gen S_gen hS_gen =
       generatedLanguage gen' Finset.univ (generator_supports_univ gen') := by
-    rw [hLang]
-    ext w
-    simp only [generatedLanguage, Set.mem_setOf_eq]
+    rw [hLang]; ext w; simp only [generatedLanguage, Set.mem_setOf_eq]
     constructor
-    · rintro ⟨input, h⟩
-      exact ⟨input, restrictToSupport_Computes ggen S_ggen hS_ggen h⟩
-    · rintro ⟨input, h⟩
-      exact ⟨input, restrictToSupport_Computes_lift ggen S_ggen hS_ggen h⟩
+    · rintro ⟨input, h⟩; exact ⟨input, restrictToSupport_Computes ggen S_ggen hS_ggen h⟩
+    · rintro ⟨input, h⟩; exact ⟨input, restrictToSupport_Computes_lift ggen S_ggen hS_ggen h⟩
   rw [lang_eq]
-  exact (greedyEnumMachine_recognises gen' hGreedy' input).symm
+  exact (GreedyEnum.greedyEnumMachine_recognises gen' hGreedy' input).symm
 
 end RandomisedGeneration
