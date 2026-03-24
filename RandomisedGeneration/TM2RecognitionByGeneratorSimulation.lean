@@ -16,6 +16,7 @@ import RandomisedGeneration.GreedyGeneration
 import RandomisedGeneration.Language
 import RandomisedGeneration.GreedyEnum.AbstractMachine
 import RandomisedGeneration.GreedyEnum.GreedyEnumTM2
+import RandomisedGeneration.GreedyEnum.GreedyEnumTM2Proof
 
 namespace RandomisedGeneration
 
@@ -95,13 +96,8 @@ private lemma tm2_halts_of_counterEnum_none
         exact hn
       obtain ⟨cfg₂, hReach₂, hInv₂⟩ :=
         initRun_no_match_to_copyCounter gen hGreedy
-          stackTarget stackTarget.reverse counter
-          cfg₁ hInv₁ (by
-            intro ⟨hHalt, hOut⟩
-            apply h
-            exact (counterEnumStep_eq_none_iff gen
-              stackTarget.reverse counter).mpr
-              ⟨hHalt, hOut⟩)
+          stackTarget counter
+          cfg₁ hInv₁ h
       obtain ⟨cfg₃, hReach₃, hHalt₃⟩ :=
         ih (counterIncrement counter) cfg₂ hInv₂ hn'
       exact ⟨cfg₃,

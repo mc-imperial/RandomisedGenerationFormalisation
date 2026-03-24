@@ -16,7 +16,7 @@
 
 import Mathlib
 import RandomisedGeneration.Generator
-import RandomisedGeneration.GreedyEnum.GreedyEnumTM2
+import RandomisedGeneration.GreedyEnum.CounterManipulation
 
 namespace RandomisedGeneration
 
@@ -26,10 +26,6 @@ namespace GreedyEnum
 
 variable {Γw Γo Q : Type u}
 variable [Inhabited Γo] [FinEnum Γo] [FinEnum Γw]
-
--- ═══════════════════════════════════════════════════════════════════════════
--- Section 1: Abstract machine definition
--- ═══════════════════════════════════════════════════════════════════════════
 
 /-- One round of the counter-based enumeration.
     Run the greedy generator on `counterToInput counter` for `counter.length`
@@ -80,13 +76,9 @@ lemma counterEnumStep_ne_none (gen : Generator Γw Γo Q) (target : List Γo)
       ite_eq_right_iff] at h ⊢
     exact h
 
--- ═══════════════════════════════════════════════════════════════════════════
--- Section 2: Greedy generator lemmas (non-private versions)
--- ═══════════════════════════════════════════════════════════════════════════
-
 /-- For a greedy generator, the inputIndex after n steps equals
     the starting inputIndex plus n. -/
-lemma greedy_inputIndex_eq_steps'
+lemma greedy_inputIndex_eq_steps
     (gen : Generator Γw Γo Q) (hGreedy : gen.IsGreedy)
     (cfg cfg' : GenConfig Γw Γo Q) (n : ℕ)
     (h : Steps gen cfg cfg' n) :
@@ -128,7 +120,7 @@ lemma greedy_stepN_agree'
       rw [ih (by omega) cfgF_prev hprev]
       simp only [Option.bind_some]
       have hIdxJ : cfgF_prev.inputIndex = j := by
-        have := greedy_inputIndex_eq_steps' gen hGreedy _ _ j
+        have := greedy_inputIndex_eq_steps gen hGreedy _ _ j
           ((stepN_eq_Steps gen _ _ j).mp hprev)
         simp only [initConfig, zero_add] at this; exact this
       have hInput : cfgF_prev.input = f :=
@@ -158,7 +150,7 @@ lemma greedy_computes_within
       (stepNHalt gen (initConfig gen g) steps).output = w := by
   obtain ⟨n, haltCfg, hStepN, hHalt, hOut⟩ := hComp.to_stepN
   have hSteps := (stepN_eq_Steps gen _ _ n).mp hStepN
-  have hIdx_n := greedy_inputIndex_eq_steps' gen hGreedy _ _ n hSteps
+  have hIdx_n := greedy_inputIndex_eq_steps gen hGreedy _ _ n hSteps
   simp only [initConfig, zero_add] at hIdx_n
   have hn_lt_k : n < k := by rw [← hIdx_n]; exact hBound _ ⟨n, hSteps⟩
   have hStepN' := greedy_stepN_agree' gen hGreedy f g n
@@ -173,92 +165,6 @@ lemma greedy_computes_within
   exact ⟨n, by omega,
     by rw [stepNHalt_eq_of_stepN gen _ _ n hStepN']; exact hHalt',
     by rw [stepNHalt_eq_of_stepN gen _ _ n hStepN']; exact hOut⟩
-
--- ═══════════════════════════════════════════════════════════════════════════
--- Section 3: counterToNat, counterIterN, and arithmetic
--- ═══════════════════════════════════════════════════════════════════════════
-
-/-- The natural number represented by a counter (LSB first). -/
-def counterToNat : List (ULift.{u} Bool) → ℕ
-  | [] => 0
-  | ⟨b⟩ :: rest => (if b then 1 else 0) + 2 * counterToNat rest
-
-lemma counterToNat_increment (c : List (ULift.{u} Bool)) :
-    counterToNat (counterIncrement c) = counterToNat c + 1 := by
-  induction c with
-  | nil => simp [counterIncrement, counterToNat]
-  | cons b rest ih =>
-    cases b with | up bv =>
-    cases bv <;> simp [counterIncrement, counterToNat, ih] <;> ring
-
-/-- The n-th counter value produced by repeated increment from []. -/
-def counterIterN : ℕ → List (ULift.{u} Bool)
-  | 0 => []
-  | n + 1 => counterIncrement (counterIterN n)
-
-lemma counterIterN_toNat (n : ℕ) :
-    counterToNat (counterIterN n) = n := by
-  induction n with
-  | zero => simp [counterIterN, counterToNat]
-  | succ n ih => simp [counterIterN, counterToNat_increment, ih]
-
-/-- counterToInput reads bit i as Nat.testBit of the counter's natural value. -/
-lemma counterToInput_eq_testBit (c : List (ULift.{u} Bool)) (i : ℕ) :
-    counterToInput c i = Nat.testBit (counterToNat c) i := by
-  induction c generalizing i with
-  | nil => simp [counterToInput, counterToNat]
-  | cons b rest ih =>
-    cases b with | up bv =>
-    simp only [counterToInput, counterToNat]
-    cases i with
-    | zero =>
-      simp only [List.getElem?_cons_zero]
-      cases bv <;> simp [Nat.testBit_zero]
-    | succ i =>
-      simp only [List.getElem?_cons_succ]
-      change counterToInput rest i = _
-      rw [ih]
-      cases bv <;> simp [Nat.testBit_succ, Nat.add_mul_div_left _ _ (by omega : 0 < 2)]
-
-lemma counterToInput_counterIterN (n : ℕ) (i : ℕ) :
-    counterToInput (counterIterN n) i = Nat.testBit n i := by
-  rw [counterToInput_eq_testBit, counterIterN_toNat]
-
--- ═══════════════════════════════════════════════════════════════════════════
--- Section 4: counterIterN length bound
--- ═══════════════════════════════════════════════════════════════════════════
-
-/-- A counter representing a value ≥ 2^k has length ≥ k + 1. -/
-lemma counterToNat_length_bound (c : List (ULift.{u} Bool)) (k : ℕ)
-    (h : counterToNat c ≥ 2 ^ k) : c.length ≥ k + 1 := by
-  induction k generalizing c with
-  | zero =>
-    cases c with
-    | nil => simp [counterToNat] at h
-    | cons _ _ => simp
-  | succ k ih =>
-    cases c with
-    | nil => simp [counterToNat] at h
-    | cons b rest =>
-      cases b with | up bv =>
-      simp only [counterToNat, List.length_cons] at h ⊢
-      have : counterToNat rest ≥ 2 ^ k := by
-        cases bv <;> simp at h <;> omega
-      exact Nat.succ_le_succ (ih rest this)
-
-lemma counterIterN_length_ge (n k : ℕ) (h : n ≥ 2 ^ k) :
-    (counterIterN n).length ≥ k + 1 :=
-  counterToNat_length_bound _ k (by rw [counterIterN_toNat]; exact h)
-
--- ═══════════════════════════════════════════════════════════════════════════
--- Section 5: testBit agreement for m + 2^k
--- ═══════════════════════════════════════════════════════════════════════════
-
--- Proved unnecessary. Gone.
-
--- ═══════════════════════════════════════════════════════════════════════════
--- Section 6: Iteration reaches counterIterN n
--- ═══════════════════════════════════════════════════════════════════════════
 
 lemma counterEnum_iterates (gen : Generator Γw Γo Q) (w : List Γo) (n : ℕ)
     (hNoMatch : ∀ m, m < n →
