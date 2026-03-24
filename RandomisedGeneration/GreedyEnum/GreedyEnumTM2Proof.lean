@@ -482,11 +482,150 @@ private lemma runStep_exhausted_halted_to_checkOutput
     ∃ cfg', TM2Reaches gen cfg cfg' ∧
       CheckOutputInvariant stackTarget counter
         stackTarget gcfg.output.reverse cfg' := by
-  sorry
-  -- runStep peeks input (empty), branches to checkOutput.
-  -- Actually wait — looking at your runStep code, input empty → goto clearWorkL,
-  -- not checkOutput. checkOutput is reached when delta returns halt (transHalted = true).
-  -- Need to re-examine the flow here.
+  have hInputEmpty : cfg.stk GreedyEnumStack.input = [] := by
+    rw [hinv.h_input, hExhausted, List.drop_length]
+  have hDelta : gen.δ gcfg.state
+      (gcfg.input gcfg.inputIndex)
+      (gcfg.work gcfg.workIndex) = none := by
+    have h := hHalted
+    simp only [IsHalting, step] at h
+    revert h
+    cases gen.δ gcfg.state
+      (gcfg.input gcfg.inputIndex)
+      (gcfg.work gcfg.workIndex) with
+    | none => intro; rfl
+    | some val =>
+      obtain ⟨q', w', out?, inDir, workDir⟩ := val
+      simp
+  have hInputBit :
+      gcfg.input gcfg.inputIndex = false := by
+    rw [hInput, hExhausted]; simp [counterToInput]
+  -- The TM2 traces through modified runStep:
+  -- peek input (empty) → inputBit=false →
+  -- peek workR → [pop if non-empty] →
+  -- applyDelta → transHalted=true → goto checkOutput
+  --
+  -- applyDelta with gen.δ = none sets transHalted := true
+  cases hWR : cfg.stk GreedyEnumStack.workR with
+  | nil =>
+    have hBlank : gcfg.work gcfg.workIndex = gen.blank := by
+      have := hinv.h_work.2.1 0 (by simp [hWR])
+      simp only [CharP.cast_eq_zero, add_zero] at this
+      exact this
+    -- One TM2 step to checkOutput, stacks unchanged
+    refine ⟨⟨some GreedyEnumLabel.checkOutput,
+             applyDelta gen
+               { transQ := cfg.var.transQ
+                 transW := gen.blank
+                 transWDir := cfg.var.transWDir
+                 transOut := cfg.var.transOut
+                 transHalted := cfg.var.transHalted
+                 inputBit := false
+                 carry := cfg.var.carry
+                 peekBit := some false
+                 peekTarget := cfg.var.peekTarget
+                 peekOut := cfg.var.peekOut },
+             cfg.stk⟩, ?_, ?_⟩
+    · apply Relation.ReflTransGen.single
+      cases cfg with
+      | mk l v S =>
+        simp only at *
+        have hl := hinv.h_label; simp only at hl; subst hl
+        have hQ := hinv.h_transQ; simp only at hQ
+        rw [hInputBit, hBlank] at hDelta
+        simp only [GEStep, Turing.TM2.step,
+                   greedyEnumMachine, runStep,
+                   Turing.TM2.stepAux,
+                   hInputEmpty, hWR, List.head?,
+                   Option.isSome, Option.getD, BEq.beq,
+                   applyDelta, hQ,
+                   hDelta]
+        have h1 : Option.instBEq.beq
+            (some false) (some false) = true := by decide
+        have h2 : Option.instBEq.beq
+            (some false) (some true) = false := by decide
+        rw [h1, h2, cond_true, cond_false]
+        -- applyDelta with none → transHalted = true → checkOutput
+        simp only [cond_true]
+    · constructor
+      · -- h_label
+        rfl
+      · -- h_target
+        exact hinv.h_target
+      · -- h_output
+        rw [hinv.h_output]
+      · -- h_saveTarget
+        simp [hinv.h_saveTarget]
+      · -- h_counter
+        exact hinv.h_counter
+      · -- h_saveCounter
+        exact hinv.h_saveCounter
+      · -- h_input
+        exact hInputEmpty
+      · -- h_suffix
+        simp
+  | cons w rest =>
+    have hHead : w = gcfg.work gcfg.workIndex := by
+      have := hinv.h_work.1 0 (by simp [hWR])
+      simp only [List.get_eq_getElem, hWR, List.getElem_cons_zero,
+        CharP.cast_eq_zero, add_zero] at this
+      exact this
+    -- One TM2 step, workR gets popped
+    refine ⟨⟨some GreedyEnumLabel.checkOutput,
+             applyDelta gen
+               { transQ := cfg.var.transQ
+                 transW := w
+                 transWDir := cfg.var.transWDir
+                 transOut := cfg.var.transOut
+                 transHalted := cfg.var.transHalted
+                 inputBit := false
+                 carry := cfg.var.carry
+                 peekBit := some true
+                 peekTarget := cfg.var.peekTarget
+                 peekOut := cfg.var.peekOut },
+             fun k => match k with
+               | GreedyEnumStack.workR => rest
+               | other => cfg.stk other⟩, ?_, ?_⟩
+    · apply Relation.ReflTransGen.single
+      cases cfg with
+      | mk l v S =>
+        simp only at *
+        have hl := hinv.h_label; simp only at hl; subst hl
+        have hQ := hinv.h_transQ; simp only at hQ
+        rw [hInputBit] at hDelta
+        simp only [GEStep, Turing.TM2.step,
+                   greedyEnumMachine, runStep,
+                   Turing.TM2.stepAux,
+                   hInputEmpty, hWR, List.head?,
+                   Option.isSome, Option.getD, BEq.beq,
+                   List.tail_cons,
+                   applyDelta, hQ]
+        have h1 : Option.instBEq.beq
+            (some false) (some false) = true := by decide
+        have h2 : Option.instBEq.beq
+            (some true) (some true) = true := by decide
+        rw [h1, h2, cond_true, cond_true]
+        rw [hHead, hDelta]
+        simp only [cond_true]
+        congr 1; congr 1
+        funext k; cases k <;> simp [Function.update]
+    · constructor
+      · -- h_label
+        rfl
+      · -- h_target
+        exact hinv.h_target
+      · -- h_output
+        rw [hinv.h_output]
+      · -- h_saveTarget
+        simp [hinv.h_saveTarget]
+      · -- h_counter
+        exact hinv.h_counter
+      · -- h_saveCounter
+        exact hinv.h_saveCounter
+      · -- h_input
+        exact hInputEmpty
+      · -- h_suffix
+        simp
 
 /-- When the run loop ends because delta halted (not input exhausted),
     we reach checkOutput. -/
