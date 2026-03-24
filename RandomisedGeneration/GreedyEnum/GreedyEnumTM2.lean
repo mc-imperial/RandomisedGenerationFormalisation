@@ -1335,6 +1335,46 @@ lemma stepNHalt_fixed_of_isHalting
     · exact ih
     · rwa [ih]
 
+lemma stepNHalt_greedy_inputIndex
+    (gen : Generator Γw Γo Q)
+    (hGreedy : gen.IsGreedy)
+    (gcfg : GenConfig Γw Γo Q)
+    (n : ℕ)
+    (hAlive : ∀ i, i < n →
+      ¬IsHalting gen (stepNHalt gen gcfg i)) :
+    (stepNHalt gen gcfg n).inputIndex =
+      gcfg.inputIndex + n := by
+  induction n with
+  | zero => simp [stepNHalt]
+  | succ n ih =>
+    have hAliveN := hAlive n (by omega)
+    have ihVal := ih (fun i hi => hAlive i (by omega))
+    simp only [IsHalting, step] at hAliveN
+    have hne := Option.ne_none_iff_exists'.mp hAliveN
+    obtain ⟨gcfg', hStep⟩ := hne
+    -- stepNHalt gen gcfg (n+1) unfolds using stepNHalt
+    unfold stepNHalt
+    simp only [step, hStep]
+    -- Now goal should be gcfg'.inputIndex = gcfg.inputIndex + (n + 1)
+    -- Extract gen.δ from hStep
+    revert hStep
+    cases hd : gen.δ
+      (stepNHalt gen gcfg n).state
+      ((stepNHalt gen gcfg n).input
+        (stepNHalt gen gcfg n).inputIndex)
+      ((stepNHalt gen gcfg n).work
+        (stepNHalt gen gcfg n).workIndex) with
+    | none => simp
+    | some val =>
+      obtain ⟨q', w', o, itd, wd⟩ := val
+      have hItd := hGreedy _ _ _ _ _ _ _ _ hd
+      subst hItd
+      simp only [Option.some.injEq]
+      intro hEq
+      rw [← hEq, ihVal]
+      simp only
+      omega
+
 /-- If `stepNHalt gen gcfg n` is halting, there exists a first halting
     step `k ≤ n`, all earlier steps are non-halting, and stepNHalt is
     the same at `k` and `n`. -/
@@ -1403,48 +1443,80 @@ lemma initRun_match_halts
   -- Phase 4: at step k, delta returns none → checkOutput
   -- IsHalting means step gen (stepNHalt gen gcfg₀ k) = none,
   -- which means gen.δ on the current state/input/work = none.
-  have hk_input :
-      (stepNHalt gen gcfg₀ k).inputIndex < counter.length := by
-    sorry -- follows from greedy: each step increments inputIndex
-          -- by 1, starting at 0, k steps → inputIndex = k,
-          -- and k ≤ counter.length. Need k < counter.length
-          -- or handle k = counter.length separately.
-  have hk_delta : gen.δ (stepNHalt gen gcfg₀ k).state
-      ((stepNHalt gen gcfg₀ k).input
-        (stepNHalt gen gcfg₀ k).inputIndex)
-      ((stepNHalt gen gcfg₀ k).work
-        (stepNHalt gen gcfg₀ k).workIndex) = none := by
-    have h := hk_halt
-    simp only [IsHalting, step] at h
-    revert h
-    cases hd : gen.δ
-      (stepNHalt gen gcfg₀ k).state
-      ((stepNHalt gen gcfg₀ k).input
-        (stepNHalt gen gcfg₀ k).inputIndex)
-      ((stepNHalt gen gcfg₀ k).work
-        (stepNHalt gen gcfg₀ k).workIndex) with
-    | none => intro; rfl
-    | some val =>
-      obtain ⟨q', w', out?, inDir, workDir⟩ := val
-      simp
-  obtain ⟨cfg₃, hr₃, hinv₃⟩ :=
-    runStep_halted_to_checkOutput gen stackTarget counter
-      (stepNHalt gen gcfg₀ k) cfg₂ hinv₂
-      hk_input hk_delta
-  -- Phase 5: output matches target → halt
-  have hOutK :
-      (stepNHalt gen gcfg₀ k).output.reverse = stackTarget := by
-    have : gcfgN = stepNHalt gen gcfg₀ k := hk_fixed
-    rw [this] at hOut; exact hOut
-  obtain ⟨cfg₄, hr₄, hhalted⟩ :=
-    checkOutput_matching_lists_halt gen stackTarget
-      stackTarget cfg₃
-      (by rw [← hOutK] at hinv₃; rw [← hOutK]; exact hinv₃)
-  exact ⟨cfg₄,
-    TM2Reaches_trans
-      (TM2Reaches_trans
-        (TM2Reaches_trans hr₁ hr₂) hr₃) hr₄,
-    hhalted⟩
+  have hk_inputIdx :
+      (stepNHalt gen gcfg₀ k).inputIndex = k := by
+    rw [stepNHalt_greedy_inputIndex gen hGreedy gcfg₀ k
+          hk_min, hInitIdx, Nat.zero_add]
+  rcases Nat.lt_or_eq_of_le hk_le with hk_lt | hk_eq
+  · -- Case k < counter.length: halted mid-run, input available
+    have hk_input :
+        (stepNHalt gen gcfg₀ k).inputIndex
+          < counter.length := by
+      rw [hk_inputIdx]; exact hk_lt
+    have hk_delta : gen.δ
+        (stepNHalt gen gcfg₀ k).state
+        ((stepNHalt gen gcfg₀ k).input
+          (stepNHalt gen gcfg₀ k).inputIndex)
+        ((stepNHalt gen gcfg₀ k).work
+          (stepNHalt gen gcfg₀ k).workIndex) = none := by
+      have h := hk_halt
+      simp only [IsHalting, step] at h
+      revert h
+      cases gen.δ
+        (stepNHalt gen gcfg₀ k).state
+        ((stepNHalt gen gcfg₀ k).input
+          (stepNHalt gen gcfg₀ k).inputIndex)
+        ((stepNHalt gen gcfg₀ k).work
+          (stepNHalt gen gcfg₀ k).workIndex) with
+      | none => intro; rfl
+      | some val =>
+        obtain ⟨q', w', out?, inDir, workDir⟩ := val
+        simp
+    obtain ⟨cfg₃, hr₃, hinv₃⟩ :=
+      runStep_halted_to_checkOutput gen stackTarget
+        counter (stepNHalt gen gcfg₀ k) cfg₂ hinv₂
+        hk_input hk_delta
+    have hOutK :
+        (stepNHalt gen gcfg₀ k).output.reverse
+          = stackTarget := by
+      have : gcfgN = stepNHalt gen gcfg₀ k := hk_fixed
+      rw [this] at hOut; exact hOut
+    obtain ⟨cfg₄, hr₄, hhalted⟩ :=
+      checkOutput_matching_lists_halt gen stackTarget
+        stackTarget cfg₃
+        (by rw [← hOutK] at hinv₃; rw [← hOutK]
+            exact hinv₃)
+    exact ⟨cfg₄,
+      TM2Reaches_trans
+        (TM2Reaches_trans
+          (TM2Reaches_trans hr₁ hr₂) hr₃) hr₄,
+      hhalted⟩
+  · -- Case k = counter.length: input exhausted, final
+    -- delta check halts
+    have hk_exhausted :
+        (stepNHalt gen gcfg₀ k).inputIndex
+          = counter.length := by
+      rw [hk_inputIdx, hk_eq]
+    obtain ⟨cfg₃, hr₃, hinv₃⟩ :=
+      runStep_exhausted_halted_to_checkOutput gen
+        hGreedy stackTarget counter
+        (stepNHalt gen gcfg₀ k) cfg₂ hinv₂
+        hk_exhausted hk_halt
+    have hOutK :
+        (stepNHalt gen gcfg₀ k).output.reverse
+          = stackTarget := by
+      have : gcfgN = stepNHalt gen gcfg₀ k := hk_fixed
+      rw [this] at hOut; exact hOut
+    obtain ⟨cfg₄, hr₄, hhalted⟩ :=
+      checkOutput_matching_lists_halt gen stackTarget
+        stackTarget cfg₃
+        (by rw [← hOutK] at hinv₃; rw [← hOutK]
+            exact hinv₃)
+    exact ⟨cfg₄,
+      TM2Reaches_trans
+        (TM2Reaches_trans
+          (TM2Reaches_trans hr₁ hr₂) hr₃) hr₄,
+      hhalted⟩
 
 section CounterIncrement
 
