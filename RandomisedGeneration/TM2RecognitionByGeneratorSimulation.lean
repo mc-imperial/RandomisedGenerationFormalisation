@@ -55,10 +55,8 @@ private lemma tm2_halts_of_counterEnum_none
     obtain ⟨cfg₁, hReach₁, hInv₁⟩ := copyCounter_to_initRun gen stackTarget counter cfg hInv
     by_cases h : counterEnumStep gen cmpTarget counter = none
     · have ⟨hHalt, hOut⟩ := (counterEnumStep_eq_none_iff gen cmpTarget counter).mp h
-      have hComp : Computes gen (initConfig gen (counterToInput counter)) cmpTarget :=
-        hOut ▸ stepNHalt_Computes gen _ _ hHalt
       obtain ⟨cfg_halt, hReach_halt, hHalt_halt⟩ :=
-        initRun_match_halts gen hGreedy stackTarget cmpTarget counter cfg₁ hInv₁ hComp
+        initRun_match_halts gen hGreedy stackTarget cmpTarget counter cfg₁ hInv₁ hHalt hOut
       exact ⟨cfg_halt, TM2Reaches_trans hReach₁ hReach_halt, hHalt_halt⟩
     · have hNoMatch : ¬(IsHalting gen
           (stepNHalt gen (initConfig gen (counterToInput counter)) counter.length) ∧
