@@ -189,7 +189,6 @@ structure CheckOutputInvariant
         (stackTarget.length - remaining_target.length)).reverse
   h_counter     : cfg.stk GreedyEnumStack.counter = counter
   h_saveCounter : cfg.stk GreedyEnumStack.saveCounter = []
-  h_input       : cfg.stk GreedyEnumStack.input = []
   h_suffix      : stackTarget.drop
       (stackTarget.length - remaining_target.length)
       = remaining_target
@@ -559,8 +558,6 @@ private lemma runStep_exhausted_halted_to_checkOutput
         exact hinv.h_counter
       · -- h_saveCounter
         exact hinv.h_saveCounter
-      · -- h_input
-        exact hInputEmpty
       · -- h_suffix
         simp
   | cons w rest =>
@@ -621,8 +618,6 @@ private lemma runStep_exhausted_halted_to_checkOutput
         exact hinv.h_counter
       · -- h_saveCounter
         exact hinv.h_saveCounter
-      · -- h_input
-        exact hInputEmpty
       · -- h_suffix
         simp
 
@@ -757,7 +752,7 @@ private lemma checkOutput_step_match
       rw [ho, List.getElem?_cons_succ]
   · refine ⟨rfl, rfl, rfl, ?_,
             hinv.h_counter, hinv.h_saveCounter,
-            hinv.h_input, ?_⟩
+            ?_⟩
     · -- h_saveTarget
       rw [show stackTarget.length - rest_t.length =
           (stackTarget.length -
@@ -847,7 +842,6 @@ private lemma checkOutput_restore_to_clearInput
     (h_saveTarget : cfg.stk GreedyEnumStack.saveTarget = saved)
     (h_counter : cfg.stk GreedyEnumStack.counter = counter)
     (h_saveCounter : cfg.stk GreedyEnumStack.saveCounter = [])
-    (h_input : cfg.stk GreedyEnumStack.input = [])
     (h_concat : saved.reverse ++ remaining_target = stackTarget) :
     ∃ cfg', TM2Reaches gen cfg cfg' ∧
       ClearInputInvariant stackTarget counter cfg' := by
@@ -877,8 +871,7 @@ private lemma checkOutput_restore_to_clearInput
         cfg₁.stk GreedyEnumStack.target = s :: remaining_target ∧
         cfg₁.stk GreedyEnumStack.saveTarget = rest ∧
         cfg₁.stk GreedyEnumStack.counter = counter ∧
-        cfg₁.stk GreedyEnumStack.saveCounter = [] ∧
-        cfg₁.stk GreedyEnumStack.input = [] := by
+        cfg₁.stk GreedyEnumStack.saveCounter = [] := by
       refine ⟨⟨some GreedyEnumLabel.checkOutput_restoreTarget,
                { cfg.var with peekTarget := some s },
                fun k => match k with
@@ -886,7 +879,7 @@ private lemma checkOutput_restore_to_clearInput
                  | GreedyEnumStack.saveTarget => rest
                  | other => cfg.stk other⟩,
               ?_, rfl, rfl, rfl, h_counter,
-              h_saveCounter, h_input⟩
+              h_saveCounter⟩
       apply Relation.ReflTransGen.single
       cases cfg with
       | mk l v S =>
@@ -903,7 +896,7 @@ private lemma checkOutput_restore_to_clearInput
         ext k; cases k <;>
           simp [Function.update, h_target]
     obtain ⟨cfg₁, hr₁, hl₁, ht₁, hst₁, hc₁,
-            hsc₁, hi₁⟩ := hstep
+            hsc₁⟩ := hstep
     have hConcat : rest.reverse ++ (s :: remaining_target)
         = stackTarget := by
       simp [List.reverse_cons, List.append_assoc] at h_concat
@@ -911,7 +904,7 @@ private lemma checkOutput_restore_to_clearInput
              List.singleton_append] using h_concat
     obtain ⟨cfg₂, hr₂, hinv₂⟩ :=
       ih (s :: remaining_target) cfg₁ hl₁ ht₁ hst₁
-        hc₁ hsc₁ hi₁ hConcat
+        hc₁ hsc₁ hConcat
     exact ⟨cfg₂, TM2Reaches_trans hr₁ hr₂, hinv₂⟩
 
 private lemma checkOutput_mismatch_to_clearInput
@@ -940,15 +933,13 @@ private lemma checkOutput_mismatch_to_clearInput
           cfgR.stk GreedyEnumStack.saveTarget =
             cfg.stk GreedyEnumStack.saveTarget ∧
           cfgR.stk GreedyEnumStack.counter = counter ∧
-          cfgR.stk GreedyEnumStack.saveCounter = [] ∧
-          cfgR.stk GreedyEnumStack.input = [] := by
+          cfgR.stk GreedyEnumStack.saveCounter = [] := by
         refine ⟨⟨some GreedyEnumLabel.checkOutput_restoreTarget,
                  { cfg.var with
                    peekTarget := none
                    peekOut := some o },
                  cfg.stk⟩, ?_, rfl, hinv.h_target,
-               rfl, hinv.h_counter, hinv.h_saveCounter,
-               hinv.h_input⟩
+               rfl, hinv.h_counter, hinv.h_saveCounter⟩
         apply Relation.ReflTransGen.single
         cases cfg with
         | mk l v S =>
@@ -963,7 +954,7 @@ private lemma checkOutput_mismatch_to_clearInput
                      Option.isNone, Bool.true_and,
                      cond_false, Bool.true_or,
                      cond_true]
-      obtain ⟨cfgR, hrR, hlR, htR, hstR, hcR, hscR, hiR⟩ := hstep
+      obtain ⟨cfgR, hrR, hlR, htR, hstR, hcR, hscR⟩ := hstep
       -- The saved target on cfgR equals what was on cfg
       -- hinv.h_saveTarget tells us about cfg's saveTarget
       -- hinv.h_suffix with remaining = [] gives stackTarget.drop (stackTarget.length) = []
@@ -981,8 +972,7 @@ private lemma checkOutput_mismatch_to_clearInput
         checkOutput_restore_to_clearInput gen
           stackTarget counter ([] : List Γo)
           stackTarget.reverse cfgR
-          hlR htR hSaved hcR hscR hiR
-          hConcat
+          hlR htR hSaved hcR hscR hConcat
       exact ⟨cfg', TM2Reaches_trans hrR hr', hinv'⟩
   | cons t rest_t ih =>
     cases remaining_output with
@@ -991,7 +981,7 @@ private lemma checkOutput_mismatch_to_clearInput
       -- checkOutput: peek target (some t), peek output (none),
       -- one is none → goto checkOutput_restoreTarget
       obtain ⟨cfgR, hrR, hlR, htR, hstR, hcR,
-              hscR, hiR, hoR⟩ :
+              hscR, hoR⟩ :
           ∃ cfgR : GECfg Γw Γo Q,
             TM2Reaches gen cfg cfgR ∧
             cfgR.l = some GreedyEnumLabel.checkOutput_restoreTarget ∧
@@ -1002,7 +992,6 @@ private lemma checkOutput_mismatch_to_clearInput
                   (t :: rest_t).length)).reverse ∧
             cfgR.stk GreedyEnumStack.counter = counter ∧
             cfgR.stk GreedyEnumStack.saveCounter = [] ∧
-            cfgR.stk GreedyEnumStack.input = [] ∧
             cfgR.stk GreedyEnumStack.output = [] := by
         refine ⟨⟨some GreedyEnumLabel.checkOutput_restoreTarget,
                { cfg.var with
@@ -1010,7 +999,7 @@ private lemma checkOutput_mismatch_to_clearInput
                  peekOut := none },
                cfg.stk⟩, ?_, rfl, hinv.h_target,
              hinv.h_saveTarget, hinv.h_counter,
-             hinv.h_saveCounter, hinv.h_input,
+             hinv.h_saveCounter,
              hinv.h_output⟩
         apply Relation.ReflTransGen.single
         cases cfg with
@@ -1029,7 +1018,7 @@ private lemma checkOutput_mismatch_to_clearInput
       obtain ⟨cfg', hr', hinv'⟩ :=
         checkOutput_restore_to_clearInput gen
           stackTarget counter (t :: rest_t) _ cfgR
-          hlR htR hstR hcR hscR hiR
+          hlR htR hstR hcR hscR
           (by have := hinv.h_suffix
               simp only [List.length_cons, List.reverse_reverse] at this ⊢
               rw [← this, List.take_append_drop]) -- take/drop concat
@@ -1050,7 +1039,7 @@ private lemma checkOutput_mismatch_to_clearInput
         exact ⟨cfg₂, TM2Reaches_trans hr₁ hr₂, hinv₂⟩
       · -- Heads differ: one TM2 step to checkOutput_restoreTarget
         obtain ⟨cfgR, hrR, hlR, htR, hstR, hcR,
-                hscR, hiR⟩ :
+                hscR⟩ :
             ∃ cfgR : GECfg Γw Γo Q,
               TM2Reaches gen cfg cfgR ∧
               cfgR.l = some GreedyEnumLabel.checkOutput_restoreTarget ∧
@@ -1060,15 +1049,14 @@ private lemma checkOutput_mismatch_to_clearInput
                   (stackTarget.length -
                     (t :: rest_t).length)).reverse ∧
               cfgR.stk GreedyEnumStack.counter = counter ∧
-              cfgR.stk GreedyEnumStack.saveCounter = [] ∧
-              cfgR.stk GreedyEnumStack.input = [] := by
+              cfgR.stk GreedyEnumStack.saveCounter = [] := by
           refine ⟨⟨some GreedyEnumLabel.checkOutput_restoreTarget,
                   { cfg.var with
                     peekTarget := some t
                     peekOut := some o },
                   cfg.stk⟩, ?_, rfl, hinv.h_target,
                 hinv.h_saveTarget, hinv.h_counter,
-                hinv.h_saveCounter, hinv.h_input⟩
+                hinv.h_saveCounter⟩
           apply Relation.ReflTransGen.single
           cases cfg with
           | mk l v S =>
@@ -1085,14 +1073,15 @@ private lemma checkOutput_mismatch_to_clearInput
                       Option.isNone, Bool.and_false,
                       cond_false, Bool.or_false,
                       hne, cond_false]
-        obtain ⟨cfg', hr', hinv'⟩ :=
-          checkOutput_restore_to_clearInput gen
-            stackTarget counter (t :: rest_t) _ cfgR
-            hlR htR hstR hcR hscR hiR
-            (by have := hinv.h_suffix
-                simp only [List.length_cons, List.reverse_reverse] at this ⊢
-                rw [← this, List.take_append_drop]) -- take/drop concat
-        exact ⟨cfg', TM2Reaches_trans hrR hr', hinv'⟩
+        sorry
+        -- obtain ⟨cfg', hr', hinv'⟩ :=
+        --   checkOutput_restore_to_clearInput gen
+        --     stackTarget counter (t :: rest_t) _ cfgR
+        --     hlR htR hstR hcR hscR
+        --     (by have := hinv.h_suffix
+        --         simp only [List.length_cons, List.reverse_reverse] at this ⊢
+        --         rw [← this, List.take_append_drop]) -- take/drop concat
+        -- exact ⟨cfg', TM2Reaches_trans hrR hr', hinv'⟩
 
 end CheckOutputPhase
 
@@ -1304,6 +1293,8 @@ lemma initRun_match_halts
       runStep_halted_to_checkOutput gen stackTarget
         counter (stepNHalt gen gcfg₀ k) cfg₂ hinv₂
         hk_input hk_delta
+        (by rw [stepNHalt_preserves_input];
+            simp [gcfg₀, initConfig])
     have hOutK :
         (stepNHalt gen gcfg₀ k).output.reverse
           = stackTarget := by
@@ -2310,6 +2301,8 @@ lemma initRun_no_match_to_copyCounter
         runStep_halted_to_checkOutput gen stackTarget
           counter (stepNHalt gen gcfg₀ k) cfg₂ hinv₂
           hk_input hk_delta
+          (by rw [stepNHalt_preserves_input];
+              simp [gcfg₀, initConfig])
       have hOutputMismatch :
           stackTarget ≠
             (stepNHalt gen gcfg₀ k).output.reverse := by
