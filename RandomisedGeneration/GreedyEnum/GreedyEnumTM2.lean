@@ -1235,22 +1235,33 @@ private lemma checkOutput_restoreTarget_to_clearInput
 /-- When input is exhausted and generator did NOT halt,
     runStep goes to clearWorkL (via the "input empty" branch).
     This eventually reaches clearInput → counterIncrement. -/
-private lemma runStep_exhausted_not_halted_to_clearInput
+private lemma runStep_exhausted_not_halted_to_counterIncrement
     (gen : Generator Γw Γo Q)
     (stackTarget : List Γo)
     (counter : List (ULift.{u} Bool))
     (gcfg : GenConfig Γw Γo Q)
-    (cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) GreedyEnumLabel (GreedyEnumSigma Γw Γo Q))
+    (cfg : GECfg Γw Γo Q)
     (hinv : RunStepInvariant gen stackTarget counter gcfg cfg)
-    (hExhausted : gcfg.inputIndex = counter.length) :
+    (hExhausted : gcfg.inputIndex = counter.length)
+    (hNotHalted : ¬IsHalting gen gcfg) :
     ∃ cfg', TM2Reaches gen cfg cfg' ∧
-      ClearInputInvariant stackTarget counter cfg' := by
+      CounterIncrementInvariant stackTarget counter cfg' := by
+  -- Extract that input stack is empty
+  have hInputEmpty : cfg.stk GreedyEnumStack.input = [] := by
+    rw [hinv.h_input, hExhausted, List.drop_length]
+  -- Extract that gen.δ returns some (not halted)
+  have hDeltaNe : gen.δ gcfg.state
+      (gcfg.input gcfg.inputIndex)
+      (gcfg.work gcfg.workIndex) ≠ none := by
+    intro h
+    apply hNotHalted
+    simp only [IsHalting, step, h]
+  obtain ⟨⟨q', w', o, itd, wd⟩, hDelta⟩ :=
+    Option.ne_none_iff_exists'.mp hDeltaNe
+  -- Step through runStep to reach clearWorkL.
+  -- This is many TM2 micro-steps. We construct the
+  -- target config and show reachability.
   sorry
-  -- runStep peeks input (empty) → goto clearWorkL.
-  -- But ClearInputInvariant expects label = clearInput...
-  -- Actually looking at your runStep code: input empty → goto clearWorkL, not clearInput.
-  -- So this goes clearWorkL → clearWorkR → clearOutput → counter_increment.
-  -- You might want to go directly to CounterIncrementInvariant here instead.
 
 end NoMatchPhase
 
@@ -2068,60 +2079,116 @@ private lemma clear_stack_output
     (gen : Generator Γw Γo Q)
     (target : List Γo)
     (counter : List (ULift.{u} Bool))
-    (cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) GreedyEnumLabel (GreedyEnumSigma Γw Γo Q))
+    (output : List Γo)
+    (cfg : GECfg Γw Γo Q)
     (h_label : cfg.l = some GreedyEnumLabel.clearOutput)
     (h_target : cfg.stk GreedyEnumStack.target = target)
     (h_counter : cfg.stk GreedyEnumStack.counter = counter)
     (h_input : cfg.stk GreedyEnumStack.input = [])
     (h_workL : cfg.stk GreedyEnumStack.workL = [])
     (h_workR : cfg.stk GreedyEnumStack.workR = [])
-    (h_output : cfg.stk GreedyEnumStack.output = [])
+    (h_output : cfg.stk GreedyEnumStack.output = output)
     (h_saveTarget : cfg.stk GreedyEnumStack.saveTarget = [])
     (h_saveCounter : cfg.stk GreedyEnumStack.saveCounter = []) :
     ∃ cfg', TM2Reaches gen cfg cfg' ∧
       CounterIncrementInvariant target counter cfg' := by
-  refine ⟨⟨some GreedyEnumLabel.counter_increment,
-           { cfg.var with peekOut := none },
-           cfg.stk⟩, ?_, ?_⟩
-  · apply Relation.ReflTransGen.single
-    cases cfg with
-    | mk l v S =>
-      simp only at h_label; subst h_label
-      have ho : S GreedyEnumStack.output = [] := h_output
-      simp only [Turing.TM2.step, greedyEnumMachine,
-                 clearOutput, Turing.TM2.stepAux, ho, List.head?,
-                 Option.isNone, cond_true]
-  · exact ⟨rfl, h_target, h_counter, h_input, h_workL, h_workR,
-           h_output, h_saveTarget, h_saveCounter⟩
+  induction output generalizing cfg with
+  | nil =>
+    -- Same as old clear_stack_output: peek empty → goto counter_increment
+    refine ⟨⟨some GreedyEnumLabel.counter_increment,
+             { cfg.var with peekOut := none },
+             cfg.stk⟩, ?_, ?_⟩
+    · apply Relation.ReflTransGen.single
+      cases cfg with
+      | mk l v S =>
+        simp only at h_label; subst h_label
+        simp only [Turing.TM2.step, greedyEnumMachine,
+                   clearOutput, Turing.TM2.stepAux,
+                   List.head?, Option.isNone]
+        simp only [] at h_output
+        rw [h_output]
+        simp
+    · exact ⟨rfl, h_target, h_counter, h_input,
+             h_workL, h_workR, h_output, h_saveTarget,
+             h_saveCounter⟩
+  | cons o rest ih =>
+    have hstep : ∃ cfg₁, TM2Reaches gen cfg cfg₁ ∧
+        cfg₁.l = some GreedyEnumLabel.clearOutput ∧
+        cfg₁.stk GreedyEnumStack.output = rest ∧
+        cfg₁.stk GreedyEnumStack.target = target ∧
+        cfg₁.stk GreedyEnumStack.counter = counter ∧
+        cfg₁.stk GreedyEnumStack.input = [] ∧
+        cfg₁.stk GreedyEnumStack.workL = [] ∧
+        cfg₁.stk GreedyEnumStack.workR = [] ∧
+        cfg₁.stk GreedyEnumStack.saveTarget = [] ∧
+        cfg₁.stk GreedyEnumStack.saveCounter = [] := by
+      refine ⟨⟨some GreedyEnumLabel.clearOutput,
+               { cfg.var with peekOut := some o },
+               fun k => match k with
+                 | GreedyEnumStack.output => rest
+                 | other => cfg.stk other⟩,
+              ?_, rfl, rfl, h_target, h_counter,
+              h_input, h_workL, h_workR,
+              h_saveTarget, h_saveCounter⟩
+      apply Relation.ReflTransGen.single
+      cases cfg with
+      | mk l v S =>
+        simp only at h_label; subst h_label
+        have ho : S GreedyEnumStack.output = o :: rest :=
+          h_output
+        simp only [Turing.TM2.step, greedyEnumMachine,
+                   clearOutput, Turing.TM2.stepAux, ho,
+                   List.head?, Option.isNone, List.tail_cons,
+                   cond_false, Option.some.injEq,
+                   Turing.TM2.Cfg.mk.injEq, true_and]
+        ext k; cases k <;> simp [Function.update]
+    obtain ⟨cfg₁, hr₁, hl₁, ho₁, ht₁, hc₁, hi₁,
+            hwl₁, hwr₁, hst₁, hsc₁⟩ := hstep
+    obtain ⟨cfg₂, hr₂, hinv₂⟩ :=
+      ih cfg₁ hl₁ ht₁ hc₁ hi₁ hwl₁ hwr₁ ho₁ hst₁ hsc₁
+    exact ⟨cfg₂, TM2Reaches_trans hr₁ hr₂, hinv₂⟩
 
 lemma clearInput_to_counterIncrement
     (gen : Generator Γw Γo Q)
     (target : List Γo)
     (counter : List (ULift.{u} Bool))
-    (cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) GreedyEnumLabel (GreedyEnumSigma Γw Γo Q))
+    (cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q)
+      GreedyEnumLabel (GreedyEnumSigma Γw Γo Q))
     (hinv : ClearInputInvariant target counter cfg) :
     ∃ cfg', TM2Reaches gen cfg cfg' ∧
       CounterIncrementInvariant target counter cfg' := by
-  obtain ⟨cfg₁, hr₁, hl₁, ht₁, hc₁, hi₁, hwl₁, hwr₁, ho₁, hst₁, hsc₁⟩ :=
+  obtain ⟨cfg₁, hr₁, hl₁, ht₁, hc₁, hi₁,
+          hwl₁, hwr₁, ho₁, hst₁, hsc₁⟩ :=
     clear_stack_input gen target counter
       (cfg.stk GreedyEnumStack.input)
       (cfg.stk GreedyEnumStack.workL)
       (cfg.stk GreedyEnumStack.workR)
-      cfg hinv.h_label hinv.h_target hinv.h_counter rfl rfl rfl
+      cfg hinv.h_label hinv.h_target hinv.h_counter
+      rfl rfl rfl
       hinv.h_output hinv.h_saveTarget hinv.h_saveCounter
-  obtain ⟨cfg₂, hr₂, hl₂, ht₂, hc₂, hi₂, hwl₂, hwr₂, ho₂, hst₂, hsc₂⟩ :=
+  obtain ⟨cfg₂, hr₂, hl₂, ht₂, hc₂, hi₂,
+          hwl₂, hwr₂, ho₂, hst₂, hsc₂⟩ :=
     clear_stack_workL gen target counter
       (cfg.stk GreedyEnumStack.workL)
       (cfg.stk GreedyEnumStack.workR)
-      cfg₁ hl₁ ht₁ hc₁ hi₁ hwl₁ hwr₁ ho₁ hst₁ hsc₁
-  obtain ⟨cfg₃, hr₃, hl₃, ht₃, hc₃, hi₃, hwl₃, hwr₃, ho₃, hst₃, hsc₃⟩ :=
+      cfg₁ hl₁ ht₁ hc₁ hi₁ hwl₁ hwr₁
+      ho₁ hst₁ hsc₁
+  obtain ⟨cfg₃, hr₃, hl₃, ht₃, hc₃, hi₃,
+          hwl₃, hwr₃, ho₃, hst₃, hsc₃⟩ :=
     clear_stack_workR gen target counter
       (cfg.stk GreedyEnumStack.workR)
-      cfg₂ hl₂ ht₂ hc₂ hi₂ hwl₂ hwr₂ ho₂ hst₂ hsc₂
+      cfg₂ hl₂ ht₂ hc₂ hi₂ hwl₂ hwr₂
+      ho₂ hst₂ hsc₂
   obtain ⟨cfg₄, hr₄, hinv₄⟩ :=
     clear_stack_output gen target counter
-      cfg₃ hl₃ ht₃ hc₃ hi₃ hwl₃ hwr₃ ho₃ hst₃ hsc₃
-  exact ⟨cfg₄, TM2Reaches_trans (TM2Reaches_trans (TM2Reaches_trans hr₁ hr₂) hr₃) hr₄, hinv₄⟩
+      (cfg₃.stk GreedyEnumStack.output)
+      cfg₃ hl₃ ht₃ hc₃ hi₃ hwl₃ hwr₃
+      rfl hst₃ hsc₃
+  exact ⟨cfg₄,
+    TM2Reaches_trans
+      (TM2Reaches_trans
+        (TM2Reaches_trans hr₁ hr₂) hr₃) hr₄,
+    hinv₄⟩
 
 end ClearPhase
 
