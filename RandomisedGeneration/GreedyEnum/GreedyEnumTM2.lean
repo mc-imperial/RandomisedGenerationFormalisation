@@ -1129,10 +1129,11 @@ private lemma runStep_exhausted_halted_to_checkOutput
     (stackTarget : List Γo)
     (counter : List (ULift.{u} Bool))
     (gcfg : GenConfig Γw Γo Q)
-    (cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) GreedyEnumLabel (GreedyEnumSigma Γw Γo Q))
+    (cfg : GECfg Γw Γo Q)
     (hinv : RunStepInvariant gen stackTarget counter gcfg cfg)
     (hExhausted : gcfg.inputIndex = counter.length)
-    (hHalted : IsHalting gen gcfg) :
+    (hHalted : IsHalting gen gcfg)
+    (hInput : gcfg.input = counterToInput counter) :
     ∃ cfg', TM2Reaches gen cfg cfg' ∧
       CheckOutputInvariant stackTarget gcfg.output.reverse
         stackTarget gcfg.output.reverse cfg' := by
@@ -1198,83 +1199,27 @@ private lemma checkOutput_matching_lists_halt
 
 end CheckOutputPhase
 
-
-section NoMatchPhase
-
-/-- checkOutput with a mismatch → goto checkOutput_restoreTarget. -/
-private lemma checkOutput_mismatch_to_restore
+-- This will be needed by the caller of runStep_exhausted_not_halted_to_counterIncrement
+lemma stepNHalt_preserves_input
     (gen : Generator Γw Γo Q)
-    (stackTarget cmpTarget : List Γo)
-    (remaining_target remaining_output : List Γo)
-    (cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) GreedyEnumLabel (GreedyEnumSigma Γw Γo Q))
-    (hinv : CheckOutputInvariant stackTarget cmpTarget remaining_target remaining_output cfg)
-    (hMismatch : remaining_target ≠ [] ∨ remaining_output ≠ [])
-    -- Plus: they don't match at the head
-    :
-    ∃ cfg', TM2Reaches gen cfg cfg' ∧
-      cfg'.l = some GreedyEnumLabel.checkOutput_restoreTarget ∧
-      -- target is partially consumed, saveTarget has the consumed prefix
-      True := by
-  sorry
-
-/-- Restore target from saveTarget, then reach clearInput. -/
-private lemma checkOutput_restoreTarget_to_clearInput
-    (gen : Generator Γw Γo Q)
-    (stackTarget : List Γo)
-    (counter : List (ULift.{u} Bool))
-    (cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) GreedyEnumLabel (GreedyEnumSigma Γw Γo Q))
-    (h_label : cfg.l = some GreedyEnumLabel.checkOutput_restoreTarget)
-    -- ... stack conditions: target partially consumed, saveTarget has prefix ...
-    :
-    ∃ cfg', TM2Reaches gen cfg cfg' ∧
-      ClearInputInvariant stackTarget counter cfg' := by
-  sorry
-  -- Loop: pop saveTarget, push to target, until saveTarget empty.
-  -- Then goto clearInput.
-
-/-- When input is exhausted and generator did NOT halt,
-    runStep goes to clearWorkL (via the "input empty" branch).
-    This eventually reaches clearInput → counterIncrement. -/
-private lemma runStep_exhausted_not_halted_to_counterIncrement
-    (gen : Generator Γw Γo Q)
-    (stackTarget : List Γo)
-    (counter : List (ULift.{u} Bool))
     (gcfg : GenConfig Γw Γo Q)
-    (cfg : GECfg Γw Γo Q)
-    (hinv : RunStepInvariant gen stackTarget counter gcfg cfg)
-    (hExhausted : gcfg.inputIndex = counter.length)
-    (hNotHalted : ¬IsHalting gen gcfg) :
-    ∃ cfg', TM2Reaches gen cfg cfg' ∧
-      CounterIncrementInvariant stackTarget counter cfg' := by
-  -- Extract that input stack is empty
-  have hInputEmpty : cfg.stk GreedyEnumStack.input = [] := by
-    rw [hinv.h_input, hExhausted, List.drop_length]
-  -- Extract that gen.δ returns some (not halted)
-  have hDeltaNe : gen.δ gcfg.state
-      (gcfg.input gcfg.inputIndex)
-      (gcfg.work gcfg.workIndex) ≠ none := by
-    intro h
-    apply hNotHalted
-    simp only [IsHalting, step, h]
-  obtain ⟨⟨q', w', o, itd, wd⟩, hDelta⟩ :=
-    Option.ne_none_iff_exists'.mp hDeltaNe
-  -- Step through runStep to reach clearWorkL.
-  -- This is many TM2 micro-steps. We construct the
-  -- target config and show reachability.
-  sorry
-
-end NoMatchPhase
-
-
-
-
-
-
-
-
-
-
-
+    (n : ℕ) :
+    (stepNHalt gen gcfg n).input = gcfg.input := by
+  induction n with
+  | zero => rfl
+  | succ n ih =>
+    simp only [stepNHalt]
+    cases h : step gen (stepNHalt gen gcfg n) with
+    | none => exact ih
+    | some c =>
+      simp only [step] at h
+      revert h
+      cases gen.δ _ _ _ with
+      | none => simp
+      | some val =>
+        obtain ⟨q', w', o, itd, wd⟩ := val
+        simp only [Option.some.injEq]
+        intro h; rw [← h, ih]
 
 lemma copyCounter_to_initRun
     (gen : Generator Γw Γo Q)
@@ -1513,6 +1458,10 @@ lemma initRun_match_halts
         hGreedy stackTarget counter
         (stepNHalt gen gcfg₀ k) cfg₂ hinv₂
         hk_exhausted hk_halt
+        (by
+          rw [stepNHalt_preserves_input]
+          simp [gcfg₀, initConfig]
+        )
     have hOutK :
         (stepNHalt gen gcfg₀ k).output.reverse
           = stackTarget := by
@@ -2196,6 +2145,227 @@ lemma clearInput_to_counterIncrement
     hinv₄⟩
 
 end ClearPhase
+
+section NoMatchPhase
+
+/-- checkOutput with a mismatch → goto checkOutput_restoreTarget. -/
+private lemma checkOutput_mismatch_to_restore
+    (gen : Generator Γw Γo Q)
+    (stackTarget cmpTarget : List Γo)
+    (remaining_target remaining_output : List Γo)
+    (cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) GreedyEnumLabel (GreedyEnumSigma Γw Γo Q))
+    (hinv : CheckOutputInvariant stackTarget cmpTarget remaining_target remaining_output cfg)
+    (hMismatch : remaining_target ≠ [] ∨ remaining_output ≠ [])
+    -- Plus: they don't match at the head
+    :
+    ∃ cfg', TM2Reaches gen cfg cfg' ∧
+      cfg'.l = some GreedyEnumLabel.checkOutput_restoreTarget ∧
+      -- target is partially consumed, saveTarget has the consumed prefix
+      True := by
+  sorry
+
+/-- Restore target from saveTarget, then reach clearInput. -/
+private lemma checkOutput_restoreTarget_to_clearInput
+    (gen : Generator Γw Γo Q)
+    (stackTarget : List Γo)
+    (counter : List (ULift.{u} Bool))
+    (cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) GreedyEnumLabel (GreedyEnumSigma Γw Γo Q))
+    (h_label : cfg.l = some GreedyEnumLabel.checkOutput_restoreTarget)
+    -- ... stack conditions: target partially consumed, saveTarget has prefix ...
+    :
+    ∃ cfg', TM2Reaches gen cfg cfg' ∧
+      ClearInputInvariant stackTarget counter cfg' := by
+  sorry
+  -- Loop: pop saveTarget, push to target, until saveTarget empty.
+  -- Then goto clearInput.
+
+/-- When input is exhausted and generator did NOT halt,
+    runStep goes to clearWorkL (via the "input empty" branch).
+    This eventually reaches clearInput → counterIncrement. -/
+private lemma runStep_exhausted_not_halted_to_counterIncrement
+    (gen : Generator Γw Γo Q)
+    (stackTarget : List Γo)
+    (counter : List (ULift.{u} Bool))
+    (gcfg : GenConfig Γw Γo Q)
+    (cfg : GECfg Γw Γo Q)
+    (hinv : RunStepInvariant gen stackTarget counter gcfg cfg)
+    (hExhausted : gcfg.inputIndex = counter.length)
+    (hNotHalted : ¬IsHalting gen gcfg)
+    (hInput : gcfg.input = counterToInput counter)
+     :
+    ∃ cfg', TM2Reaches gen cfg cfg' ∧
+      CounterIncrementInvariant stackTarget counter cfg' := by
+  -- Extract that input stack is empty
+  have hInputEmpty : cfg.stk GreedyEnumStack.input = [] := by
+    rw [hinv.h_input, hExhausted, List.drop_length]
+  -- Extract that gen.δ returns some (not halted)
+  have hDeltaNe : gen.δ gcfg.state
+      (gcfg.input gcfg.inputIndex)
+      (gcfg.work gcfg.workIndex) ≠ none := by
+    intro h
+    apply hNotHalted
+    simp only [IsHalting, step, h]
+  obtain ⟨⟨q', w', o, itd, wd⟩, hDelta⟩ :=
+    Option.ne_none_iff_exists'.mp hDeltaNe
+  -- Part A: reach clearWorkL via modified runStep
+  obtain ⟨cfgCW, hrCW, hlCW, htCW, hcCW, hiCW,
+          hoCW, hstCW, hscCW⟩ :
+      ∃ cfgCW : GECfg Γw Γo Q,
+        TM2Reaches gen cfg cfgCW ∧
+        cfgCW.l = some GreedyEnumLabel.clearWorkL ∧
+        cfgCW.stk GreedyEnumStack.target
+          = stackTarget ∧
+        cfgCW.stk GreedyEnumStack.counter = counter ∧
+        cfgCW.stk GreedyEnumStack.input = [] ∧
+        cfgCW.stk GreedyEnumStack.output
+          = gcfg.output.reverse ∧
+        cfgCW.stk GreedyEnumStack.saveTarget = [] ∧
+        cfgCW.stk GreedyEnumStack.saveCounter = [] := by
+    -- The modified runStep when input is empty:
+    -- 1. peek input → none, inputBit := false
+    -- 2. branch peekBit == some false → true
+    -- 3. peek workR
+    -- 4. [pop workR if non-empty]
+    -- 5. applyDelta with inputBit=false
+    -- 6. transHalted = false → goto clearWorkL
+    --
+    -- applyDelta uses gen.δ with inputBit=false and
+    -- the current head symbol. hDelta tells us gen.δ
+    -- returns some, so transHalted = false.
+    --
+    -- All of runStep's internal peek/branch/pop/load
+    -- execute within a single Turing.TM2.step call.
+    -- Case split on workR empty vs non-empty.
+    cases hWR : cfg.stk GreedyEnumStack.workR with
+    | nil =>
+      -- workR empty: peek gets none, no pop, applyDelta,
+      -- transHalted = false → goto clearWorkL
+      have hBlank : gcfg.work gcfg.workIndex = gen.blank := by
+        have := hinv.h_work.2.1 0 (by simp [hWR])
+        simp only [CharP.cast_eq_zero, add_zero] at this
+        exact this
+      refine ⟨⟨some GreedyEnumLabel.clearWorkL,
+               applyDelta gen
+                 { transQ := cfg.var.transQ
+                   transW := gen.blank
+                   transWDir := cfg.var.transWDir
+                   transOut := cfg.var.transOut
+                   transHalted := cfg.var.transHalted
+                   inputBit := false
+                   carry := cfg.var.carry
+                   peekBit := some false
+                   peekTarget := cfg.var.peekTarget
+                   peekOut := cfg.var.peekOut },
+               cfg.stk⟩, ?_, rfl,
+             hinv.h_target, hinv.h_counter, hInputEmpty,
+             hinv.h_output, hinv.h_saveTarget,
+             hinv.h_saveCounter⟩
+      apply Relation.ReflTransGen.single
+      cases cfg with
+      | mk l v S =>
+        simp only at *
+        have hl := hinv.h_label; simp only at hl; subst hl
+        have hQ := hinv.h_transQ; simp only at hQ
+        have hInputBit :
+            gcfg.input gcfg.inputIndex = false := by
+          rw [hInput, hExhausted]
+          simp [counterToInput]
+        rw [hInputBit, hBlank] at hDelta
+        simp only [GEStep, Turing.TM2.step,
+                   greedyEnumMachine, runStep,
+                   Turing.TM2.stepAux,
+                   hInputEmpty, hWR, List.head?,
+                   Option.isSome,
+                   Option.getD, BEq.beq,
+                   cond_false,
+                   applyDelta, hQ,
+                   hDelta, List.tail_nil]
+        have h1 : Option.instBEq.beq (some false) (some false) = true := by decide
+        have h2 : Option.instBEq.beq (some false) (some true) = false := by decide
+        rw [h1, h2, cond_true, cond_false]
+    | cons w rest =>
+      -- workR non-empty: peek gets some w, pop w,
+      -- applyDelta, transHalted = false → goto clearWorkL
+      have hHead : w = gcfg.work gcfg.workIndex := by
+        have := hinv.h_work.1 0 (by simp [hWR])
+        simp only [List.get_eq_getElem, hWR, List.getElem_cons_zero,
+          CharP.cast_eq_zero, add_zero] at this
+        exact this
+      refine ⟨⟨some GreedyEnumLabel.clearWorkL,
+               applyDelta gen
+                 { transQ := cfg.var.transQ
+                   transW := w
+                   transWDir := cfg.var.transWDir
+                   transOut := cfg.var.transOut
+                   transHalted := cfg.var.transHalted
+                   inputBit := false
+                   carry := cfg.var.carry
+                   peekBit := some true
+                   peekTarget := cfg.var.peekTarget
+                   peekOut := cfg.var.peekOut },
+               fun k => match k with
+                 | GreedyEnumStack.workR => rest
+                 | other => cfg.stk other⟩, ?_, rfl,
+             hinv.h_target, hinv.h_counter, hInputEmpty,
+             hinv.h_output, hinv.h_saveTarget,
+             hinv.h_saveCounter⟩
+      apply Relation.ReflTransGen.single
+      cases cfg with
+      | mk l v S =>
+        simp only at *
+        have hl := hinv.h_label; simp only at hl; subst hl
+        have hQ := hinv.h_transQ; simp only at hQ
+        have hInputBit :
+            gcfg.input gcfg.inputIndex = false := by
+          rw [hInput, hExhausted]
+          simp [counterToInput]
+        rw [hInputBit] at hDelta
+        simp only [GEStep, Turing.TM2.step,
+                   greedyEnumMachine, runStep,
+                   Turing.TM2.stepAux,
+                   hInputEmpty, hWR, List.head?,
+                   Option.isSome,
+                   Option.getD, BEq.beq,
+                   List.tail_cons,
+                   applyDelta, hQ,
+                   List.tail_nil]
+        have h1 : Option.instBEq.beq (some false) (some false) = true := by decide
+        have h2 : Option.instBEq.beq (some true) (some true) = true := by decide
+        rw [h1, h2, cond_true, cond_true]
+        -- Now need to show the stk functions match
+        simp only [Option.some.injEq]
+        rw [hHead, hDelta]
+        simp only [cond_false, Turing.TM2.Cfg.mk.injEq,
+                   true_and]
+        ext k; cases k <;> simp [Function.update]
+  -- Part B: chain clears to CounterIncrementInvariant
+  obtain ⟨cfg₁, hr₁, hl₁, ht₁, hc₁, hi₁,
+          hwl₁, hwr₁, ho₁, hst₁, hsc₁⟩ :=
+    clear_stack_workL gen stackTarget counter
+      (cfgCW.stk GreedyEnumStack.workL)
+      (cfgCW.stk GreedyEnumStack.workR)
+      gcfg.output.reverse
+      cfgCW hlCW htCW hcCW hiCW rfl rfl
+      hoCW hstCW hscCW
+  obtain ⟨cfg₂, hr₂, hl₂, ht₂, hc₂, hi₂,
+          hwl₂, hwr₂, ho₂, hst₂, hsc₂⟩ :=
+    clear_stack_workR gen stackTarget counter
+      (cfgCW.stk GreedyEnumStack.workR)
+      gcfg.output.reverse
+      cfg₁ hl₁ ht₁ hc₁ hi₁ hwl₁ hwr₁
+      ho₁ hst₁ hsc₁
+  obtain ⟨cfg₃, hr₃, hinv₃⟩ :=
+    clear_stack_output gen stackTarget counter
+      (cfg₂.stk GreedyEnumStack.output)
+      cfg₂ hl₂ ht₂ hc₂ hi₂ hwl₂ hwr₂
+      rfl hst₂ hsc₂
+  exact ⟨cfg₃,
+    TM2Reaches_trans
+      (TM2Reaches_trans
+        (TM2Reaches_trans hrCW hr₁) hr₂) hr₃,
+    hinv₃⟩
+
+end NoMatchPhase
 
 lemma eval_dom_iff_TM2Halts
     (gen : Generator Γw Γo Q) (target : List Γo) :
