@@ -36,7 +36,7 @@ variable [Inhabited Γo] [FinEnum Γo] [FinEnum Γw]
     steps. If the generator halts within those steps and the output matches
     `target`, return `none` (match found). Otherwise return
     `some (counterIncrement counter)`. -/
-noncomputable def counterEnumStep
+def counterEnumStep
     (gen : Generator Γw Γo Q) (target : List Γo)
     (counter : List (ULift.{u} Bool)) : Option (List (ULift.{u} Bool)) :=
   let input := counterToInput counter
@@ -192,7 +192,7 @@ lemma counterToNat_increment (c : List (ULift.{u} Bool)) :
     cases bv <;> simp [counterIncrement, counterToNat, ih] <;> ring
 
 /-- The n-th counter value produced by repeated increment from []. -/
-noncomputable def counterIterN : ℕ → List (ULift.{u} Bool)
+def counterIterN : ℕ → List (ULift.{u} Bool)
   | 0 => []
   | n + 1 => counterIncrement (counterIterN n)
 
