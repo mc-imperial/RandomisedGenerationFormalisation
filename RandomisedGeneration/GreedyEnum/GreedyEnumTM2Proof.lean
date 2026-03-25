@@ -1309,26 +1309,236 @@ private lemma initRun_to_runStep
     · -- h_output
       rw [hinv.h_output]; simp [initConfig]
 
-/-- One iteration of the run loop: if input is non-empty and delta doesn't halt,
-    we advance the GenConfig by one step and return to runStep. -/
+-- Extract delta result from hStep
+private lemma step_delta_of_step
+    (gen : Generator Γw Γo Q)
+    (hGreedy : gen.IsGreedy)
+    (gcfg gcfg' : GenConfig Γw Γo Q)
+    (hStep : step gen gcfg = some gcfg') :
+    ∃ q' w' o wd,
+      gen.δ gcfg.state (gcfg.input gcfg.inputIndex)
+        (gcfg.work gcfg.workIndex)
+        = some (q', w', o, InputTapeDirection.R, wd) ∧
+      gcfg' = { state := q'
+                input := gcfg.input
+                inputIndex := gcfg.inputIndex + 1
+                work := fun x => if x = gcfg.workIndex
+                  then w' else gcfg.work x
+                workIndex := gcfg.workIndex + ↑wd
+                output := match o with
+                  | none => gcfg.output
+                  | some g => gcfg.output ++ [g] } := by
+  simp only [step] at hStep
+  revert hStep
+  cases hd : gen.δ gcfg.state
+      (gcfg.input gcfg.inputIndex)
+      (gcfg.work gcfg.workIndex) with
+  | none => simp
+  | some val =>
+    obtain ⟨q', w', o, itd, wd⟩ := val
+    have := hGreedy _ _ _ _ _ _ _ _ hd; subst this
+    simp only [Option.some.injEq]
+    intro h
+    exact ⟨q', w', o, wd, rfl, h.symm⟩
+
+-- Sub-lemma 1: runStep → runStep_apply
+-- Traces through: peek input (non-empty), pop input,
+-- peek workR, [pop workR if non-empty], applyDelta
+-- (non-halting), goto runStep_apply
+private lemma runStep_to_apply
+    (gen : Generator Γw Γo Q)
+    (stackTarget : List Γo)
+    (counter : List (ULift.{u} Bool))
+    (gcfg : GenConfig Γw Γo Q)
+    (q' : Q) (w' : Γw) (o : Option Γo)
+    (wd : WorkTapeDirection)
+    (cfg : GECfg Γw Γo Q)
+    (hinv : RunStepInvariant gen stackTarget counter
+        gcfg cfg)
+    (hInput : gcfg.inputIndex < counter.length)
+    (hDelta : gen.δ gcfg.state
+        (gcfg.input gcfg.inputIndex)
+        (gcfg.work gcfg.workIndex)
+        = some (q', w', o, InputTapeDirection.R, wd)) :
+    ∃ cfg', TM2Reaches gen cfg cfg' ∧
+      RunStepApplyInvariant gen stackTarget counter
+        gcfg q' w' o wd cfg' := by
+  sorry
+
+-- Sub-lemma 2: runStep_apply → runStep_moveHead
+-- Traces through: push w' to workR, optionally push
+-- output, goto runStep_moveHead
+private lemma apply_to_moveHead
+    (gen : Generator Γw Γo Q)
+    (stackTarget : List Γo)
+    (counter : List (ULift.{u} Bool))
+    (gcfg gcfg' : GenConfig Γw Γo Q)
+    (q' : Q) (w' : Γw) (o : Option Γo) (wd : WorkTapeDirection)
+    (cfg : GECfg Γw Γo Q)
+    (hinv : RunStepApplyInvariant gen stackTarget counter
+        gcfg q' w' o wd cfg)
+    (hStep : step gen gcfg = some gcfg') :
+    ∃ cfg', TM2Reaches gen cfg cfg' ∧
+      RunStepMoveHeadInvariant gen stackTarget counter
+        gcfg gcfg' wd cfg' := by
+  -- Extract gcfg' fields from hStep and hinv.h_delta
+  have hDelta := hinv.h_delta
+  simp only [step, hDelta, Option.some.injEq] at hStep
+  have hState' : gcfg'.state = q' := by rw [← hStep]
+  have hInput' : gcfg'.input = gcfg.input := by rw [← hStep]
+  have hInputIdx' : gcfg'.inputIndex = gcfg.inputIndex + 1 := by
+    rw [← hStep]
+  have hWork' : gcfg'.work = fun x =>
+      if x = gcfg.workIndex then w' else gcfg.work x := by
+    rw [← hStep]
+  have hWorkIdx' : gcfg'.workIndex = gcfg.workIndex + ↑wd := by
+    rw [← hStep]
+  have hOutput' : gcfg'.output = match o with
+      | none => gcfg.output | some g => gcfg.output ++ [g] := by
+    cases o <;> simp [← hStep]
+  -- Build the target TM2 config
+  let newWorkR := w' :: cfg.stk GreedyEnumStack.workR
+  let newOutput := match o with
+    | none => cfg.stk GreedyEnumStack.output
+    | some g => g :: cfg.stk GreedyEnumStack.output
+  refine ⟨⟨some GreedyEnumLabel.runStep_moveHead,
+           { cfg.var with transWDir := wd },
+           fun k => match k with
+             | GreedyEnumStack.workR => newWorkR
+             | GreedyEnumStack.output => newOutput
+             | other => cfg.stk other⟩, ?_, ?_⟩
+  · -- TM2 reaches in one step
+    apply Relation.ReflTransGen.single
+    cases cfg with
+    | mk l v S =>
+      simp only at *
+      have hl := hinv.h_label; simp only at hl; subst hl
+      have hTransW := hinv.h_transW; simp only at hTransW
+      have hTransOut := hinv.h_transOut; simp only at hTransOut
+      have hTransWDir := hinv.h_transWDir; simp only at hTransWDir
+      simp only [GEStep, Turing.TM2.step,
+                 greedyEnumMachine, runStep_apply,
+                 Turing.TM2.stepAux, hTransW]
+      cases o with
+      | none =>
+        simp only [hTransOut, Option.isSome, cond_false,
+                   Option.some.injEq, Turing.TM2.Cfg.mk.injEq,
+                   true_and]
+        constructor
+        · cases v; simp_all
+        · ext k; cases k <;> simp [Function.update, newWorkR, newOutput]
+      | some g =>
+        simp only [hTransOut, Option.isSome, cond_true,
+                   Option.getD_some,
+                   Option.some.injEq, Turing.TM2.Cfg.mk.injEq,
+                   true_and]
+        constructor
+        · cases v; simp_all
+        · ext k; cases k <;> simp [Function.update, newWorkR, newOutput]
+  · -- RunStepMoveHeadInvariant
+    refine ⟨rfl, ?_, ?_, hinv.h_target, hinv.h_counter,
+            hinv.h_saveCounter, hinv.h_saveTarget, ?_, ?_, ?_, ?_⟩
+    · -- h_gen_step: step gen gcfg = some gcfg'
+      rw [← hStep]; simp [step, hDelta]
+    · -- h_wd: gcfg'.workIndex = gcfg.workIndex + ↑wd
+      exact hWorkIdx'
+    · -- h_input
+      rw [hinv.h_input, hInputIdx']
+    · -- h_output
+      simp only [newOutput]
+      rw [hOutput']
+      cases o with
+      | none => exact hinv.h_output
+      | some g => simp [List.reverse_append, hinv.h_output]
+    · -- h_work: WorkTapeMatches gen gcfg'.work gcfg.workIndex workL newWorkR
+      refine ⟨?_, ?_, ?_, ?_⟩
+      · -- workR elements match gcfg'.work
+        intro i hi
+        simp only [newWorkR] at hi ⊢
+        cases i with
+        | zero =>
+          simp only [List.get_eq_getElem, List.getElem_cons_zero,
+                     CharP.cast_eq_zero, add_zero]
+          rw [hWork']; simp
+        | succ j =>
+          simp only [List.get_eq_getElem, List.getElem_cons_succ,
+                     Nat.cast_succ]
+          rw [hWork']
+          have hne : gcfg.workIndex + (↑j + 1) ≠ gcfg.workIndex := by omega
+          simp only [if_neg hne]
+          have hj : j < (cfg.stk GreedyEnumStack.workR).length := by
+            simp [List.length_cons] at hi; omega
+          exact hinv.h_workR j hj
+      · -- beyond workR, gcfg'.work = gen.blank
+        intro i hi
+        simp only [newWorkR, List.length_cons] at hi
+        rw [hWork']
+        cases i with
+        | zero => omega
+        | succ j =>
+          have hne : gcfg.workIndex + (↑j + 1) ≠ gcfg.workIndex := by omega
+          simp only [Nat.cast_succ, if_neg hne]
+          exact hinv.h_workR_blank j (by omega)
+      · -- workL elements match gcfg'.work
+        intro i hi
+        rw [hWork']
+        have hne : gcfg.workIndex - (↑i + 1) ≠ gcfg.workIndex := by omega
+        simp only [if_neg hne]
+        exact hinv.h_workL i hi
+      · -- beyond workL, gcfg'.work = gen.blank
+        intro i hi
+        rw [hWork']
+        have hne : gcfg.workIndex - (↑i + 1) ≠ gcfg.workIndex := by omega
+        simp only [if_neg hne]
+        exact hinv.h_workL_blank i hi
+    · -- h_transWDir
+      rfl
+
+-- Sub-lemma 3: runStep_moveHead → runStep
+-- Traces through: case split on wd (L/R/N),
+-- manipulate workL/workR, goto runStep
+private lemma moveHead_to_runStep
+    (gen : Generator Γw Γo Q)
+    (stackTarget : List Γo)
+    (counter : List (ULift.{u} Bool))
+    (gcfg gcfg' : GenConfig Γw Γo Q)
+    (wd : WorkTapeDirection)
+    (cfg : GECfg Γw Γo Q)
+    (hinv : RunStepMoveHeadInvariant gen stackTarget
+        counter gcfg gcfg' wd cfg) :
+    ∃ cfg', TM2Reaches gen cfg cfg' ∧
+      RunStepInvariant gen stackTarget counter
+        gcfg' cfg' := by
+  sorry
+
+-- The main lemma, composing the three
 private lemma runStep_step
     (gen : Generator Γw Γo Q)
     (hGreedy : gen.IsGreedy)
     (stackTarget : List Γo)
     (counter : List (ULift.{u} Bool))
     (gcfg gcfg' : GenConfig Γw Γo Q)
-    (cfg : Turing.TM2.Cfg (stackAlphabet Γw Γo Q) GreedyEnumLabel (GreedyEnumSigma Γw Γo Q))
+    (cfg : GECfg Γw Γo Q)
     (hinv : RunStepInvariant gen stackTarget counter gcfg cfg)
     (hInput : gcfg.inputIndex < counter.length)
     (hStep : step gen gcfg = some gcfg') :
     ∃ cfg', TM2Reaches gen cfg cfg' ∧
       RunStepInvariant gen stackTarget counter gcfg' cfg' := by
-  sorry
-  -- This is the big one. Path: runStep → runStep_apply → runStep_moveHead → runStep.
-  -- Needs to go through the branch on input non-empty, pop input, peek workR,
-  -- apply delta (non-halting), push new workR, emit output, move head.
-  -- You may want to split this into sub-lemmas:
-  --   runStep_to_apply, runStep_apply_to_moveHead, runStep_moveHead_to_runStep
+  obtain ⟨q', w', o, wd, hDelta, hGcfg'⟩ :=
+    step_delta_of_step gen hGreedy gcfg gcfg' hStep
+  obtain ⟨cfg₁, hr₁, hinv₁⟩ :=
+    runStep_to_apply gen stackTarget counter gcfg
+      q' w' o wd cfg hinv hInput hDelta
+  obtain ⟨cfg₂, hr₂, hinv₂⟩ :=
+    apply_to_moveHead gen stackTarget counter gcfg gcfg'
+      q' w' o wd cfg₁ hinv₁ hStep
+  obtain ⟨cfg₃, hr₃, hinv₃⟩ :=
+    moveHead_to_runStep gen stackTarget counter
+      gcfg gcfg' wd cfg₂ hinv₂
+  exact ⟨cfg₃,
+    TM2Reaches_trans
+      (TM2Reaches_trans hr₁ hr₂) hr₃,
+    hinv₃⟩
 
 /-- Run the full loop for N steps, chaining runStep_step. -/
 private lemma runStep_loop
