@@ -16,7 +16,8 @@ import RandomisedGeneration.GreedyGeneration
 import RandomisedGeneration.Language
 import RandomisedGeneration.GreedyEnum.AbstractMachine
 import RandomisedGeneration.GreedyEnum.GreedyEnumTM2
-import RandomisedGeneration.GreedyEnum.GreedyEnumTM2Proof
+import RandomisedGeneration.GreedyEnum.GreedyEnumTM2Backward
+import RandomisedGeneration.GreedyEnum.GreedyEnumTM2Forward
 
 namespace RandomisedGeneration
 
@@ -112,7 +113,7 @@ theorem greedyEnumTM2_halts_iff_CounterEnumRecognises {Γw Γo Q : Type u}
     GreedyEnum.CounterEnumRecognises gen target := by
   rw [GreedyEnum.eval_dom_iff_TM2Halts]
   constructor
-  · sorry
+  · exact tm2_halts_implies_counterEnumRecognises gen hGreedy target
   · intro ⟨n, hn⟩
     have hInit :=
       init_copyCounterInvariant gen target.reverse

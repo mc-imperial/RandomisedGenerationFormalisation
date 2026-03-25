@@ -186,7 +186,7 @@ lemma counterEnum_iterates (gen : Generator Γw Γo Q) (w : List Γo) (n : ℕ)
 
 /-- If counterEnumStep returns none at some counterIterN n, the iteration
     reaches none (possibly earlier). -/
-private lemma iteration_reaches_none
+lemma iteration_reaches_none
     (gen : Generator Γw Γo Q) (w : List Γo) (n : ℕ)
     (hMatch : counterEnumStep gen w (counterIterN n) = none) :
     CounterEnumRecognises gen w := by
