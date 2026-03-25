@@ -173,6 +173,7 @@ structure RunStepMoveHeadInvariant
   h_work        : WorkTapeMatches gen gcfg'.work gcfg.workIndex
                     (cfg.stk GreedyEnumStack.workL) (cfg.stk GreedyEnumStack.workR)
   h_transWDir   : cfg.var.transWDir = wd
+  h_transQ      : cfg.var.transQ = some gcfg'.state
   h_inputFn     : gcfg'.input = counterToInput counter
 
 /-- When input is exhausted and the generator halts, runStep branches
@@ -1561,8 +1562,8 @@ private lemma runStep_to_apply
             = S GreedyEnumStack.workR := by
           simp [Function.update]
         rw [hUpd1, hWR]
-        simp only [List.head?, List.tail_cons,
-                   Option.getD, Option.isSome]
+        simp only [List.tail_cons,
+                   Option.getD]
         rw [h2, cond_true, hQ]
         simp only [applyDelta, Option.getD_some, hBitVal, hHead, hDelta,
                    cond_false]
@@ -1673,7 +1674,7 @@ private lemma apply_to_moveHead
         · ext k; cases k <;> simp [Function.update, newWorkR, newOutput]
   · -- RunStepMoveHeadInvariant
     refine ⟨rfl, ?_, ?_, hinv.h_target, hinv.h_counter,
-            hinv.h_saveCounter, hinv.h_saveTarget, ?_, ?_, ?_, ?_, ?_⟩
+            hinv.h_saveCounter, hinv.h_saveTarget, ?_, ?_, ?_, ?_, ?_, ?_⟩
     · -- h_gen_step: step gen gcfg = some gcfg'
       rw [← hStep]; simp [step, hDelta]
     · -- h_wd: gcfg'.workIndex = gcfg.workIndex + ↑wd
@@ -1729,6 +1730,8 @@ private lemma apply_to_moveHead
         exact hinv.h_workL_blank i hi
     · -- h_transWDir
       rfl
+    · -- h_transQ
+      simp only [hState', hinv.h_transQ]
     · -- h_inputFn
       rw [hInput']
       exact hinv.h_inputFn
@@ -1748,7 +1751,530 @@ private lemma moveHead_to_runStep
     ∃ cfg', TM2Reaches gen cfg cfg' ∧
       RunStepInvariant gen stackTarget counter
         gcfg' cfg' := by
-  sorry
+  have hWIdx := hinv.h_wd
+  cases wd with
+  | N =>
+    -- gcfg'.workIndex = gcfg.workIndex
+    simp only at hWIdx
+    have hWIdx' : gcfg'.workIndex = gcfg.workIndex := by omega
+    -- No stack changes, goto runStep
+    refine ⟨⟨some GreedyEnumLabel.runStep,
+             cfg.var,
+             cfg.stk⟩, ?_, ?_⟩
+    · apply Relation.ReflTransGen.single
+      cases cfg with
+      | mk l v S =>
+        simp only at *
+        have hl := hinv.h_label; simp only at hl; subst hl
+        have hDir := hinv.h_transWDir; simp only at hDir
+        simp only [GEStep, Turing.TM2.step,
+                   greedyEnumMachine, runStep_moveHead,
+                   Turing.TM2.stepAux, hDir]
+        simp [cond_false]
+    · exact ⟨rfl, hinv.h_target, hinv.h_counter, hinv.h_saveCounter,
+             hinv.h_saveTarget, hinv.h_input, hinv.h_transQ,
+             by rw [hWIdx']; exact hinv.h_work,
+             hinv.h_output, hinv.h_inputFn⟩
+  | L =>
+    -- gcfg'.workIndex = gcfg.workIndex - 1
+    simp only at hWIdx
+    -- New head is at gcfg.workIndex - 1, which is workL.head (or blank)
+    -- TM2: peek workL, branch on empty:
+    --   non-empty: pop workL, push to workR, goto runStep
+    --   empty: push blank to workR, goto runStep
+    cases hWL : cfg.stk GreedyEnumStack.workL with
+    | nil =>
+      -- workL empty: push gen.blank to workR
+      -- The new head cell is at gcfg.workIndex - 1.
+      -- Since workL is empty, by h_work.2.2.2, all cells left of
+      -- gcfg.workIndex are blank. In particular,
+      -- gcfg'.work (gcfg.workIndex - 1) = gen.blank.
+      have hNewHeadBlank : gcfg'.work (gcfg.workIndex - 1) = gen.blank := by
+        exact hinv.h_work.2.2.2 0 (by simp [hWL])
+      refine ⟨⟨some GreedyEnumLabel.runStep,
+               { cfg.var with
+                 transW := gen.blank
+                 peekBit := some false },
+               fun k => match k with
+                 | GreedyEnumStack.workR =>
+                     gen.blank :: cfg.stk GreedyEnumStack.workR
+                 | other => cfg.stk other⟩, ?_, ?_⟩
+      · apply Relation.ReflTransGen.single
+        cases cfg with
+        | mk l v S =>
+          simp only at *
+          have hl := hinv.h_label; simp only at hl; subst hl
+          have hDir := hinv.h_transWDir; simp only at hDir
+          simp only [GEStep, Turing.TM2.step,
+                     greedyEnumMachine, runStep_moveHead,
+                     Turing.TM2.stepAux, hDir,
+                     hWL, List.head?, Option.getD,
+                     Option.isSome]
+          have h1 : Option.instBEq.beq (some false)
+              (some true) = false := by decide
+          rw [cond_false]
+          simp only [Option.some.injEq]
+          simp only [cond_true]
+          have : (some false == some true) = false := by decide
+          rw [this, cond_false]
+          simp only [Turing.TM2.Cfg.mk.injEq, true_and]
+          funext k; cases k <;> simp [Function.update]
+      · constructor
+        · rfl
+        · exact hinv.h_target
+        · exact hinv.h_counter
+        · exact hinv.h_saveCounter
+        · exact hinv.h_saveTarget
+        · exact hinv.h_input
+        · exact hinv.h_transQ
+        · -- h_work: WorkTapeMatches gen gcfg'.work gcfg'.workIndex
+          --   (cfg.stk workL) (gen.blank :: cfg.stk workR)
+          rw [hWIdx]
+          refine ⟨?_, ?_, ?_, ?_⟩
+          · -- workR elements
+            intro i hi
+            cases i with
+            | zero =>
+              simp only [List.get_eq_getElem, List.getElem_cons_zero,
+                         CharP.cast_eq_zero, add_zero]
+              exact hNewHeadBlank.symm
+            | succ j =>
+              simp only [List.get_eq_getElem, List.getElem_cons_succ]
+              have hj : j < (cfg.stk GreedyEnumStack.workR).length := by
+                simp [List.length_cons] at hi; omega
+              have := hinv.h_work.1 j hj
+              simp only [List.get_eq_getElem] at this
+              -- Need: workR[j] = gcfg'.work (gcfg.workIndex - 1 + (j + 1))
+              -- = gcfg'.work (gcfg.workIndex + j)
+              -- hinv.h_work.1 says workR[j] = gcfg'.work (gcfg.workIndex + j)
+              convert this using 2
+              push_cast; ring
+          · -- beyond workR: blank
+            intro i hi
+            simp [List.length_cons] at hi
+            have := hinv.h_work.2.1 (i - 1) (by omega)
+            convert this using 2
+            omega
+          · -- workL elements (empty)
+            intro i hi; simp [hWL] at hi
+          · -- beyond workL: blank
+            intro i _
+            have := hinv.h_work.2.2.2 (i + 1) (by simp [hWL])
+            convert this using 2
+            push_cast; ring
+        · exact hinv.h_output
+        · exact hinv.h_inputFn
+    | cons lw rest_workL =>
+      -- workL non-empty: pop lw, push to workR
+      have hLHead : lw = gcfg'.work (gcfg.workIndex - 1) := by
+        have := hinv.h_work.2.2.1 0 (by simp [hWL])
+        simp only [List.get_eq_getElem, hWL, List.getElem_cons_zero,
+          CharP.cast_eq_zero,
+          Int.sub_eq_add_neg] at this
+        convert this using 2
+      refine ⟨⟨some GreedyEnumLabel.runStep,
+               { cfg.var with
+                 transW := lw
+                 peekBit := some true },
+               fun k => match k with
+                 | GreedyEnumStack.workL => rest_workL
+                 | GreedyEnumStack.workR =>
+                     lw :: cfg.stk GreedyEnumStack.workR
+                 | other => cfg.stk other⟩, ?_, ?_⟩
+      · apply Relation.ReflTransGen.single
+        cases cfg with
+        | mk l v S =>
+          simp only at *
+          have hl := hinv.h_label; simp only at hl; subst hl
+          have hDir := hinv.h_transWDir; simp only at hDir
+          simp only [GEStep, Turing.TM2.step,
+                     greedyEnumMachine, runStep_moveHead,
+                     Turing.TM2.stepAux, hDir,
+                     hWL, List.head?, List.tail_cons,
+                     Option.getD_some, Option.isSome]
+          have h1 : Option.instBEq.beq (some true)
+              (some true) = true := by decide
+          rw [cond_true]
+          simp only [Option.some.injEq]
+          have : (some true == some true) = true := by decide
+          rw [this, cond_true]
+          simp only [Turing.TM2.Cfg.mk.injEq, true_and]
+          funext k; cases k <;> simp [Function.update]
+      · constructor
+        · rfl
+        · exact hinv.h_target
+        · exact hinv.h_counter
+        · exact hinv.h_saveCounter
+        · exact hinv.h_saveTarget
+        · exact hinv.h_input
+        · exact hinv.h_transQ
+        · -- h_work
+          rw [hWIdx]
+          refine ⟨?_, ?_, ?_, ?_⟩
+          · -- workR elements: lw :: cfg.stk workR
+            intro i hi
+            cases i with
+            | zero =>
+              simp only [List.get_eq_getElem, List.getElem_cons_zero,
+                         CharP.cast_eq_zero, add_zero]
+              exact hLHead
+            | succ j =>
+              simp only [List.get_eq_getElem, List.getElem_cons_succ]
+              have hj : j < (cfg.stk GreedyEnumStack.workR).length := by
+                simp [List.length_cons] at hi; omega
+              have := hinv.h_work.1 j hj
+              simp only [List.get_eq_getElem] at this
+              convert this using 2
+              push_cast; ring
+          · -- beyond workR: blank
+            intro i hi
+            simp [List.length_cons] at hi
+            have := hinv.h_work.2.1 (i - 1) (by omega)
+            convert this using 2
+            omega
+          · -- workL elements: rest_workL
+            intro i hi
+            have hi' : i + 1 < (lw :: rest_workL).length := by
+              simp [List.length_cons]; omega
+            have := hinv.h_work.2.2.1 (i + 1) (by rw [hWL]; exact hi')
+            simp only [List.get_eq_getElem, hWL,
+              List.getElem_cons_succ] at this
+            convert this using 2
+            push_cast; ring
+          · -- beyond workL: blank
+            intro i hi
+            have hi' : i + 1 ≥ (lw :: rest_workL).length := by
+              simp [List.length_cons]; omega
+            have := hinv.h_work.2.2.2 (i + 1) (by rw [hWL]; exact hi')
+            convert this using 2
+            push_cast; ring
+        · exact hinv.h_output
+        · exact hinv.h_inputFn
+  | R =>
+    -- gcfg'.workIndex = gcfg.workIndex + 1
+    simp only at hWIdx
+    -- TM2: pop workR (= w' just pushed), push to workL,
+    -- peek workR, if empty push blank, goto runStep
+    -- workR from RunStepMoveHeadInvariant has w' on top
+    -- (it was pushed by runStep_apply)
+    cases hWR : cfg.stk GreedyEnumStack.workR with
+    | nil =>
+      -- workR empty: shouldn't happen since apply pushed w' onto it
+      -- But h_work says workR matches gcfg'.work starting at gcfg.workIndex
+      -- with 0 elements, so gcfg'.work gcfg.workIndex = gen.blank
+      -- But gcfg'.work gcfg.workIndex = w' (the cell just written).
+      -- This case may actually be impossible if the caller always
+      -- pushes w' before reaching moveHead. But the invariant
+      -- doesn't directly exclude it. Let's handle it anyway.
+      -- Actually: runStep_apply always pushes w' to workR before
+      -- reaching moveHead, so workR is never empty here.
+      -- The h_work.1 for workR gives vacuous truth.
+      -- We need gcfg'.work gcfg.workIndex from somewhere.
+      -- h_work.2.1 says gcfg'.work (gcfg.workIndex + i) = gen.blank for i ≥ 0.
+      -- In particular gcfg'.work gcfg.workIndex = gen.blank.
+      -- Then the new head at gcfg.workIndex + 1 is also blank.
+      -- This is a valid (if degenerate) case.
+      have hHeadBlank : gcfg'.work gcfg.workIndex = gen.blank := by
+        have := hinv.h_work.2.1 0 (by simp [hWR])
+        simp only [CharP.cast_eq_zero, add_zero] at this; exact this
+      have hNewHeadBlank : gcfg'.work (gcfg.workIndex + 1) = gen.blank := by
+        have := hinv.h_work.2.1 1 (by simp [hWR])
+        simp only [Nat.cast_one] at this; exact this
+      -- TM2: pop workR (empty, so pops nothing? No — pop on empty is identity)
+      -- Actually, TM2 pop on empty list: the stmt is
+      -- Stmt.pop which pops and calls callback. On empty stack,
+      -- the pop gives default. Let's trace carefully.
+      -- pop workR gives default (gen.blank since workR : Γw),
+      -- callback sets transW := (none).getD gen.blank = gen.blank
+      -- push workL with transW = gen.blank
+      -- peek workR (now empty) → peekBit = some false
+      -- branch peekBit == some false → true → push blank to workR
+      -- goto runStep
+      refine ⟨⟨some GreedyEnumLabel.runStep,
+               { cfg.var with
+                 transW := gen.blank
+                 peekBit := some false },
+               fun k => match k with
+                 | GreedyEnumStack.workL =>
+                     gen.blank :: cfg.stk GreedyEnumStack.workL
+                 | GreedyEnumStack.workR => [gen.blank]
+                 | other => cfg.stk other⟩, ?_, ?_⟩
+      · apply Relation.ReflTransGen.single
+        cases cfg with
+        | mk l v S =>
+          simp only at *
+          have hl := hinv.h_label; simp only at hl; subst hl
+          have hDir := hinv.h_transWDir; simp only at hDir
+          simp only [GEStep, Turing.TM2.step,
+                     greedyEnumMachine, runStep_moveHead,
+                     Turing.TM2.stepAux, hDir,
+                     hWR, List.head?, List.tail_nil,
+                     Option.getD, Option.isSome]
+          have h1 : Option.instBEq.beq (some false)
+              (some false) = true := by decide
+          rw [cond_true]
+          simp only [Option.some.injEq]
+          simp only [cond_false]
+          have key : Function.update (Function.update S GreedyEnumStack.workR [])
+              GreedyEnumStack.workL
+              (gen.blank :: Function.update S GreedyEnumStack.workR [] GreedyEnumStack.workL)
+              GreedyEnumStack.workR = [] := by
+            simp [Function.update]
+          rw [key]
+          simp only
+          have : (some false == some false) = true := by decide
+          rw [this, cond_true]
+          simp only [Turing.TM2.Cfg.mk.injEq, true_and]
+          funext k; cases k <;> simp [Function.update]
+      · constructor
+        · rfl
+        · exact hinv.h_target
+        · exact hinv.h_counter
+        · exact hinv.h_saveCounter
+        · exact hinv.h_saveTarget
+        · exact hinv.h_input
+        · exact hinv.h_transQ
+        · -- h_work
+          rw [hWIdx]
+          refine ⟨?_, ?_, ?_, ?_⟩
+          · -- workR = [gen.blank]
+            intro i hi
+            simp only [List.length_cons, List.length_nil] at hi
+            have : i = 0 := by omega
+            subst this
+            simp only [List.get_eq_getElem, List.getElem_cons_zero,
+                       CharP.cast_eq_zero, add_zero]
+            exact hNewHeadBlank.symm
+          · -- beyond workR
+            intro i hi
+            simp only [List.length_cons, List.length_nil] at hi
+            have := hinv.h_work.2.1 (i + 1) (by simp [hWR])
+            convert this using 2
+            push_cast; ring
+          · -- workL = gen.blank :: old workL
+            intro i hi
+            cases i with
+            | zero =>
+              simp only [List.get_eq_getElem, List.getElem_cons_zero,
+                         CharP.cast_eq_zero,
+                         Int.sub_eq_add_neg]
+              convert hHeadBlank.symm using 2
+              ring
+            | succ j =>
+              simp only [List.get_eq_getElem, List.getElem_cons_succ,
+                         List.length_cons] at hi ⊢
+              have hj : j < (cfg.stk GreedyEnumStack.workL).length := by
+                omega
+              have := hinv.h_work.2.2.1 j hj
+              simp only [List.get_eq_getElem] at this
+              convert this using 2
+              push_cast; ring
+          · -- beyond workL
+            intro i hi
+            simp [List.length_cons] at hi
+            have := hinv.h_work.2.2.2 (i - 1) (by omega)
+            convert this using 2
+            omega
+        · exact hinv.h_output
+        · exact hinv.h_inputFn
+    | cons rw rest_workR =>
+      -- workR non-empty: pop rw (= the cell at gcfg.workIndex),
+      -- push to workL, then check if rest_workR is empty
+      have hRHead : rw = gcfg'.work gcfg.workIndex := by
+        have := hinv.h_work.1 0 (by simp [hWR])
+        simp only [List.get_eq_getElem, hWR, List.getElem_cons_zero,
+          CharP.cast_eq_zero, add_zero] at this
+        exact this
+      cases hRest : rest_workR with
+      | nil =>
+        -- After popping, workR is empty → push blank
+        have hNewHeadBlank : gcfg'.work (gcfg.workIndex + 1) = gen.blank := by
+          have := hinv.h_work.2.1 1 (by rw [hWR, hRest]; simp)
+          simp only [Nat.cast_one] at this; exact this
+        refine ⟨⟨some GreedyEnumLabel.runStep,
+                 { cfg.var with
+                   transW := rw
+                   peekBit := some false },
+                 fun k => match k with
+                   | GreedyEnumStack.workL =>
+                       rw :: cfg.stk GreedyEnumStack.workL
+                   | GreedyEnumStack.workR => [gen.blank]
+                   | other => cfg.stk other⟩, ?_, ?_⟩
+        · apply Relation.ReflTransGen.single
+          cases cfg with
+          | mk l v S =>
+            simp only at *
+            have hl := hinv.h_label; simp only at hl; subst hl
+            have hDir := hinv.h_transWDir; simp only at hDir
+            simp only [GEStep, Turing.TM2.step,
+                       greedyEnumMachine, runStep_moveHead,
+                       Turing.TM2.stepAux, hDir,
+                       hWR, List.head?, List.tail_cons,
+                       Option.getD_some, Option.isSome,
+                       hRest, List.head?, Option.isSome]
+            have h1 : Option.instBEq.beq (some false)
+                (some false) = true := by decide
+            rw [cond_true]
+            simp only [Option.some.injEq]
+            simp only [cond_false]
+            have key : Function.update (Function.update S GreedyEnumStack.workR [])
+              GreedyEnumStack.workL
+                (rw :: Function.update S GreedyEnumStack.workR [] GreedyEnumStack.workL)
+                GreedyEnumStack.workR = [] := by
+              simp [Function.update]
+            rw [key]
+            have : (some false == some false) = true := by decide
+            rw [this, cond_true]
+            simp only [Turing.TM2.Cfg.mk.injEq, true_and]
+            funext k; cases k <;> simp [Function.update]
+        · constructor
+          · rfl
+          · exact hinv.h_target
+          · exact hinv.h_counter
+          · exact hinv.h_saveCounter
+          · exact hinv.h_saveTarget
+          · exact hinv.h_input
+          · exact hinv.h_transQ
+          · -- h_work
+            rw [hWIdx]
+            refine ⟨?_, ?_, ?_, ?_⟩
+            · -- workR = [gen.blank]
+              intro i hi
+              simp only [List.length_cons, List.length_nil] at hi
+              have : i = 0 := by omega
+              subst this
+              simp only [List.get_eq_getElem, List.getElem_cons_zero,
+                         CharP.cast_eq_zero, add_zero]
+              exact hNewHeadBlank.symm
+            · -- beyond workR
+              intro i hi
+              simp only [List.length_cons, List.length_nil] at hi
+              have := hinv.h_work.2.1 (i + 1) (by rw [hWR, hRest]; simp)
+              convert this using 2
+              push_cast; ring
+            · -- workL = rw :: old workL
+              intro i hi
+              cases i with
+              | zero =>
+                simp only [List.get_eq_getElem, List.getElem_cons_zero,
+                           CharP.cast_eq_zero]
+                convert hRHead.symm using 2
+                ring_nf
+                exact hRHead.symm
+              | succ j =>
+                simp only [List.get_eq_getElem, List.getElem_cons_succ,
+                           List.length_cons] at hi ⊢
+                have hj : j < (cfg.stk GreedyEnumStack.workL).length := by
+                  omega
+                have := hinv.h_work.2.2.1 j hj
+                simp only [List.get_eq_getElem] at this
+                convert this using 2
+                push_cast; ring
+            · -- beyond workL
+              intro i hi
+              simp [List.length_cons] at hi
+              have := hinv.h_work.2.2.2 (i - 1) (by omega)
+              convert this using 2
+              omega
+          · exact hinv.h_output
+          · exact hinv.h_inputFn
+      | cons rw2 rest2 =>
+        -- After popping, workR has rw2 :: rest2 → no blank push needed
+        have hNewHead : rw2 = gcfg'.work (gcfg.workIndex + 1) := by
+          have := hinv.h_work.1 1 (by rw [hWR]; simp [hRest])
+          simp only [List.get_eq_getElem, hWR, hRest,
+            List.getElem_cons_succ, List.getElem_cons_zero,
+            Nat.cast_one] at this
+          exact this
+        refine ⟨⟨some GreedyEnumLabel.runStep,
+                 { cfg.var with
+                   transW := rw
+                   peekBit := some true },
+                 fun k => match k with
+                   | GreedyEnumStack.workL =>
+                       rw :: cfg.stk GreedyEnumStack.workL
+                   | GreedyEnumStack.workR => rw2 :: rest2
+                   | other => cfg.stk other⟩, ?_, ?_⟩
+        · apply Relation.ReflTransGen.single
+          cases cfg with
+          | mk l v S =>
+            simp only at *
+            have hl := hinv.h_label; simp only at hl; subst hl
+            have hDir := hinv.h_transWDir; simp only at hDir
+            simp only [GEStep, Turing.TM2.step,
+                       greedyEnumMachine, runStep_moveHead,
+                       Turing.TM2.stepAux, hDir,
+                       hWR, List.head?, List.tail_cons,
+                       Option.getD_some, Option.isSome,
+                       hRest, List.head?, Option.isSome]
+            have h1 : Option.instBEq.beq (some true)
+                (some false) = false := by decide
+            rw [cond_false]
+            simp only [Option.some.injEq]
+            simp only [cond_true]
+            have key : Function.update (Function.update S GreedyEnumStack.workR
+              (rw2 :: rest2)) GreedyEnumStack.workL
+                (rw :: Function.update S GreedyEnumStack.workR (rw2 :: rest2) GreedyEnumStack.workL)
+                GreedyEnumStack.workR = rw2 :: rest2 := by
+              simp [Function.update]
+            rw [key]
+            simp only
+            have : (some true == some false) = false := by decide
+            rw [this, cond_false]
+            simp only [Turing.TM2.Cfg.mk.injEq, true_and]
+            funext k; cases k <;> simp [Function.update]
+        · constructor
+          · rfl
+          · exact hinv.h_target
+          · exact hinv.h_counter
+          · exact hinv.h_saveCounter
+          · exact hinv.h_saveTarget
+          · exact hinv.h_input
+          · exact hinv.h_transQ
+          · -- h_work
+            rw [hWIdx]
+            refine ⟨?_, ?_, ?_, ?_⟩
+            · -- workR = rw2 :: rest2
+              intro i hi
+              have hi' : i + 1 < (rw :: rw2 :: rest2).length := by
+                simp [List.length_cons] at hi ⊢; omega
+              have := hinv.h_work.1 (i + 1) (by rw [hWR, hRest]; exact hi')
+              simp only [List.get_eq_getElem, hWR, hRest,
+                List.getElem_cons_succ] at this
+              convert this using 2
+              push_cast; ring
+            · -- beyond workR
+              intro i hi
+              simp only [List.length_cons] at hi
+              have := hinv.h_work.2.1 (i + 1) (by rw [hWR, hRest]; simp; omega)
+              convert this using 2
+              push_cast; ring
+            · -- workL = rw :: old workL
+              intro i hi
+              cases i with
+              | zero =>
+                simp only [List.get_eq_getElem, List.getElem_cons_zero,
+                           CharP.cast_eq_zero]
+                convert hRHead.symm using 2
+                ring_nf
+                exact hRHead.symm
+              | succ j =>
+                simp only [List.get_eq_getElem, List.getElem_cons_succ,
+                           List.length_cons] at hi ⊢
+                have hj : j < (cfg.stk GreedyEnumStack.workL).length := by
+                  omega
+                have := hinv.h_work.2.2.1 j hj
+                simp only [List.get_eq_getElem] at this
+                convert this using 2
+                push_cast; ring
+            · -- beyond workL
+              intro i hi
+              simp [List.length_cons] at hi
+              have := hinv.h_work.2.2.2 (i - 1) (by omega)
+              convert this using 2
+              omega
+          · exact hinv.h_output
+          · exact hinv.h_inputFn
 
 -- The main lemma, composing the three
 private lemma runStep_step
