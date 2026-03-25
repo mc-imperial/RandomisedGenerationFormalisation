@@ -115,6 +115,7 @@ structure RunStepInvariant
   h_work        : WorkTapeMatches gen gcfg.work gcfg.workIndex
                     (cfg.stk GreedyEnumStack.workL) (cfg.stk GreedyEnumStack.workR)
   h_output      : cfg.stk GreedyEnumStack.output      = gcfg.output.reverse
+  h_inputFn     : gcfg.input = counterToInput counter
 
 structure RunStepApplyInvariant
     (gen : Generator Γw Γo Q)
@@ -150,6 +151,7 @@ structure RunStepApplyInvariant
   h_transOut    : cfg.var.transOut     = o
   h_transWDir   : cfg.var.transWDir   = wd
   h_transHalted : cfg.var.transHalted = false
+  h_inputFn     : gcfg.input = counterToInput counter
 
 structure RunStepMoveHeadInvariant
     (gen : Generator Γw Γo Q)
@@ -171,6 +173,7 @@ structure RunStepMoveHeadInvariant
   h_work        : WorkTapeMatches gen gcfg'.work gcfg.workIndex
                     (cfg.stk GreedyEnumStack.workL) (cfg.stk GreedyEnumStack.workR)
   h_transWDir   : cfg.var.transWDir = wd
+  h_inputFn     : gcfg'.input = counterToInput counter
 
 /-- When input is exhausted and the generator halts, runStep branches
     to checkOutput. -/
@@ -1308,6 +1311,8 @@ private lemma initRun_to_runStep
       · intro i _; simp [initConfig]
     · -- h_output
       rw [hinv.h_output]; simp [initConfig]
+    · -- h_inputFn
+      simp [initConfig]
 
 -- Extract delta result from hStep
 private lemma step_delta_of_step
@@ -1363,7 +1368,238 @@ private lemma runStep_to_apply
     ∃ cfg', TM2Reaches gen cfg cfg' ∧
       RunStepApplyInvariant gen stackTarget counter
         gcfg q' w' o wd cfg' := by
-  sorry
+  -- Input stack is non-empty
+  have hDrop := hinv.h_input
+  have hDropNe : counter.drop gcfg.inputIndex ≠ [] := by
+    intro h
+    have : (counter.drop gcfg.inputIndex).length = 0 := by
+      rw [h]; simp
+    simp [List.length_drop] at this
+    omega
+  obtain ⟨bit, rest_input, hDropEq⟩ :=
+    List.exists_cons_of_ne_nil hDropNe
+  rw [hDropEq] at hDrop
+  -- Relate bit.down to gcfg.input gcfg.inputIndex
+  have hBitIdx : counter[gcfg.inputIndex]? = some bit := by
+    rw [← List.head?_drop]; rw [hDropEq]; rfl
+  have hBitVal : bit.down = gcfg.input gcfg.inputIndex := by
+    rw [hinv.h_inputFn, counterToInput]; simp [hBitIdx]
+  -- rest_input = counter.drop (gcfg.inputIndex + 1)
+  have hRestInput : rest_input = counter.drop (gcfg.inputIndex + 1) := by
+    have h : counter.drop gcfg.inputIndex = bit :: rest_input := hDropEq
+    have : List.tail (counter.drop gcfg.inputIndex) = rest_input := by
+      rw [h]; rfl
+    rw [← this, List.tail_drop]
+  -- Case split on workR
+  cases hWR : cfg.stk GreedyEnumStack.workR with
+  | nil =>
+    -- workR empty: head symbol is gen.blank
+    have hBlank : gcfg.work gcfg.workIndex = gen.blank := by
+      have := hinv.h_work.2.1 0 (by simp [hWR])
+      simp only [CharP.cast_eq_zero, add_zero] at this
+      exact this
+    -- Compute applyDelta result
+    have hApplyEq : applyDelta gen
+        { transQ := some gcfg.state
+          transW := gen.blank
+          transWDir := cfg.var.transWDir
+          transOut := cfg.var.transOut
+          transHalted := cfg.var.transHalted
+          inputBit := bit.down
+          carry := cfg.var.carry
+          peekBit := some false
+          peekTarget := cfg.var.peekTarget
+          peekOut := cfg.var.peekOut }
+      = { transQ := some q'
+          transW := w'
+          transWDir := wd
+          transOut := o
+          transHalted := false
+          inputBit := bit.down
+          carry := cfg.var.carry
+          peekBit := some false
+          peekTarget := cfg.var.peekTarget
+          peekOut := cfg.var.peekOut } := by
+      simp only [applyDelta, Option.getD_some, hBitVal]
+      rw [← hBlank, hDelta]
+    refine ⟨⟨some GreedyEnumLabel.runStep_apply,
+             applyDelta gen
+               { transQ := some gcfg.state
+                 transW := gen.blank
+                 transWDir := cfg.var.transWDir
+                 transOut := cfg.var.transOut
+                 transHalted := cfg.var.transHalted
+                 inputBit := bit.down
+                 carry := cfg.var.carry
+                 peekBit := some false
+                 peekTarget := cfg.var.peekTarget
+                 peekOut := cfg.var.peekOut },
+             fun k => match k with
+               | GreedyEnumStack.input => rest_input
+               | other => cfg.stk other⟩, ?_, ?_⟩
+    · -- TM2 step
+      apply Relation.ReflTransGen.single
+      cases cfg with
+      | mk l v S =>
+        simp only at *
+        have hl := hinv.h_label; simp only at hl; subst hl
+        have hQ := hinv.h_transQ; simp only at hQ
+        simp only [GEStep, Turing.TM2.step,
+                   greedyEnumMachine, runStep,
+                   Turing.TM2.stepAux,
+                   hDrop, List.head?, List.tail_cons,
+                   Option.isSome, BEq.beq]
+        have h1 : Option.instBEq.beq
+            (some true) (some false) = false := by decide
+        have h2 : Option.instBEq.beq
+            (some false) (some true) = false := by decide
+        rw [h1, cond_false]
+        have hUpd1 : Function.update S GreedyEnumStack.input
+            rest_input GreedyEnumStack.workR
+            = S GreedyEnumStack.workR := by
+          simp [Function.update]
+        rw [hUpd1, hWR]
+        simp only [Option.getD]
+        rw [h2, cond_false, hQ]
+        simp only [applyDelta, Option.getD_some, hBitVal]
+        simp only [Option.some.injEq]
+        rw [← hBlank, hDelta]
+        simp only [cond_false, Turing.TM2.Cfg.mk.injEq, true_and]
+        funext k; cases k <;> simp [Function.update]
+    · -- RunStepApplyInvariant
+      constructor
+      · rfl  -- h_label
+      · exact hDelta  -- h_delta
+      · exact hinv.h_target  -- h_target
+      · exact hinv.h_counter  -- h_counter
+      · exact hinv.h_saveCounter  -- h_saveCounter
+      · exact hinv.h_saveTarget  -- h_saveTarget
+      · exact hRestInput  -- h_input
+      · exact hinv.h_output  -- h_output
+      · exact hinv.h_work.2.2.1  -- h_workL
+      · exact hinv.h_work.2.2.2  -- h_workL_blank
+      · intro i h; simp [hWR] at h  -- h_workR (vacuous)
+      · -- h_workR_blank
+        intro i _
+        have := hinv.h_work.2.1 (i + 1) (by
+          rw [hWR]
+          simp
+        )
+        simp only [Nat.cast_add, Nat.cast_one] at this
+        exact this
+      · simp [hApplyEq]  -- h_transQ
+      · simp [hApplyEq]  -- h_transW
+      · simp [hApplyEq]  -- h_transOut
+      · simp [hApplyEq]  -- h_transWDir
+      · simp [hApplyEq]  -- h_transHalted
+      · exact hinv.h_inputFn  -- h_inputFn
+  | cons w rest_work =>
+    -- workR non-empty: head symbol is w
+    have hHead : w = gcfg.work gcfg.workIndex := by
+      have := hinv.h_work.1 0 (by simp [hWR])
+      simp only [List.get_eq_getElem, hWR, List.getElem_cons_zero,
+        CharP.cast_eq_zero, add_zero] at this
+      exact this
+    -- Compute applyDelta result
+    have hApplyEq : applyDelta gen
+        { transQ := some gcfg.state
+          transW := w
+          transWDir := cfg.var.transWDir
+          transOut := cfg.var.transOut
+          transHalted := cfg.var.transHalted
+          inputBit := bit.down
+          carry := cfg.var.carry
+          peekBit := some true
+          peekTarget := cfg.var.peekTarget
+          peekOut := cfg.var.peekOut }
+      = { transQ := some q'
+          transW := w'
+          transWDir := wd
+          transOut := o
+          transHalted := false
+          inputBit := bit.down
+          carry := cfg.var.carry
+          peekBit := some true
+          peekTarget := cfg.var.peekTarget
+          peekOut := cfg.var.peekOut } := by
+      simp only [applyDelta, Option.getD_some, hBitVal, hHead, hDelta]
+    refine ⟨⟨some GreedyEnumLabel.runStep_apply,
+             applyDelta gen
+               { transQ := some gcfg.state
+                 transW := w
+                 transWDir := cfg.var.transWDir
+                 transOut := cfg.var.transOut
+                 transHalted := cfg.var.transHalted
+                 inputBit := bit.down
+                 carry := cfg.var.carry
+                 peekBit := some true
+                 peekTarget := cfg.var.peekTarget
+                 peekOut := cfg.var.peekOut },
+             fun k => match k with
+               | GreedyEnumStack.input => rest_input
+               | GreedyEnumStack.workR => rest_work
+               | other => cfg.stk other⟩, ?_, ?_⟩
+    · -- TM2 step
+      apply Relation.ReflTransGen.single
+      cases cfg with
+      | mk l v S =>
+        simp only at *
+        have hl := hinv.h_label; simp only at hl; subst hl
+        have hQ := hinv.h_transQ; simp only at hQ
+        simp only [GEStep, Turing.TM2.step,
+                   greedyEnumMachine, runStep,
+                   Turing.TM2.stepAux,
+                   hDrop, List.head?, List.tail_cons,
+                   Option.isSome, BEq.beq]
+        have h1 : Option.instBEq.beq
+            (some true) (some false) = false := by decide
+        have h2 : Option.instBEq.beq
+            (some true) (some true) = true := by decide
+        rw [h1, cond_false]
+        have hUpd1 : Function.update S GreedyEnumStack.input
+            rest_input GreedyEnumStack.workR
+            = S GreedyEnumStack.workR := by
+          simp [Function.update]
+        rw [hUpd1, hWR]
+        simp only [List.head?, List.tail_cons,
+                   Option.getD, Option.isSome]
+        rw [h2, cond_true, hQ]
+        simp only [applyDelta, Option.getD_some, hBitVal, hHead, hDelta,
+                   cond_false]
+        simp only [Option.some.injEq, Turing.TM2.Cfg.mk.injEq,
+                   true_and]
+        funext k; cases k <;> simp [Function.update]
+    · -- RunStepApplyInvariant
+      constructor
+      · rfl  -- h_label
+      · exact hDelta  -- h_delta
+      · exact hinv.h_target  -- h_target
+      · exact hinv.h_counter  -- h_counter
+      · exact hinv.h_saveCounter  -- h_saveCounter
+      · exact hinv.h_saveTarget  -- h_saveTarget
+      · exact hRestInput  -- h_input
+      · exact hinv.h_output  -- h_output
+      · exact hinv.h_work.2.2.1  -- h_workL
+      · exact hinv.h_work.2.2.2  -- h_workL_blank
+      · -- h_workR: rest_work elements at offsets +1, +2, ...
+        intro i hi
+        have hi' : i + 1 < (w :: rest_work).length := by
+          simp [List.length_cons]; omega
+        have := hinv.h_work.1 (i + 1) (by rw [hWR]; exact hi')
+        simp only [List.get_eq_getElem, hWR,
+          List.getElem_cons_succ, Nat.cast_succ] at this
+        exact this
+      · -- h_workR_blank
+        intro i hi
+        have hi' : i + 1 ≥ (w :: rest_work).length := by
+          simp [List.length_cons]; omega
+        exact hinv.h_work.2.1 (i + 1) (by rw [hWR]; exact hi')
+      · simp [hApplyEq]  -- h_transQ
+      · simp [hApplyEq]  -- h_transW
+      · simp [hApplyEq]  -- h_transOut
+      · simp [hApplyEq]  -- h_transWDir
+      · simp [hApplyEq]  -- h_transHalted
+      · exact hinv.h_inputFn  -- h_inputFn
 
 -- Sub-lemma 2: runStep_apply → runStep_moveHead
 -- Traces through: push w' to workR, optionally push
@@ -1437,7 +1673,7 @@ private lemma apply_to_moveHead
         · ext k; cases k <;> simp [Function.update, newWorkR, newOutput]
   · -- RunStepMoveHeadInvariant
     refine ⟨rfl, ?_, ?_, hinv.h_target, hinv.h_counter,
-            hinv.h_saveCounter, hinv.h_saveTarget, ?_, ?_, ?_, ?_⟩
+            hinv.h_saveCounter, hinv.h_saveTarget, ?_, ?_, ?_, ?_, ?_⟩
     · -- h_gen_step: step gen gcfg = some gcfg'
       rw [← hStep]; simp [step, hDelta]
     · -- h_wd: gcfg'.workIndex = gcfg.workIndex + ↑wd
@@ -1493,6 +1729,9 @@ private lemma apply_to_moveHead
         exact hinv.h_workL_blank i hi
     · -- h_transWDir
       rfl
+    · -- h_inputFn
+      rw [hInput']
+      exact hinv.h_inputFn
 
 -- Sub-lemma 3: runStep_moveHead → runStep
 -- Traces through: case split on wd (L/R/N),
